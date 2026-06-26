@@ -19,14 +19,13 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DerivingStrategies #-}
 
-module Untyped.FreeFoil.LambdaPi where
+module LambdaPi where
 
 import Control.DeepSeq (NFData)
 import Data.Bifunctor.TH (deriveBifunctor)
 import GHC.Generics (Generic)
 
-import Control.Monad.Foil
-import Control.Monad.Free.Foil
+import FreeFoil.NbE
 
 
 --- Impl of nf, whnf using generic sinking

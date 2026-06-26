@@ -1,0 +1,34 @@
+cabal-version:      3.0
+name:               free-foil-nbe
+version:            0.1.0.0
+synopsis:           Generic normalisation by evaluation via free-foil
+license:            BSD-3-Clause
+license-file:       LICENSE
+maintainer:         rentacat45@gmail.com
+category:           Language
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+
+common warnings
+    ghc-options: -Wall
+
+library
+    import:           warnings
+    hs-source-dirs:   src
+    exposed-modules:  FreeFoil.NbE
+    build-depends:    base ^>=4.20.2.0
+        , free-foil
+    default-language: Haskell2010
+
+-- Exercises the generic NbE on the lambda-pi language.
+test-suite lambda-pi
+    import:           warnings
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          Main.hs
+    other-modules:    LambdaPi
+    build-depends:    base ^>=4.20.2.0
+        , bifunctors
+        , deepseq
+        , free-foil-nbe
+    default-language: Haskell2010
