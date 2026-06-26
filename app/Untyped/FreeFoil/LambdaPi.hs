@@ -13,14 +13,20 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DerivingStrategies #-}
 
-module LambdaPi where 
+module Untyped.FreeFoil.LambdaPi where
 
-import Untyped.FreeFoil.Internal as FreeFoil
+import Control.DeepSeq (NFData)
+import Data.Bifunctor.TH (deriveBifunctor)
+import GHC.Generics (Generic)
+
+import Control.Monad.Foil
+import Control.Monad.Free.Foil
 
 
 --- Impl of nf, whnf using generic sinking
@@ -31,7 +37,7 @@ data LambdaPiF scope term
   deriving (Eq, Show, Functor, NFData, Generic)
 deriveBifunctor ''LambdaPiF
 
-type LambdaPi n = FreeFoil.AST LambdaPiF n
+type LambdaPi n = AST NameBinder LambdaPiF n
 
 pattern App :: LambdaPi n -> LambdaPi n -> LambdaPi n
 pattern App fun arg = Node (AppF fun arg)
@@ -41,38 +47,41 @@ pattern Lam binder body = Node (LamF (ScopedAST binder body))
 
 {-# COMPLETE Var, App, Lam #-}
 
-whnf :: FreeFoil.Distinct n => FreeFoil.Scope n -> LambdaPi n -> LambdaPi n
+whnf :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n
 whnf scope = \case
   App fun arg ->
     case whnf scope fun of
       Lam binder body ->
-        let subst = FreeFoil.addSubst FreeFoil.identitySubst binder arg
-        in whnf scope (FreeFoil.substitute scope subst body)
+        let subst = addSubst identitySubst binder arg
+        in whnf scope (substitute scope subst body)
       fun' -> App fun' arg
   t -> t
 
-nf :: FreeFoil.Distinct n => FreeFoil.Scope n -> LambdaPi n -> LambdaPi n
+nf :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n
 nf scope = \case
-  Lam binder body -> FreeFoil.unsafeAssertFresh binder \binder' ->
-          let scope' = FreeFoil.extendScope binder' scope
-        in Lam binder' (nf scope' body)
+  Lam binder body ->
+    case assertDistinct binder of
+      Distinct ->
+        let scope' = extendScope binder scope
+        in Lam binder (nf scope' body)
   App fun arg ->
     case whnf scope fun of
       Lam binder body ->
-        let subst =  FreeFoil.addSubst FreeFoil.identitySubst binder arg
+        let subst = addSubst identitySubst binder arg
         in nf scope (substitute scope subst body)
       fun' -> App (nf scope fun') (nf scope arg)
   t -> t
 
 nfd :: LambdaPi VoidS -> LambdaPi VoidS
-nfd term = nf FreeFoil.emptyScope term
+nfd = nf emptyScope
 
 --- examples
 two :: LambdaPi VoidS
-two = FreeFoil.withFresh FreeFoil.emptyScope
-  (\ s -> Lam s $ FreeFoil.withFresh (FreeFoil.extendScope s FreeFoil.emptyScope)
-    (\ z -> Lam z (App (Var (FreeFoil.sink (FreeFoil.nameOf s)))
-                        (App (Var (sink (nameOf s)))
-                             (Var (nameOf z))))))
+two = withFresh emptyScope
+  (\ s -> Lam s $ withFresh (extendScope s emptyScope)
+    (\ z -> Lam z (App (Var (sink (nameOf s)))
+                       (App (Var (sink (nameOf s)))
+                            (Var (nameOf z))))))
 
+appTwo :: LambdaPi VoidS
 appTwo = App two two
