@@ -26,9 +26,29 @@ import Data.Bifunctor.TH (deriveBifunctor)
 import GHC.Generics (Generic)
 
 import FreeFoil.NbE
+    ( S(VoidS),
+      Distinct,
+      Scope,
+      AST(..),
+      NameBinder,
+      ScopedAST(ScopedAST),
+      DistinctEvidence(Distinct),
+      Substitution,
+      Closure(..),
+      assertDistinct,
+      sink,
+      nameOf,
+      addSubst,
+      emptyScope,
+      extendScope,
+      identitySubst,
+      withFresh,
+      substitute,
+      lookupSubst,
+      quote' 
+    )
 
 
---- Impl of nf, whnf using generic sinking
 data LambdaPiF scope term
   = AppF term term
   | LamF scope
@@ -46,6 +66,7 @@ pattern Lam binder body = Node (LamF (ScopedAST binder body))
 
 {-# COMPLETE Var, App, Lam #-}
 
+--- Impl of nf, whnf using generic sinking
 whnf :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n
 whnf scope = \case
   App fun arg ->
@@ -73,6 +94,36 @@ nf scope = \case
 
 nfd :: LambdaPi VoidS -> LambdaPi VoidS
 nfd = nf emptyScope
+
+--- Impl of nf, whnf using NBE
+type ValueF = Closure NameBinder LambdaPiF
+
+eval :: (Distinct o, Distinct i) => Scope o -> Substitution ValueF i o -> LambdaPi i -> ValueF o
+eval scope env = \case
+  Var x -> lookupSubst env x
+  App f x ->
+    let fun = eval scope env f
+        arg = eval scope env x
+      in case fun of
+        Closure env' (LamF (ScopedAST binder body)) ->
+          case assertDistinct binder of
+            Distinct ->
+              let env'' = addSubst env' binder arg
+              in eval scope env'' body
+        fun' -> Neutral (AppF fun' arg)
+  Lam binder body ->
+    Closure env (LamF (ScopedAST binder body))
+
+
+-- | Normal form
+-- >>> Free.nf emptyScope (fromString "(λs. λz. s (s (s z))) (λs. λz. s (s z)) (λx. x) (λy. λz. y)")
+-- λ x0 . λ x1 . x0
+-- >>> Free.nf emptyScope (fromString "let x = (λx. (x,(x,x))) in (x x)")
+-- (λ x0 . (x0, (x0, x0)), (λ x0 . (x0, (x0, x0)), λ x0 . (x0, (x0, x0))))
+-- >>> Free.nf emptyScope (fromString "(λx. (x,(x,x)))")
+-- λ x0 . (x0, (x0, x0))
+nfNbe :: (Distinct n) => Scope n -> LambdaPi n -> LambdaPi n
+nfNbe scope term = quote' eval scope (eval scope identitySubst term)
 
 --- examples
 two :: LambdaPi VoidS
