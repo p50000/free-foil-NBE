@@ -110,7 +110,6 @@ substituteClosure scope env (VarC x) =
 substituteClosure scope env (Closure env' sig) =
   Closure (composeSubst scope env env') sig
 substituteClosure scope env (Neutral sig) = 
-  Neutral (composeSubst scope env env) sig
 
 -- | Compose two substitutions under a given scope to produce a combined substitution.
 composeSubst ::
