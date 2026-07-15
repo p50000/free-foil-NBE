@@ -110,7 +110,7 @@ eval scope env = \case
             Distinct ->
               let env'' = addSubst env' binder arg
               in eval scope env'' body
-        fun' -> Neutral (AppF fun' arg)
+        fun' -> Closure identitySubst (AppF fun' arg)
   Lam binder body ->
     Closure env (LamF (ScopedAST binder body))
 

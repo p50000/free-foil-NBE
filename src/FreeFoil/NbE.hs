@@ -23,12 +23,17 @@ import Data.Bifunctor
 
 import qualified Data.IntMap as IntMap
 
+-- | A semantic value for NbE.
+--
+-- 'VarC' is a neutral variable (a stuck computation whose head is a free
+-- variable). 'Closure' suspends a syntax node together with an environment
+-- of captured variables. A neutral node (a stuck eliminator, e.g. an
+-- application blocked on a variable) is represented as a 'Closure' over the
+-- identity substitution, so it needs no separate constructor: evaluation
+-- distinguishes redexes from neutrals by matching on the node itself.
 data Closure binder sig i where
   VarC ::
     Name i -> Closure binder sig i
-  Neutral ::
-    sig (ScopedAST binder sig i) (Closure binder sig i) ->
-    Closure binder sig i
   Closure ::
     (Distinct i) =>
     Substitution (Closure binder sig) i o -> -- Environment of captured variables.
@@ -94,8 +99,6 @@ quote' eval scope = \case
         (quoteScoped eval scope env)
         (quote' eval scope . substituteClosure scope env)
         node
-  Neutral node -> Node $
-     second (quote' eval scope) node
 
 
 -- | Perform substitution inside a closure using the given environment and scope.
@@ -105,11 +108,10 @@ substituteClosure ::
   Foil.Substitution (Closure pat sig) n o ->
   Closure pat sig n ->
   Closure pat sig o
-substituteClosure scope env (VarC x) =
+substituteClosure _scope env (VarC x) =
   Foil.lookupSubst env x
 substituteClosure scope env (Closure env' sig) =
   Closure (composeSubst scope env env') sig
-substituteClosure scope env (Neutral sig) = 
 
 -- | Compose two substitutions under a given scope to produce a combined substitution.
 composeSubst ::
@@ -121,7 +123,7 @@ composeSubst ::
 composeSubst
   scope
   env@(UnsafeSubstitution outerMap)
-  env'@(UnsafeSubstitution innerMap) =
+  (UnsafeSubstitution innerMap) =
     UnsafeSubstitution $
       IntMap.union
         (IntMap.map (substituteClosure scope env) innerMap)
