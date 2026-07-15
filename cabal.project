@@ -2,9 +2,3 @@ packages: .
 
 -- The project targets base 4.20 (GHC 9.10).
 with-compiler: ghc-9.10.3
-
-source-repository-package
-  type: git
-  location: https://github.com/fizruk/free-foil
-  tag: 649d306dc277617f2b4664f53c7be7863881cd1e
-  subdir: haskell/free-foil
