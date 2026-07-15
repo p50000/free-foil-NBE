@@ -135,3 +135,21 @@ two = withFresh emptyScope
 
 appTwo :: LambdaPi VoidS
 appTwo = App two two
+
+-- | NbE must preserve neutral terms built from free variables.
+--
+-- In a scope with two free variables @f@ and @g@, the term @f ((λx. x) g)@
+-- normalises to the neutral application @f g@: the redex in the argument is
+-- reduced while the application stuck on the free @f@ is preserved.
+neutralNbeOk :: Bool
+neutralNbeOk =
+  withFresh emptyScope $ \fBinder ->
+    withFresh (extendScope fBinder emptyScope) $ \gBinder ->
+      let scope = extendScope gBinder (extendScope fBinder emptyScope)
+          f = sink (nameOf fBinder)  -- free variable f, sunk into the full scope
+          g = nameOf gBinder         -- free variable g
+          idLam = withFresh scope (\x -> Lam x (Var (nameOf x)))
+          term = App (Var f) (App idLam (Var g))
+      in case nfNbe scope term of
+           App (Var f') (Var g') -> f' == f && g' == g
+           _                     -> False

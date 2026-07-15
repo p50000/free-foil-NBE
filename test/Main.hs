@@ -5,7 +5,10 @@ import System.Exit (exitFailure)
 import LambdaPi
 
 main :: IO ()
-main =
+main = do
   case nfd appTwo of
-    Lam _ _ -> putStrLn "lambda-pi NbE: ok"
+    Lam _ _ -> putStrLn "lambda-pi nf: ok"
     _       -> exitFailure
+  if neutralNbeOk
+    then putStrLn "lambda-pi NbE (neutral): ok"
+    else exitFailure
