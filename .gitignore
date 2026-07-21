@@ -22,5 +22,10 @@ cabal.project.local~
 .HTF/
 .ghc.environment.*
 
+# Internal planning docs (not published)
+ROADMAP.md
+PHASE_0_PLAN.md
+PHASE_1_PLAN.md
+
 # Personal notes
 /notes
