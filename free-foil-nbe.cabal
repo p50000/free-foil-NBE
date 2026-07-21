@@ -21,15 +21,70 @@ library
         , containers ^>=0.7
     default-language: Haskell2010
 
+-- BNFC-generated parser/printer for lambda-pi, from demo/grammar/Syntax.cf.
+-- Kept in its own library so -Wall does not apply to generated code.
+-- Regenerate with ./grammar-regen.sh (needs bnfc, alex, happy).
+library lambda-pi-syntax
+    hs-source-dirs:   gen
+    exposed-modules:  LambdaPi.Syntax.Abs
+        , LambdaPi.Syntax.Lex
+        , LambdaPi.Syntax.Par
+        , LambdaPi.Syntax.Print
+    build-depends:    base ^>=4.20.2.0
+        , array
+    default-language: Haskell2010
+
+-- The lambda-pi demo language: syntax, NbE wiring, parsing, pretty-printing.
+library lambda-pi-demo
+    import:           warnings
+    hs-source-dirs:   demo
+    exposed-modules:  LambdaPi
+        , LambdaPi.Parser
+        , LambdaPi.PrettyPrint
+        , LambdaPi.Raw
+        , LambdaPi.LambdaNWays
+    other-modules:    LambdaPi.Generated
+    build-depends:    base ^>=4.20.2.0
+        , bifunctors
+        , containers ^>=0.7
+        , deepseq
+        , free-foil ^>=0.3.2
+        , free-foil-nbe
+        , kind-generics >=0.5.0 && <0.6
+        , kind-generics-th
+        , lambda-pi-syntax
+        , template-haskell
+    default-language: Haskell2010
+
 -- Exercises the generic NbE on the lambda-pi language.
 test-suite lambda-pi
     import:           warnings
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
     main-is:          Main.hs
-    other-modules:    LambdaPi
+    other-modules:    LambdaPi.Gen
     build-depends:    base ^>=4.20.2.0
         , bifunctors
+        , containers ^>=0.7
         , deepseq
         , free-foil-nbe
+        , lambda-pi-demo
+        , lambda-pi-syntax
+        , tasty
+        , tasty-hunit
+        , tasty-quickcheck
+        , QuickCheck
+    default-language: Haskell2010
+
+-- Microbenchmarks: NbE vs the reference normaliser on classic worst cases.
+benchmark nbe-bench
+    import:           warnings
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   bench
+    main-is:          Main.hs
+    ghc-options:      -O2
+    build-depends:    base ^>=4.20.2.0
+        , free-foil-nbe
+        , lambda-pi-demo
+        , tasty-bench
     default-language: Haskell2010

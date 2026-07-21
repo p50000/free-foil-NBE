@@ -10,6 +10,10 @@ module FreeFoil.NbE
   , module FreeFoil
   , Closure (..)
   , quote'
+  , quoteScoped
+  , substituteClosure
+  , composeSubst
+  , substitutionDomain
   ) where
 
 import Control.Monad.Foil as Foil
@@ -22,6 +26,12 @@ import Control.Monad.Free.Foil as FreeFoil
 import Data.Bifunctor
 
 import qualified Data.IntMap as IntMap
+
+-- | The raw name identifiers a substitution currently maps (its domain).
+-- Handy for inspecting the captured environment of a 'Closure' without
+-- reaching into foil internals.
+substitutionDomain :: Substitution e i o -> [Int]
+substitutionDomain (UnsafeSubstitution m) = IntMap.keys m
 
 -- | A semantic value for NbE.
 --
