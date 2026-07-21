@@ -1,36 +1,42 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE QuantifiedConstraints #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
-module LambdaPi where
-
-import Control.DeepSeq (NFData)
-import Data.Bifunctor.TH (deriveBifunctor)
-import GHC.Generics (Generic)
+-- | The lambda-pi demonstration language.
+--
+-- The scope-safe syntax, its signature bifunctor, and the raw/scoped
+-- conversions are generated from "LambdaPi.Raw" by free-foil's Template
+-- Haskell (see "LambdaPi.Generated"). This module only adds the friendly
+-- surface API — a 'LambdaPi' type synonym and 'Var'\/'App'\/'Lam'\/'Pi'
+-- pattern synonyms that hide the generated @FFPattern@ wrapper — and the
+-- normalisers ('nf', 'whnf', and the NbE-based 'nfNbe').
+module LambdaPi
+  ( LambdaPi,
+    pattern Var,
+    pattern App,
+    pattern Lam,
+    pattern Pi,
+    whnf,
+    nf,
+    nfd,
+    ValueF,
+    eval,
+    nfNbe,
+    two,
+    appTwo,
+    neutralNbeOk,
+  )
+where
 
 import FreeFoil.NbE
     ( S(VoidS),
       Distinct,
       Scope,
-      AST(..),
       NameBinder,
+      AST(Var),
       ScopedAST(ScopedAST),
       DistinctEvidence(Distinct),
       Substitution,
@@ -45,26 +51,38 @@ import FreeFoil.NbE
       withFresh,
       substitute,
       lookupSubst,
-      quote' 
+      quote',
+      quoteScoped
     )
 
+import LambdaPi.Generated
+    ( FFTerm,
+      TermSig(AppSig, LamSig, PiSig),
+      FFPattern(FFPatternVar),
+      pattern FFApp,
+      pattern FFLam,
+      pattern FFPi
+    )
 
-data LambdaPiF scope term
-  = AppF term term
-  | LamF scope
-  | PiF term scope
-  deriving (Eq, Show, Functor, NFData, Generic)
-deriveBifunctor ''LambdaPiF
+-- | Scope-safe lambda-pi terms in scope @n@ (an alias for the generated
+-- @FFTerm@).
+type LambdaPi n = FFTerm n
 
-type LambdaPi n = AST NameBinder LambdaPiF n
-
+-- | Application. (@Var@ is re-exported from free-foil's generic 'AST'.)
 pattern App :: LambdaPi n -> LambdaPi n -> LambdaPi n
-pattern App fun arg = Node (AppF fun arg)
+pattern App fun arg = FFApp fun arg
 
+-- | Lambda abstraction. Hides the generated @FFPatternVar@ wrapper so the body
+-- binds a plain 'NameBinder', as before.
 pattern Lam :: NameBinder n l -> LambdaPi l -> LambdaPi n
-pattern Lam binder body = Node (LamF (ScopedAST binder body))
+pattern Lam binder body = FFLam (FFPatternVar binder) body
 
-{-# COMPLETE Var, App, Lam #-}
+-- | Dependent function type @(x : dom) -> body@. The domain @dom@ lives in the
+-- outer scope @n@; the codomain @body@ may mention the bound variable.
+pattern Pi :: LambdaPi n -> NameBinder n l -> LambdaPi l -> LambdaPi n
+pattern Pi dom binder body = FFPi dom (FFPatternVar binder) body
+
+{-# COMPLETE Var, App, Lam, Pi #-}
 
 --- Impl of nf, whnf using generic sinking
 whnf :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n
@@ -84,6 +102,11 @@ nf scope = \case
       Distinct ->
         let scope' = extendScope binder scope
         in Lam binder (nf scope' body)
+  Pi dom binder body ->
+    case assertDistinct binder of
+      Distinct ->
+        let scope' = extendScope binder scope
+        in Pi (nf scope dom) binder (nf scope' body)
   App fun arg ->
     case whnf scope fun of
       Lam binder body ->
@@ -96,32 +119,38 @@ nfd :: LambdaPi VoidS -> LambdaPi VoidS
 nfd = nf emptyScope
 
 --- Impl of nf, whnf using NBE
-type ValueF = Closure NameBinder LambdaPiF
+type ValueF = Closure FFPattern TermSig
 
 eval :: (Distinct o, Distinct i) => Scope o -> Substitution ValueF i o -> LambdaPi i -> ValueF o
 eval scope env = \case
   Var x -> lookupSubst env x
-  App f x ->
+  FFApp f x ->
     let fun = eval scope env f
         arg = eval scope env x
       in case fun of
-        Closure env' (LamF (ScopedAST binder body)) ->
+        Closure env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
           case assertDistinct binder of
             Distinct ->
               let env'' = addSubst env' binder arg
               in eval scope env'' body
-        fun' -> Closure identitySubst (AppF fun' arg)
-  Lam binder body ->
-    Closure env (LamF (ScopedAST binder body))
+        fun' -> Closure identitySubst (AppSig fun' arg)
+  FFLam pat body ->
+    Closure env (LamSig (ScopedAST pat body))
+  FFPi dom pat body ->
+    -- 'Pi' carries both a term position (the domain) and a scoped position
+    -- (the codomain), which must share one environment. We therefore evaluate
+    -- the domain eagerly under @env@ and normalise the codomain into the same
+    -- scope via the generic 'quoteScoped', then suspend the whole (now closed
+    -- over the identity substitution) node.
+    Closure identitySubst
+      (PiSig (eval scope env dom)
+             (quoteScoped eval scope env (ScopedAST pat body)))
 
-
--- | Normal form
--- >>> Free.nf emptyScope (fromString "(λs. λz. s (s (s z))) (λs. λz. s (s z)) (λx. x) (λy. λz. y)")
--- λ x0 . λ x1 . x0
--- >>> Free.nf emptyScope (fromString "let x = (λx. (x,(x,x))) in (x x)")
--- (λ x0 . (x0, (x0, x0)), (λ x0 . (x0, (x0, x0)), λ x0 . (x0, (x0, x0))))
--- >>> Free.nf emptyScope (fromString "(λx. (x,(x,x)))")
--- λ x0 . (x0, (x0, x0))
+-- | Normal form via NbE: evaluate into the semantic domain, then quote back.
+--
+-- Agrees with the reference substitution-based 'nf' on lambda-pi terms (see
+-- the test suite). For example, @(λx. x) (λy. y)@ normalises to @λy. y@ and the
+-- dependent type @(x : A) -> (λy. y) x@ normalises to @(x : A) -> x@.
 nfNbe :: (Distinct n) => Scope n -> LambdaPi n -> LambdaPi n
 nfNbe scope term = quote' eval scope (eval scope identitySubst term)
 
