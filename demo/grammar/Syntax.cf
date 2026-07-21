@@ -1,0 +1,19 @@
+-- LBNF grammar for the lambda-pi demonstration language.
+-- Generated modules live under LambdaPi.Syntax.* (see demo/grammar/regen.sh).
+
+comment "--" ;
+comment "{-" "-}" ;
+
+token VarIdent letter (letter | digit | '_' | '\'')* ;
+
+Var. Term2 ::= VarIdent ;
+App. Term1 ::= Term1 Term2 ;
+Lam. Term  ::= "\\" Pattern "." ScopedTerm ;
+Pi.  Term  ::= "(" Pattern ":" Term ")" "->" ScopedTerm ;
+coercions Term 2 ;
+
+AScopedTerm. ScopedTerm ::= Term ;
+
+PatternVar. Pattern ::= VarIdent ;
+
+entrypoints Term ;
