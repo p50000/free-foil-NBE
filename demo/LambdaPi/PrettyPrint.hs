@@ -22,19 +22,19 @@ import FreeFoil.NbE
   ( Closure (Closure, VarC), ScopedAST (ScopedAST), Distinct, Scope
   , nameId, nameOf, quote', substitutionDomain
   )
-import LambdaPi (ValueF, eval)
+import LambdaPi (Value, eval)
 import LambdaPi.Generated (TermSig (AppSig, LamSig, PiSig), FFPattern (FFPatternVar), fromTerm)
 import LambdaPi.Syntax.Print (printTree)
 
 -- | Pretty-print a lambda-pi value by quoting it back to a term and printing.
 -- Requires the scope the value lives in so that quoting can go under binders.
-ppValue :: Distinct n => Scope n -> ValueF n -> String
+ppValue :: Distinct n => Scope n -> Value n -> String
 ppValue scope = printTree . fromTerm . quote' eval scope
 
 -- | A structural rendering of a value: @#n@ for a neutral variable, and
 -- @{node |env=[...]}@ for a suspended closure (term subterms recurse; scoped
 -- subterms are shown as their raw suspended AST).
-ppValueStruct :: ValueF n -> String
+ppValueStruct :: Value n -> String
 ppValueStruct = \case
   VarC x -> '#' : show (nameId x)
   Closure env node ->
@@ -52,5 +52,5 @@ ppValueStruct = \case
     binder :: FFPattern i l -> String
     binder (FFPatternVar nb) = 'x' : show (nameId (nameOf nb))
 
-instance Show (ValueF n) where
+instance Show (Value n) where
   show = ppValueStruct

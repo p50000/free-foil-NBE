@@ -22,7 +22,7 @@ module LambdaPi
     whnf,
     nf,
     nfd,
-    ValueF,
+    Value,
     eval,
     nfNbe,
     two,
@@ -119,9 +119,9 @@ nfd :: LambdaPi VoidS -> LambdaPi VoidS
 nfd = nf emptyScope
 
 --- Impl of nf, whnf using NBE
-type ValueF = Closure FFPattern TermSig
+type Value = Closure FFPattern TermSig
 
-eval :: (Distinct o, Distinct i) => Scope o -> Substitution ValueF i o -> LambdaPi i -> ValueF o
+eval :: (Distinct o, Distinct i) => Scope o -> Substitution Value i o -> LambdaPi i -> Value o
 eval scope env = \case
   Var x -> lookupSubst env x
   FFApp f x ->
