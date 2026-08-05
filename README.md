@@ -4,8 +4,8 @@ A generic **normalisation-by-evaluation (NbE)** framework built on
 [free-foil](https://github.com/fizruk/free-foil) (intrinsically-scoped abstract
 syntax). You describe an object language as a signature and obtain NbE-based
 normalisation with as little bespoke code as possible; normalisation is factored,
-following Christiansen's tutorial, into an evaluator into semantic values and a
-`quote` function back into syntax.
+following [Christiansen's tutorial](https://davidchristiansen.dk/tutorials/nbe/),
+into an evaluator into semantic values and a `quote` function back into syntax.
 
 This realises the generic-`Closure` sketch (Figure 14) that the Free Foil paper
 ([Kudasov, Shakirova, Shalagin, Tyulebaeva, ICCQ 2024](https://arxiv.org/abs/2405.16384))
@@ -35,7 +35,7 @@ everything. All commands are run from the repository root.
 
 | Path | What it is |
 |------|-----------|
-| `src/FreeFoil/NbE.hs` | The generic NbE core: the `Closure` value type and generic `quote'` (language-agnostic). |
+| `src/FreeFoil/NbE.hs` | The generic NbE core: the `Value`/`ScopedClosure` semantic domain and generic `quote` (language-agnostic). |
 | `demo/grammar/Syntax.cf` | The lambda-pi grammar (LBNF). |
 | `gen/LambdaPi/Syntax/*` | BNFC/alex/happy output (lexer, parser, printer) — committed. |
 | `demo/LambdaPi/Raw.hs`, `Generated.hs` | free-foil TH: config + generated scope-safe types, patterns, conversions, `Show`, `NFData`. |
@@ -43,7 +43,7 @@ everything. All commands are run from the repository root.
 | `demo/LambdaPi/Parser.hs`, `PrettyPrint.hs` | `IsString` parsing; value printers (`ppValue`, `ppValueStruct`). |
 | `demo/LambdaPi/LambdaNWays.hs` | Adapter to Weirich's `lambda-n-ways` harness (untyped `LC` bridge). |
 | `test/` | `tasty` test suite. |
-| `bench/` | `tasty-bench` microbenchmarks + recorded baseline. |
+| `bench/` | `tasty-bench` microbenchmarks (NbE vs reference); `bench/lambda-n-ways/` is a guide + port for benchmarking against Weirich's `lambda-n-ways` suite. |
 
 ## Build
 
@@ -63,12 +63,13 @@ cabal test
 cabal test --test-show-details=direct
 ```
 
-Expected: **`All 40 tests passed`**. The suite covers:
+Expected: **`All 41 tests passed`**. The suite covers:
 
 - **beta-reduction** on closed terms;
 - **normalisation under binders**;
 - **`Pi`** (dependent function types): codomain redex, neutral codomain,
-  non-dependent arrow;
+  non-dependent arrow, and a deep-nesting regression (normalisation stays
+  linear in `Pi`-depth);
 - **neutrals with free variables**;
 - **`parse . show` round-trips**;
 - **value inspection** (`ppValue` / `ppValueStruct` / `Show`);
@@ -91,21 +92,23 @@ cabal bench nbe-bench
 
 Each input is normalised two ways — by NbE (`nfNbe`) and by the reference
 substitution normaliser (`nf`) — so they are directly comparable. Groups: Church
-`m^n`, Church arithmetic (mult/add), a faithful nested-`let` chain, and nested
-identity redexes.
+`m^n`, Church arithmetic (mult/add), a faithful nested-`let` chain, nested
+identity redexes, and nested `Pi` types (the dependent-type worst case that
+motivated the eager-values representation).
 
-Record or compare a baseline:
+Record your own baseline (the CSV path is gitignored, not committed) and compare
+later runs against it:
 
 ```sh
 # write a baseline
 cabal bench nbe-bench --benchmark-options '--csv bench/baseline.csv'
-# compare a later run against the committed one
+# compare a later run against it (fails on large regressions)
 cabal bench nbe-bench --benchmark-options '--baseline bench/baseline.csv'
 ```
 
-See [bench/README.md](bench/README.md) for the recorded baseline and its
-interpretation (headline: NbE beats substitution ~23× on `2^10` and ~14000× on
-nested `let`, but ~2× slower on the linear redex chain).
+See [bench/README.md](bench/README.md) for a sample run and its interpretation
+(headline: NbE beats substitution ~30× on `2^10` and ~13000× on nested `let`,
+but ~1.7× slower on the linear redex chain).
 
 ## Run NbE examples by hand (REPL)
 
@@ -141,7 +144,7 @@ ghci> nfNbe emptyScope ("(a : \\t. t) -> (\\y. y) a" :: LambdaPi VoidS)   -- Pi:
 build terms directly with the `Var`/`App`/`Lam`/`Pi` pattern synonyms and the
 foil combinators — see `two`/`appTwo`/`neutralNbeOk` in `demo/LambdaPi.hs`.)
 
-**Inspect a semantic value.** `eval` produces a `Closure`; two views:
+**Inspect a semantic value.** `eval` produces a `Value`; two views:
 
 ```haskell
 -- 'ppValue' — the value's MEANING: quote it back to a term and print.
@@ -188,3 +191,47 @@ cabal build all && cabal test && cabal bench nbe-bench
 ```
 
 If this is green, everything is working.
+
+## References
+
+The design rests on the following work, grouped by the decision each informs.
+
+**Foundation — intrinsically-scoped abstract syntax.**
+
+- N. Kudasov, R. Shakirova, E. Shalagin, K. Tyulebaeva. *Free Foil: Generating
+  Efficient and Scope-Safe Abstract Syntax.* ICCQ 2024.
+  [arXiv:2405.16384](https://arxiv.org/abs/2405.16384) — the scope-safe `AST` and
+  the generic `Closure` sketch (Figure 14) this project realises.
+
+**NbE, factored as `eval` then `quote`.**
+
+- D. T. Christiansen. *Checking Dependent Types with Normalization by Evaluation:
+  A Tutorial.* [davidchristiansen.dk/tutorials/nbe](https://davidchristiansen.dk/tutorials/nbe/)
+  — the evaluate-into-values / quote-back-to-syntax structure the demo follows.
+- U. Berger, H. Schwichtenberg. *An Inverse of the Evaluation Functional for
+  Typed λ-calculus.* LICS 1991.
+  [pdf](https://www.mathematik.uni-muenchen.de/~schwicht/papers/lics91/paper.pdf)
+  — the origin of NbE (`normalize = reify ∘ eval`).
+
+**The eager-values representation** (`Value` / `ScopedClosure`, and the fix that
+made nested `Pi` linear).
+
+- A. Kovács. *elaboration-zoo* and *smalltt.*
+  [elaboration-zoo](https://github.com/AndrasKovacs/elaboration-zoo),
+  [smalltt](https://github.com/AndrasKovacs/smalltt) — the implementation
+  reference: a single suspension point (environment + body), a `Pi`'s domain
+  evaluated eagerly and its codomain kept as a closure, and neutrals as a head
+  with a spine. Directly grounds our representation.
+- A. Abel. *Normalization by Evaluation: Dependent Types and Impredicativity.*
+  Habilitation, LMU Munich, 2013.
+  [pdf](https://www.cse.chalmers.se/~abela/habil.pdf) — NbE for dependent types:
+  reflect/reify with type-directed readback and the neutral-versus-value split.
+
+**Background for future phases (sums, type-directed readback).**
+
+- O. Danvy. *Type-Directed Partial Evaluation.* POPL 1996.
+  [doi:10.1145/237721.237784](https://doi.org/10.1145/237721.237784).
+- S. Lindley. *Normalisation by Evaluation in the Compilation of Typed Functional
+  Programming Languages.* PhD thesis, University of Edinburgh, 2005.
+  [handle](https://era.ed.ac.uk/handle/1842/778) — NbE with coproducts/sums, the
+  hard case deferred to a later phase.

@@ -82,7 +82,8 @@ benchmark nbe-bench
     type:             exitcode-stdio-1.0
     hs-source-dirs:   bench
     main-is:          Main.hs
-    ghc-options:      -O2
+    -- Optimisation comes from `optimization: 2` in cabal.project, which applies
+    -- to the library (where nfNbe/nf live) as well as this driver.
     build-depends:    base ^>=4.20.2.0
         , free-foil-nbe
         , lambda-pi-demo

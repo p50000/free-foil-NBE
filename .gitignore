@@ -22,6 +22,8 @@ cabal.project.local~
 .HTF/
 .ghc.environment.*
 
+# macOS
+.DS_Store
 # Internal planning docs (not published)
 ROADMAP.md
 PHASE_0_PLAN.md

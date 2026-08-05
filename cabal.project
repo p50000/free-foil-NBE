@@ -2,3 +2,12 @@ packages: .
 
 -- The project targets base 4.20 (GHC 9.10).
 with-compiler: ghc-9.10.3
+
+-- Build the test suite and benchmark as part of `cabal build all` (and CI),
+-- not only under `cabal test` / `cabal bench`.
+tests: True
+benchmarks: True
+
+-- Optimise every component, including the library where `nfNbe`/`nf` live, so
+-- the benchmark measures -O2 code end to end (cabal defaults to -O1).
+optimization: 2
