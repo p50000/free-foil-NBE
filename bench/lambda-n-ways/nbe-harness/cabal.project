@@ -1,0 +1,3 @@
+-- Own project file so cabal does not inherit the fork's cabal.project
+-- (which references packages this minimal harness does not need).
+packages: .
