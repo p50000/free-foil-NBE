@@ -4,7 +4,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
--- | Showing lambda-pi values (the 'Closure'-based semantic domain).
+-- | Showing lambda-pi values (the 'Value'-based semantic domain).
 --
 -- Terms have a 'Show' instance (in "LambdaPi.Generated"). Here we add two views
 -- of a semantic value:
@@ -19,9 +19,10 @@ module LambdaPi.PrettyPrint
   ) where
 
 import FreeFoil.NbE
-  ( Closure (Closure, VarC), ScopedAST (ScopedAST), Distinct, Scope
-  , nameId, nameOf, quote', substitutionDomain
+  ( ScopedClosure (ScopedClosure), ScopedAST (ScopedAST), Distinct, Scope
+  , nameId, nameOf, quote, substitutionDomain
   )
+import qualified FreeFoil.NbE as NbE
 import LambdaPi (Value, eval)
 import LambdaPi.Generated (TermSig (AppSig, LamSig, PiSig), FFPattern (FFPatternVar), fromTerm)
 import LambdaPi.Syntax.Print (printTree)
@@ -29,26 +30,32 @@ import LambdaPi.Syntax.Print (printTree)
 -- | Pretty-print a lambda-pi value by quoting it back to a term and printing.
 -- Requires the scope the value lives in so that quoting can go under binders.
 ppValue :: Distinct n => Scope n -> Value n -> String
-ppValue scope = printTree . fromTerm . quote' eval scope
+ppValue scope = printTree . fromTerm . quote eval scope
 
 -- | A structural rendering of a value: @#n@ for a neutral variable, and
--- @{node |env=[...]}@ for a suspended closure (term subterms recurse; scoped
--- subterms are shown as their raw suspended AST).
+-- @{node}@ for an evaluated node. Term subterms recurse; each scoped subterm
+-- is shown as its raw suspended body together with its captured environment,
+-- @body |env=[...]@.
 ppValueStruct :: Value n -> String
 ppValueStruct = \case
-  VarC x -> '#' : show (nameId x)
-  Closure env node ->
-    let dom = substitutionDomain env
-        envS = if null dom then "" else " |env=" ++ show dom
-        body = case node of
-          AppSig f a ->
-            "app " ++ ppValueStruct f ++ " " ++ ppValueStruct a
-          LamSig (ScopedAST b t) ->
-            "lam " ++ binder b ++ ". " ++ show t
-          PiSig d (ScopedAST b t) ->
-            "pi " ++ ppValueStruct d ++ " " ++ binder b ++ ". " ++ show t
-    in "{" ++ body ++ envS ++ "}"
+  NbE.VVar x -> '#' : show (nameId x)
+  NbE.VNode node ->
+    "{" ++ body ++ "}"
+    where
+      body = case node of
+        AppSig f a ->
+          "app " ++ ppValueStruct f ++ " " ++ ppValueStruct a
+        LamSig sc ->
+          "lam " ++ scoped sc
+        PiSig d sc ->
+          "pi " ++ ppValueStruct d ++ " " ++ scoped sc
   where
+    scoped :: ScopedClosure FFPattern TermSig n -> String
+    scoped (ScopedClosure env (ScopedAST b t)) =
+      let dom = substitutionDomain env
+          envS = if null dom then "" else " |env=" ++ show dom
+      in binder b ++ ". " ++ show t ++ envS
+
     binder :: FFPattern i l -> String
     binder (FFPatternVar nb) = 'x' : show (nameId (nameOf nb))
 

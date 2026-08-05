@@ -2,17 +2,17 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE InstanceSigs #-}
 
 -- | Generic normalisation by evaluation (NbE) via free-foil.
 module FreeFoil.NbE
   ( module Foil
   , module FreeFoil
-  , Closure (..)
-  , quote'
-  , quoteScoped
-  , substituteClosure
-  , composeSubst
+  , Value (..)
+  , ScopedClosure (..)
+  , quote
+  , quoteScopedClosure
   , substitutionDomain
   ) where
 
@@ -28,41 +28,90 @@ import Data.Bifunctor
 import qualified Data.IntMap as IntMap
 
 -- | The raw name identifiers a substitution currently maps (its domain).
--- Handy for inspecting the captured environment of a 'Closure' without
+-- Handy for inspecting the captured environment of a 'ScopedClosure' without
 -- reaching into foil internals.
 substitutionDomain :: Substitution e i o -> [Int]
 substitutionDomain (UnsafeSubstitution m) = IntMap.keys m
 
--- | A semantic value for NbE.
+-- | A semantic value for NbE, in the /eager-values/ representation.
 --
--- 'VarC' is a neutral variable (a stuck computation whose head is a free
--- variable). 'Closure' suspends a syntax node together with an environment
--- of captured variables. A neutral node (a stuck eliminator, e.g. an
--- application blocked on a variable) is represented as a 'Closure' over the
--- identity substitution, so it needs no separate constructor: evaluation
--- distinguishes redexes from neutrals by matching on the node itself.
-data Closure binder sig i where
-  VarC ::
-    Name i -> Closure binder sig i
-  Closure ::
+-- 'VVar' is a neutral variable (a stuck computation whose head is a free
+-- variable). 'VNode' is a fully evaluated syntax node whose /term/ subterms
+-- are themselves values (already in the ambient scope @n@) and whose /scoped/
+-- subterms are 'ScopedClosure's — suspended bodies that each carry their own
+-- captured environment. A neutral node (a stuck eliminator, e.g. an
+-- application blocked on a variable) is just a 'VNode' whose head is neutral;
+-- evaluation distinguishes redexes from neutrals by matching on the node.
+--
+-- Because term subterms are already values, every subterm is evaluated and
+-- quoted exactly once. This is what keeps 'quote' linear in the term size —
+-- in particular, nested 'Pi' types do not re-normalise their codomains.
+data Value binder sig n where
+  VVar ::
+    Name n -> Value binder sig n
+  VNode ::
+    sig (ScopedClosure binder sig n) (Value binder sig n) ->
+    Value binder sig n
+
+-- | A suspended scoped subterm: a body together with the environment captured
+-- where it was introduced. Evaluation of the body is deferred until 'quote'
+-- goes under the binder.
+data ScopedClosure binder sig n where
+  ScopedClosure ::
     (Distinct i) =>
-    Substitution (Closure binder sig) i o -> -- Environment of captured variables.
-    sig (ScopedAST binder sig i) (Closure binder sig i) ->
-    Closure binder sig o
+    Substitution (Value binder sig) i n ->
+    ScopedAST binder sig i ->
+    ScopedClosure binder sig n
 
-instance Foil.InjectName (Closure pat sig) where
-  injectName = VarC
+instance Foil.InjectName (Value pat sig) where
+  injectName = VVar
 
-instance Foil.Sinkable (Closure pat sig) where
-  sinkabilityProof :: (Name n -> Name l) -> Closure pat sig n -> Closure pat sig l
-  sinkabilityProof rename (VarC n) =
-    VarC (rename n)
-  sinkabilityProof rename (Closure env sig) =
-    Closure (Foil.sinkabilityProof rename env) sig
+instance (Bifunctor sig) => Foil.Sinkable (Value pat sig) where
+  sinkabilityProof :: (Name n -> Name l) -> Value pat sig n -> Value pat sig l
+  sinkabilityProof rename (VVar n) =
+    VVar (rename n)
+  sinkabilityProof rename (VNode node) =
+    VNode (bimap (sinkScopedClosure rename) (Foil.sinkabilityProof rename) node)
 
-quoteScoped ::
+-- | Sink a suspended scoped subterm: only the captured environment moves to
+-- the wider scope; the (still un-evaluated) body is untouched.
+sinkScopedClosure ::
+  (Bifunctor sig) =>
+  (Name n -> Name l) ->
+  ScopedClosure pat sig n ->
+  ScopedClosure pat sig l
+sinkScopedClosure rename (ScopedClosure env body) =
+  ScopedClosure (Foil.sinkabilityProof rename env) body
+
+-- | Quote a value back into an AST, using the provided evaluation function.
+-- Each subterm is processed exactly once: term subterms recurse directly,
+-- scoped subterms are read back under their binder via 'quoteScopedClosure'.
+quote ::
+  (Foil.Distinct n, Bifunctor sig, Foil.HasNameBinders pat, Foil.CoSinkable pat) =>
+  ( forall l m.
+    (Foil.Distinct m, Foil.Distinct l) =>
+    Foil.Scope m ->
+    Foil.Substitution (Value pat sig) l m ->
+    AST pat sig l ->
+    Value pat sig m
+  ) ->
+  Foil.Scope n ->
+  Value pat sig n ->
+  AST pat sig n
+quote eval scope = \case
+  VVar x -> Var x
+  VNode node ->
+    Node $
+      bimap
+        (quoteScopedClosure eval scope)
+        (quote eval scope)
+        node
+
+-- | Read back a suspended scoped subterm: refresh the binder, extend the
+-- captured environment to map it to a fresh neutral, evaluate the body once
+-- under that environment, and quote the result.
+quoteScopedClosure ::
   ( Foil.Distinct n,
-    Foil.Distinct o,
     Bifunctor sig,
     Foil.CoSinkable binder,
     Foil.HasNameBinders binder
@@ -70,71 +119,19 @@ quoteScoped ::
   ( forall l m.
     (Foil.Distinct m, Foil.Distinct l) =>
     Foil.Scope m ->
-    Foil.Substitution (Closure binder sig) l m ->
+    Foil.Substitution (Value binder sig) l m ->
     AST binder sig l ->
-    Closure binder sig m
+    Value binder sig m
   ) ->
-  Foil.Scope o ->
-  Foil.Substitution (Closure binder sig) n o ->
-  ScopedAST binder sig n ->
-  ScopedAST binder sig o
-quoteScoped eval scope env (ScopedAST bind body) =
-  Foil.withRefreshedPattern scope bind $ \(extendEnv :: Foil.Substitution (Closure bind sig) n o -> Foil.Substitution (Closure bind sig) l o') bind' ->
+  Foil.Scope n ->
+  ScopedClosure binder sig n ->
+  ScopedAST binder sig n
+quoteScopedClosure eval scope (ScopedClosure env (ScopedAST bind body)) =
+  Foil.withRefreshedPattern scope bind $ \extendEnv bind' ->
     case Foil.assertDistinct bind' of
       Foil.Distinct ->
         case Foil.assertDistinct bind of
           Foil.Distinct ->
             let scope' = Foil.extendScopePattern bind' scope
                 env' = extendEnv env
-             in ScopedAST bind' (quote' eval scope' (eval scope' env' body))
-
--- | Quote a closure back into an AST node, using the provided evaluation function.
-quote' ::
-  (Foil.Distinct n, Bifunctor sig, Foil.HasNameBinders pat, Foil.CoSinkable pat) =>
-  (forall l m.
-    (Foil.Distinct m, Foil.Distinct l) =>
-    Foil.Scope m ->
-    Foil.Substitution (Closure pat sig) l m ->
-    AST pat sig l ->
-    Closure pat sig m
-  ) ->
-  Foil.Scope n ->
-  Closure pat sig n ->
-  AST pat sig n
-quote' eval scope = \case
-  VarC x -> Var x
-  Closure (env :: Foil.Substitution (Closure pat sig) i n) node ->
-    Node $
-      bimap
-        (quoteScoped eval scope env)
-        (quote' eval scope . substituteClosure scope env)
-        node
-
-
--- | Perform substitution inside a closure using the given environment and scope.
-substituteClosure ::
-  (Foil.Distinct o, Foil.CoSinkable pat) =>
-  Foil.Scope o ->
-  Foil.Substitution (Closure pat sig) n o ->
-  Closure pat sig n ->
-  Closure pat sig o
-substituteClosure _scope env (VarC x) =
-  Foil.lookupSubst env x
-substituteClosure scope env (Closure env' sig) =
-  Closure (composeSubst scope env env') sig
-
--- | Compose two substitutions under a given scope to produce a combined substitution.
-composeSubst ::
-  (Foil.Distinct o, Foil.CoSinkable pat) =>
-  Foil.Scope o ->
-  Foil.Substitution (Closure pat sig) n o ->
-  Foil.Substitution (Closure pat sig) k n ->
-  Foil.Substitution (Closure pat sig) k o
-composeSubst
-  scope
-  env@(UnsafeSubstitution outerMap)
-  (UnsafeSubstitution innerMap) =
-    UnsafeSubstitution $
-      IntMap.union
-        (IntMap.map (substituteClosure scope env) innerMap)
-        outerMap
+             in ScopedAST bind' (quote eval scope' (eval scope' env' body))

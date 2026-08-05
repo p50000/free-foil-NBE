@@ -40,7 +40,7 @@ import FreeFoil.NbE
       ScopedAST(ScopedAST),
       DistinctEvidence(Distinct),
       Substitution,
-      Closure(..),
+      ScopedClosure(ScopedClosure),
       assertDistinct,
       sink,
       nameOf,
@@ -51,9 +51,9 @@ import FreeFoil.NbE
       withFresh,
       substitute,
       lookupSubst,
-      quote',
-      quoteScoped
+      quote
     )
+import qualified FreeFoil.NbE as NbE
 
 import LambdaPi.Generated
     ( FFTerm,
@@ -119,7 +119,7 @@ nfd :: LambdaPi VoidS -> LambdaPi VoidS
 nfd = nf emptyScope
 
 --- Impl of nf, whnf using NBE
-type Value = Closure FFPattern TermSig
+type Value = NbE.Value FFPattern TermSig
 
 eval :: (Distinct o, Distinct i) => Scope o -> Substitution Value i o -> LambdaPi i -> Value o
 eval scope env = \case
@@ -128,23 +128,23 @@ eval scope env = \case
     let fun = eval scope env f
         arg = eval scope env x
       in case fun of
-        Closure env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
+        NbE.VNode (LamSig (ScopedClosure env' (ScopedAST (FFPatternVar binder) body))) ->
           case assertDistinct binder of
             Distinct ->
               let env'' = addSubst env' binder arg
               in eval scope env'' body
-        fun' -> Closure identitySubst (AppSig fun' arg)
+        fun' -> NbE.VNode (AppSig fun' arg)
   FFLam pat body ->
-    Closure env (LamSig (ScopedAST pat body))
+    NbE.VNode (LamSig (ScopedClosure env (ScopedAST pat body)))
   FFPi dom pat body ->
-    -- 'Pi' carries both a term position (the domain) and a scoped position
-    -- (the codomain), which must share one environment. We therefore evaluate
-    -- the domain eagerly under @env@ and normalise the codomain into the same
-    -- scope via the generic 'quoteScoped', then suspend the whole (now closed
-    -- over the identity substitution) node.
-    Closure identitySubst
+    -- 'Pi' carries a term position (the domain) and a scoped position (the
+    -- codomain). Under the eager-values representation each is stored in its
+    -- own right: the domain is evaluated eagerly to a value, the codomain is
+    -- suspended as a 'ScopedClosure' capturing @env@. Neither is normalised
+    -- here, so 'quote' visits each exactly once — nested 'Pi' stays linear.
+    NbE.VNode
       (PiSig (eval scope env dom)
-             (quoteScoped eval scope env (ScopedAST pat body)))
+             (ScopedClosure env (ScopedAST pat body)))
 
 -- | Normal form via NbE: evaluate into the semantic domain, then quote back.
 --
@@ -152,7 +152,7 @@ eval scope env = \case
 -- the test suite). For example, @(λx. x) (λy. y)@ normalises to @λy. y@ and the
 -- dependent type @(x : A) -> (λy. y) x@ normalises to @(x : A) -> x@.
 nfNbe :: (Distinct n) => Scope n -> LambdaPi n -> LambdaPi n
-nfNbe scope term = quote' eval scope (eval scope identitySubst term)
+nfNbe scope term = quote eval scope (eval scope identitySubst term)
 
 --- examples
 two :: LambdaPi VoidS

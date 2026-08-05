@@ -4,8 +4,10 @@
 
 module Main where
 
+import Control.DeepSeq (rnf)
 import Control.Exception (evaluate)
 import Data.List (isInfixOf)
+import Data.Maybe (isJust)
 import qualified Data.Map.Strict as Map
 import System.Timeout (timeout)
 
@@ -23,11 +25,12 @@ import qualified LambdaPi.LambdaNWays as LNW
 main :: IO ()
 main =
   defaultMain $
-    localOption (QuickCheckMaxSize 12) $
+    localOption (QuickCheckMaxSize 20) $
       testGroup "lambda-pi"
         [ betaTests
         , underBinderTests
         , piTests
+        , piDepthTests
         , neutralTests
         , roundTripTests
         , valueTests
@@ -89,6 +92,29 @@ piTests =
     , bothNormaliseTo "non-dependent arrow (unused binder)"
         "(q : \\z. z) -> \\w. w" "(q : \\z. z) -> \\w. w"
     ]
+
+-- Deep Pi nesting must stay linear (regression for the exponential blow-up
+-- where each nested codomain was normalised once by 'eval' and again by
+-- 'quote'). At depth 100 a quadratic-or-worse normaliser would never finish;
+-- the eager-values representation visits each subterm once, so this is instant.
+piDepthTests :: TestTree
+piDepthTests =
+  testGroup "deep Pi nesting stays linear (regression)"
+    [ testCase ("nfNbe agrees with reference nf at depth " ++ show d) $
+        case parseLambdaPi (deepPi d) of
+          Left err -> assertFailure ("parse failed: " ++ err)
+          Right t  -> alphaEq (nfNbe emptyScope t) (nf emptyScope t)
+    | d <- [100 :: Int]
+    ]
+
+-- | A chain of @n@ nested dependent function types
+-- @(v0 : \\t. t) -> ... -> (v_{n-1} : \\t. t) -> \\w. w@, with distinct,
+-- unused binders. There are no redexes in the types, so both normalisers do a
+-- single linear pass — unless NbE re-normalises codomains, which is
+-- exponential in @n@.
+deepPi :: Int -> String
+deepPi n =
+  concatMap (\i -> "(v" ++ show i ++ " : \\t. t) -> ") [0 .. n - 1] ++ "\\w. w"
 
 -- Neutrals with free variables. ---------------------------------------------
 
@@ -195,13 +221,29 @@ propOpen (OpenTerm raw) =
   withFreeVars emptyScope Map.empty freeVars $ \scope env ->
     ioProperty (agrees scope (resolve scope env raw))
 
--- | NbE and the reference normaliser produce alpha-equivalent normal forms,
--- unless one fails to terminate within the time budget (in which case the case
--- is discarded — the untyped language admits non-normalising terms). Forcing
--- the 'alphaEquiv' result drives both normalisers far enough to decide.
+-- | NbE and the reference normaliser produce alpha-equivalent normal forms.
+--
+-- The untyped language admits non-normalising terms, so each normal form is
+-- forced under a time budget. The two outcomes are compared rather than
+-- silently discarded on any timeout: a case is discarded only when the
+-- /reference/ 'nf' also fails to terminate (a genuinely divergent term). If
+-- 'nf' finishes but 'nfNbe' does not, that is a real regression (e.g. an
+-- exponential blow-up) and the property fails instead of hiding it.
 agrees :: Distinct n => Scope n -> LambdaPi n -> IO Property
 agrees scope t = do
-  r <- timeout budgetMicros (evaluate (alphaEquiv scope (nfNbe scope t) (nf scope t)))
-  pure (maybe (property Discard) property r)
+  let a = nf scope t
+      b = nfNbe scope t
+  nfDone  <- finished (evaluate (rnf a))
+  nbeDone <- finished (evaluate (rnf b))
+  pure $ case (nfDone, nbeDone) of
+    (True, True) ->
+      counterexample "nfNbe and nf disagree" (property (alphaEquiv scope a b))
+    (False, _) ->
+      property Discard  -- reference diverged: nothing to compare against
+    (True, False) ->
+      counterexample
+        "nfNbe did not finish within the budget though reference nf did"
+        (property False)
   where
+    finished act = isJust <$> timeout budgetMicros act
     budgetMicros = 1000000  -- 1 second
