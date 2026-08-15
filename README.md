@@ -43,7 +43,7 @@ everything. All commands are run from the repository root.
 | `demo/LambdaPi/Parser.hs`, `PrettyPrint.hs` | `IsString` parsing; value printers (`ppValue`, `ppValueStruct`). |
 | `demo/LambdaPi/LambdaNWays.hs` | Adapter to Weirich's `lambda-n-ways` harness (untyped `LC` bridge). |
 | `test/` | `tasty` test suite. |
-| `bench/` | `tasty-bench` microbenchmarks (NbE vs reference); `bench/lambda-n-ways/` is a guide + port for benchmarking against Weirich's `lambda-n-ways` suite. |
+| `bench/` | `tasty-bench` microbenchmarks (NbE vs reference); `bench/lambda-n-ways/` is a guide + harness benchmarking the generic normaliser against Weirich's `lambda-n-ways` suite. |
 
 ## Build
 
