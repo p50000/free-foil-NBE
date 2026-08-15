@@ -35,3 +35,6 @@ PHASE_1_PLAN.md
 #Benchmark data
 baseline.csv
 baseline.txt
+
+# Local clone of the lambda-n-ways fork for benchmarking (see bench/lambda-n-ways/README.md)
+bench/lambda-n-ways/lambda-n-ways-fork

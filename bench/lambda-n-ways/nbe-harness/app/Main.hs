@@ -1,71 +1,103 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE BangPatterns #-}
 
--- | Minimal reproduction of the lambda-n-ways @nf@ / @random15@ / @random20@
--- normalisation benchmarks, restricted to the NbE-on-foil implementations we
--- care about: the fork's closure NbE ("Foil.NBE", baseline) and the
--- free-foil-NBE eager-values port ("Foil.EagerNBE", this work).
+-- | lambda-n-ways `nf` / `random15` / `random20` normalisation benchmark,
+-- comparing the __real generic free-foil normaliser__ against the fork's
+-- hand-written foil NbE.
 --
--- Uses the fork's real corpus (@lams/*.lam@) and real conversion/parsing
--- (@Util.Impl.getTerm@ / @getTerms@ / @toIdInt@), but is compiled with a modern
--- GHC (native aarch64) since the fork's GHC 8.10.7 cannot build on Apple
--- Silicon. Before the benchmark it cross-checks that the port's normal forms
--- are alpha-equal to the baseline's on every corpus term.
+--   * @NBE.FreeFoil (generic)@ — `LambdaPi.nfNbe` from @lambda-pi-demo@, i.e.
+--     the actual @Value@/@ScopedClosure@/@quote@ machinery of
+--     @FreeFoil.NbE@ running over the generic free-monad @AST@. The harness'
+--     @LC IdInt@ is bridged to the scope-safe @AST@ via the tested
+--     @LambdaPi.LambdaNWays@ conversion.
+--   * @NBE.Foil@ — the fork's self-contained hand-written foil NbE, which pays
+--     for no generic ("free") layer.
 --
--- The corpus directory defaults to @../lams/@ (this project living inside the
--- fork clone); override with the @LAMS_DIR@ environment variable.
+-- The difference between the two columns is the cost of that layer. A
+-- correctness check first confirms the two agree (up to alpha) on every term.
+--
+-- Corpus dir defaults to @../lambda-n-ways-fork/lams/@; override with @LAMS_DIR@.
 module Main (main) where
 
 import Control.DeepSeq (force, rnf)
+import Data.Maybe (fromMaybe)
 import System.Environment (lookupEnv)
 import Test.Tasty.Bench
 
-import Util.IdInt (IdInt)
-import Util.Syntax.Lambda (LC)
+import qualified Util.IdInt as U
+import qualified Util.Syntax.Lambda as U
 import Util.Impl (LambdaImpl (..), getTerm, getTerms, toIdInt)
-
 import qualified Foil.NBE
-import qualified Foil.EagerNBE
+
+import FreeFoil.NbE (alphaEquiv, emptyScope)
+import qualified LambdaPi as LP
+import qualified LambdaPi.LambdaNWays as LNW
+
+-- Bridge the harness' own LC/IdInt to the mirrored ones in LambdaPi.LambdaNWays,
+-- whose fromLC/toLC build/read the real scope-safe AST. (Structural identity.)
+toLNW :: U.LC U.IdInt -> LNW.LC LNW.IdInt
+toLNW = \case
+  U.Var (U.IdInt i)   -> LNW.Var (LNW.IdInt i)
+  U.Lam (U.IdInt i) b -> LNW.Lam (LNW.IdInt i) (toLNW b)
+  U.App f a           -> LNW.App (toLNW f) (toLNW a)
+
+fromLNW :: LNW.LC LNW.IdInt -> U.LC U.IdInt
+fromLNW = \case
+  LNW.Var (LNW.IdInt i)   -> U.Var (U.IdInt i)
+  LNW.Lam (LNW.IdInt i) b -> U.Lam (U.IdInt i) (fromLNW b)
+  LNW.App f a             -> U.App (fromLNW f) (fromLNW a)
+
+-- | The generic free-foil NbE as a harness `LambdaImpl`. Internal type is the
+-- real scope-safe AST (@LambdaPi VoidS@); @impl_nf@ is the real generic
+-- @nfNbe@, so this measures the free-monad layer, not a re-implementation.
+-- @impl_fromLC@/@impl_toLC@ (the conversion) run outside the timed @impl_nf@,
+-- matching how @Foil.NBE@ is measured.
+genericImpl :: LambdaImpl
+genericImpl =
+  LambdaImpl
+    { impl_name = "NBE.FreeFoil (generic)",
+      impl_fromLC = LNW.fromLC . toLNW,
+      impl_toLC = fromLNW . LNW.toLC,
+      impl_nf = LP.nfNbe emptyScope,
+      impl_nfi = error "nfi unimplemented",
+      impl_aeq = alphaEquiv emptyScope
+    }
 
 impls :: [LambdaImpl]
-impls =
-  [ Foil.EagerNBE.impl  -- free-foil-NBE eager-values port (this work)
-  , Foil.NBE.impl       -- fork's closure NbE over foil (baseline)
-  ]
+impls = [genericImpl, Foil.NBE.impl]
 
--- | Normalise one term and force the result.
-benchOne :: LambdaImpl -> LC IdInt -> Benchmark
+benchOne :: LambdaImpl -> U.LC U.IdInt -> Benchmark
 benchOne LambdaImpl{..} lc =
   let !tm = force (impl_fromLC lc)
    in bench impl_name (nf (rnf . impl_nf) tm)
 
--- | Normalise a whole list of terms and force the results.
-benchMany :: LambdaImpl -> [LC IdInt] -> Benchmark
+benchMany :: LambdaImpl -> [U.LC U.IdInt] -> Benchmark
 benchMany LambdaImpl{..} lcs =
   let !tms = force (map impl_fromLC lcs)
    in bench impl_name (nf (rnf . map impl_nf) tms)
 
 -- | Normal form of a term as a named 'LC', via a given implementation.
-nfLC :: LambdaImpl -> LC IdInt -> LC IdInt
+nfLC :: LambdaImpl -> U.LC U.IdInt -> U.LC U.IdInt
 nfLC LambdaImpl{..} = impl_toLC . impl_nf . impl_fromLC
 
--- | Does the eager-values port agree with the baseline (up to alpha) on @t@?
-agreesWithBaseline :: LC IdInt -> Bool
-agreesWithBaseline t =
+-- | Does the generic NbE agree with the fork baseline (up to alpha) on @t@?
+agrees :: U.LC U.IdInt -> Bool
+agrees t =
   case Foil.NBE.impl of
     LambdaImpl{..} ->
-      impl_aeq (impl_fromLC (nfLC Foil.EagerNBE.impl t))
+      impl_aeq (impl_fromLC (nfLC genericImpl t))
                (impl_fromLC (nfLC Foil.NBE.impl t))
 
 main :: IO ()
 main = do
-  dir <- maybe "../lams/" id <$> lookupEnv "LAMS_DIR"
+  dir <- fromMaybe "../lambda-n-ways-fork/lams/" <$> lookupEnv "LAMS_DIR"
   lennart <- toIdInt <$> getTerm (dir ++ "lennart.lam")
   random15 <- getTerms (dir ++ "random15.lam")
   random20 <- getTerms (dir ++ "random20.lam")
   let corpus = lennart : random15 ++ random20
-      bad = length (filter (not . agreesWithBaseline) corpus)
-  putStrLn $ "correctness: eager-values port vs baseline on "
+      bad = length (filter (not . agrees) corpus)
+  putStrLn $ "correctness: generic free-foil NbE vs fork baseline on "
     ++ show (length corpus) ++ " terms — "
     ++ (if bad == 0 then "ALL AGREE" else show bad ++ " MISMATCH(ES)")
   defaultMain

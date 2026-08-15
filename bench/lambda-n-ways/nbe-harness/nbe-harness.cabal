@@ -1,19 +1,22 @@
 cabal-version:      3.0
 name:               nbe-harness
 version:            0.1.0.0
-synopsis:           Minimal lambda-n-ways NbE benchmark (modern GHC, native aarch64)
+synopsis:           lambda-n-ways NbE benchmark: generic free-foil NbE vs the fork's foil NbE
 build-type:         Simple
 
--- Place this directory INSIDE a clone of the lambda-n-ways fork (i.e. at
--- <fork>/nbe-harness/) so the relative source path `../lib` and the default
--- corpus path `../lams/` resolve. It reuses the fork's real Util.* + Foil.NBE
--- source and the free-foil-NBE eager-values port (Foil.EagerNBE), compiled with
--- a modern GHC because the fork's own GHC 8.10.7 has no native aarch64 codegen
--- (it needs LLVM 9-12, unavailable on Apple Silicon). See ../nbe-harness guide.
+-- Benchmarks the REAL generic normaliser (`free-foil-nbe` + `lambda-pi-demo`,
+-- via `LambdaPi.LambdaNWays`) against the fork's hand-written foil NbE
+-- (`Foil.NBE`), on the fork's own corpus. The gap between the two is the cost
+-- of the generic free-monad ("free") layer.
+--
+-- Compiled with a modern GHC (native aarch64) because the fork's own GHC 8.10.7
+-- has no native aarch64 codegen; only the fork's self-contained `Util.*` and
+-- `Foil.NBE` modules are pulled in (via hs-source-dirs), not its whole build.
+-- Clone the fork at ../lambda-n-ways-fork (see ../README.md).
 
 executable nbe-harness
     main-is:          Main.hs
-    hs-source-dirs:   app, ../lib
+    hs-source-dirs:   app, ../lambda-n-ways-fork/lib
     other-modules:    Util.Syntax.Lambda
                     , Util.IdInt
                     , Util.IdInt.Set
@@ -23,7 +26,6 @@ executable nbe-harness
                     , Util.Stats
                     , Util.Impl
                     , Foil.NBE
-                    , Foil.EagerNBE
     ghc-options:      -O2
     default-extensions:
                     DataKinds
@@ -53,4 +55,6 @@ executable nbe-harness
                     , QuickCheck
                     , pretty
                     , tasty-bench
+                    , free-foil-nbe
+                    , free-foil-nbe:lambda-pi-demo
     default-language: Haskell2010
