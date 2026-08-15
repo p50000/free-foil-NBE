@@ -45,10 +45,14 @@ reference, not an absolute target. Reproduce with `cabal bench nbe-bench`.
   substitution on a long chain of trivial redexes (depth 1000: ≈ 17 µs vs
   ≈ 11 µs), since the closure machinery is overhead when there is nothing to
   share.
-- **Nested `Pi` types:** the dependent-type worst case. `nfNbe` scales
-  *linearly* in nesting depth (100 / 500 / 1000 ≈ 56 / 278 / 575 µs) — the
-  regression guard for the exponential blow-up the eager-values representation
-  fixed. (`nf` is a trivial single pass here since the types hold no redexes.)
+- **Nested `Pi` types:** the dependent-type worst case, and the regression
+  guard for the exponential blow-up the eager-values representation fixed.
+  `nfNbe` scales *linearly* in nesting depth (100 / 500 / 1000 ≈ 56 / 278 /
+  575 µs), and so does `nf` — but here `nfNbe` is a large **constant factor
+  slower, ~20–24×**, and the ratio stays flat as depth grows (≈24× at depth 100
+  and 1000, ≈20× at depth 8000). `nf` is a trivial single pass since these types
+  hold no redexes, whereas NbE still builds and tears down closures. Recovering
+  this factor with a shortcut for redex-free subterms is tracked in issue #3.
 
 These contrasts motivate future optimisation variants (de Bruijn levels, glued
 evaluation, memoised quoting, hash-consing).
