@@ -11,6 +11,7 @@ module FreeFoil.NbE
   , module FreeFoil
   , Value (..)
   , ScopedClosure (..)
+  , evalNode
   , quote
   , quoteScopedClosure
   , substitutionDomain
@@ -36,16 +37,41 @@ substitutionDomain (UnsafeSubstitution m) = IntMap.keys m
 -- | A semantic value for NbE, in the /eager-values/ representation.
 --
 -- 'VVar' is a neutral variable (a stuck computation whose head is a free
--- variable). 'VNode' is a fully evaluated syntax node whose /term/ subterms
--- are themselves values (already in the ambient scope @n@) and whose /scoped/
+-- variable). 'VNode' is an evaluated syntax node whose /term/ subterms are
+-- themselves values (already in the ambient scope @n@) and whose /scoped/
 -- subterms are 'ScopedClosure's — suspended bodies that each carry their own
--- captured environment. A neutral node (a stuck eliminator, e.g. an
--- application blocked on a variable) is just a 'VNode' whose head is neutral;
--- evaluation distinguishes redexes from neutrals by matching on the node.
+-- captured environment. Storing the two positions differently is exactly what
+-- a node with both needs: a @Pi@'s domain is a term position (an eager 'Value'
+-- in the ambient scope) while its codomain is a scoped position (a
+-- 'ScopedClosure' deferred under the binder), so the two no longer have to
+-- share one environment.
 --
 -- Because term subterms are already values, every subterm is evaluated and
 -- quoted exactly once. This is what keeps 'quote' linear in the term size —
 -- in particular, nested 'Pi' types do not re-normalise their codomains.
+--
+-- The type does not rule out redexes: nothing prevents one from building
+-- @VNode (AppSig (VNode (LamSig …)) v)@, a beta-redex sitting in the semantic
+-- domain. We rely on an invariant instead.
+--
+-- /Invariant./ Every value produced by 'eval' is weak-head normal at every
+-- position: no 'VNode' is an eliminator applied to the introduction form it
+-- eliminates. Equivalently, each 'VNode' is either an introduction form, or a
+-- stuck eliminator whose principal argument is 'VVar'-headed.
+--
+-- The invariant is established by the object language's @eval@, which is the
+-- only place that knows which constructors of @sig@ are eliminators: it matches
+-- on them and reduces (see the @App@ case in "LambdaPi"). Everything in this
+-- module preserves it — 'quote', 'quoteScopedClosure', 'sinkScopedClosure' and
+-- 'evalNode' only rebuild nodes and never apply an introduction form to an
+-- argument.
+--
+-- We do not enforce the invariant with types because the library is generic in
+-- @sig@ and so cannot tell introductions from eliminators. A neutral\/normal
+-- split would require the object language to supply that classification (two
+-- signature bifunctors, or a class marking the eliminator constructors), which
+-- we postpone deliberately: the present shape lets a language be plugged in
+-- with a single @eval@ and no further boilerplate.
 data Value binder sig n where
   VVar ::
     Name n -> Value binder sig n
@@ -82,6 +108,21 @@ sinkScopedClosure ::
   ScopedClosure pat sig l
 sinkScopedClosure rename (ScopedClosure env body) =
   ScopedClosure (Foil.sinkabilityProof rename env) body
+
+-- | The default evaluation of a node with /no/ elimination rule: suspend every
+-- scoped subterm under the current environment and evaluate every term subterm
+-- with @ev@. An object language's @eval@ is exactly its elimination rules
+-- (which inspect the principal value and reduce) plus this one default for
+-- every introduction form — so a new language only writes its redex cases.
+-- Preserves the 'Value' invariant: it never applies an introduction form to an
+-- argument.
+evalNode ::
+  (Bifunctor sig, Distinct i) =>
+  (AST binder sig i -> Value binder sig o) ->
+  Substitution (Value binder sig) i o ->
+  sig (ScopedAST binder sig i) (AST binder sig i) ->
+  Value binder sig o
+evalNode ev env = VNode . bimap (ScopedClosure env) ev
 
 -- | Quote a value back into an AST, using the provided evaluation function.
 -- Each subterm is processed exactly once: term subterms recurse directly,
