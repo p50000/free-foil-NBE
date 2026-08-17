@@ -23,14 +23,14 @@ import FreeFoil.NbE
   , nameId, nameOf, quote, substitutionDomain
   )
 import qualified FreeFoil.NbE as NbE
-import LambdaPi (Value, eval)
+import LambdaPi (Value)
 import LambdaPi.Generated (TermSig (AppSig, LamSig, PiSig), FFPattern (FFPatternVar), fromTerm)
 import LambdaPi.Syntax.Print (printTree)
 
 -- | Pretty-print a lambda-pi value by quoting it back to a term and printing.
 -- Requires the scope the value lives in so that quoting can go under binders.
 ppValue :: Distinct n => Scope n -> Value n -> String
-ppValue scope = printTree . fromTerm . quote eval scope
+ppValue scope = printTree . fromTerm . quote scope
 
 -- | A structural rendering of a value: @#n@ for a neutral variable, and
 -- @{node}@ for an evaluated node. Term subterms recurse; each scoped subterm
