@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 
@@ -15,12 +16,15 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.QuickCheck
 
-import FreeFoil.NbE (Distinct, Scope, S (VoidS), alphaEquiv, emptyScope, identitySubst)
+import FreeFoil.NbE
+  ( Distinct, Scope, S (VoidS), alphaEquiv, emptyScope, identitySubst
+  , extendScope, nameId, nameOf, withFresh )
 import LambdaPi
 import LambdaPi.Parser (parseLambdaPi, parseOpen, resolve, withFreeVars)
 import LambdaPi.PrettyPrint (ppValue, ppValueStruct)
 import LambdaPi.Gen (Closed (..), OpenTerm (..), freeVars)
 import qualified LambdaPi.LambdaNWays as LNW
+import qualified Booleans as B
 
 main :: IO ()
 main =
@@ -35,6 +39,7 @@ main =
         , roundTripTests
         , valueTests
         , lambdaNWaysTests
+        , booleansTests
         , propertyTests
         ]
 
@@ -49,6 +54,38 @@ bothNormaliseTo name term expected =
   testGroup name
     [ testCase "reference nf" (alphaEq (nf emptyScope term) expected)
     , testCase "nfNbe"        (alphaEq (nfNbe emptyScope term) expected)
+    ]
+
+-- Booleans: a second Eval instance, exercising the generic nfNbe on a
+-- different signature and a non-application eliminator (if). -----------------
+
+-- | A structural view of a Boolean normal form. These terms have no binders, so
+-- ordinary equality (not alpha-equivalence) is the right notion.
+data SB = SBTrue | SBFalse | SBIf SB SB SB | SBVar Int
+  deriving (Eq, Show)
+
+sb :: B.BoolTm n -> SB
+sb = \case
+  B.TT       -> SBTrue
+  B.FF       -> SBFalse
+  B.If c t f -> SBIf (sb c) (sb t) (sb f)
+  Var x      -> SBVar (nameId x)
+  _          -> error "sb: unexpected term"
+
+booleansTests :: TestTree
+booleansTests =
+  testGroup "booleans (second Eval instance)"
+    [ testCase "if true selects the then-branch" $
+        sb (B.nf emptyScope (B.If B.TT B.TT B.FF)) @?= SBTrue
+    , testCase "if false selects the else-branch" $
+        sb (B.nf emptyScope (B.If B.FF B.TT B.FF)) @?= SBFalse
+    , testCase "a reducible condition is evaluated first" $
+        sb (B.nf emptyScope (B.If (B.If B.TT B.FF B.TT) B.TT B.FF)) @?= SBFalse
+    , testCase "an if stuck on a neutral condition is preserved" $
+        withFresh emptyScope $ \x ->
+          let scope = extendScope x emptyScope
+              term  = B.If (Var (nameOf x)) B.TT B.FF
+           in sb (B.nf scope term) @?= SBIf (SBVar (nameId (nameOf x))) SBTrue SBFalse
     ]
 
 -- Beta-reduction on closed terms. -------------------------------------------
