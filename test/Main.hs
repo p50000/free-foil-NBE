@@ -35,6 +35,7 @@ main =
         , underBinderTests
         , piTests
         , piDepthTests
+        , whnfTests
         , neutralTests
         , roundTripTests
         , valueTests
@@ -128,6 +129,25 @@ piTests =
         "\\f. (a : f) -> f a" "\\f. (a : f) -> f a"
     , bothNormaliseTo "non-dependent arrow (unused binder)"
         "(q : \\z. z) -> \\w. w" "(q : \\z. z) -> \\w. w"
+    ]
+
+-- Weak-head normal form. -----------------------------------------------------
+
+-- | 'whnfNbe' reduces the head but stops at binders. It shares 'eval' with
+-- 'nfNbe' and differs only in how far quoting is driven: a redex under a binder
+-- survives 'whnfNbe' but is reduced by 'nfNbe'.
+whnfTests :: TestTree
+whnfTests =
+  testGroup "whnfNbe (weak-head normal form)"
+    [ testCase "reduces the head redex" $
+        alphaEq (whnfNbe emptyScope "(\\x. x) (\\y. y)") "\\z. z"
+    , testCase "leaves a redex under a lambda untouched" $
+        alphaEq (whnfNbe emptyScope "\\f. (\\x. x) f") "\\f. (\\x. x) f"
+    , testCase "nfNbe, in contrast, reduces under the lambda" $
+        alphaEq (nfNbe emptyScope "\\f. (\\x. x) f") "\\g. g"
+    , testCase "leaves a redex in a Pi codomain under a binder" $
+        alphaEq (whnfNbe emptyScope "\\f. (a : f) -> (\\y. y) a")
+                "\\f. (a : f) -> (\\y. y) a"
     ]
 
 -- Deep Pi nesting must stay linear (regression for the exponential blow-up
@@ -248,6 +268,7 @@ propertyTests =
   testGroup "nfNbe agrees with reference nf"
     [ testProperty "closed terms" propClosed
     , testProperty "open terms (neutrals)" propOpen
+    , testProperty "nfNbe . whnfNbe agrees with reference nf" propWhnf
     ]
 
 propClosed :: Closed -> Property
@@ -257,6 +278,26 @@ propOpen :: OpenTerm -> Property
 propOpen (OpenTerm raw) =
   withFreeVars emptyScope Map.empty freeVars $ \scope env ->
     ioProperty (agrees scope (resolve scope env raw))
+
+-- | Weak-head normalising and then fully normalising yields the same normal
+-- form as the reference @nf@: @whnfNbe@ reduces a prefix of the work @nfNbe@
+-- does, so completing it must agree. (Same time-budget discipline as 'agrees'.)
+propWhnf :: Closed -> Property
+propWhnf (Closed t) = ioProperty (agrees' emptyScope t)
+  where
+    agrees' scope term = do
+      let a = nf scope term
+          b = nfNbe scope (whnfNbe scope term)
+      nfDone  <- finished (evaluate (rnf a))
+      nbeDone <- finished (evaluate (rnf b))
+      pure $ case (nfDone, nbeDone) of
+        (True, True)  -> counterexample "nfNbe . whnfNbe and nf disagree"
+                           (property (alphaEquiv scope a b))
+        (False, _)    -> property Discard
+        (True, False) -> counterexample
+          "nfNbe . whnfNbe did not finish within the budget though nf did"
+          (property False)
+    finished act = isJust <$> timeout 1000000 act
 
 -- | NbE and the reference normaliser produce alpha-equivalent normal forms.
 --

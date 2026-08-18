@@ -17,7 +17,10 @@ module FreeFoil.NbE
   , eval
   , quote
   , quoteScopedClosure
+  , quoteWhnf
+  , freezeScopedClosure
   , nfNbe
+  , whnfNbe
   , substitutionDomain
   ) where
 
@@ -211,3 +214,87 @@ nfNbe ::
   AST binder sig n ->
   AST binder sig n
 nfNbe scope = quote scope . eval scope identitySubst
+
+-- | Weak-head normal form by NbE: evaluate into the semantic domain, then read
+-- back only the head. Shares 'eval' with 'nfNbe' and differs solely in how far
+-- quoting is driven — 'quoteWhnf' does /not/ go under binders.
+--
+-- One eager-values caveat. Because 'eval' evaluates term positions eagerly, the
+-- arguments of a stuck neutral are already normalised here, unlike a lazy whnf
+-- that would leave them untouched. The weak-head/full distinction therefore
+-- shows up only at /scoped/ positions: 'whnfNbe' leaves a redex under a binder
+-- alone (e.g. @whnfNbe (\\x. (\\y. y) x) = \\x. (\\y. y) x@), whereas 'nfNbe'
+-- reduces it. Both agree on head reduction and on neutral spines.
+whnfNbe ::
+  ( Eval binder sig,
+    Foil.Distinct n,
+    Foil.HasNameBinders binder,
+    Foil.CoSinkable binder,
+    Foil.SinkableK binder
+  ) =>
+  Foil.Scope n ->
+  AST binder sig n ->
+  AST binder sig n
+whnfNbe scope = quoteWhnf scope . eval scope identitySubst
+
+-- | Shallow readback producing a weak-head normal form: expose the head node,
+-- fully quote its term subterms (they are already normal — eager values), but
+-- /freeze/ its scoped subterms rather than normalising under their binders (see
+-- 'freezeScopedClosure').
+quoteWhnf ::
+  ( Eval binder sig,
+    Foil.Distinct n,
+    Foil.HasNameBinders binder,
+    Foil.CoSinkable binder,
+    Foil.SinkableK binder
+  ) =>
+  Foil.Scope n ->
+  Value binder sig n ->
+  AST binder sig n
+quoteWhnf scope = \case
+  VVar x -> Var x
+  VNode node ->
+    Node $
+      bimap
+        (freezeScopedClosure scope)
+        (quote scope)
+        node
+
+-- | Read back a suspended scoped subterm /without/ evaluating under its binder:
+-- refresh the binder and substitute the captured environment — quoted to terms
+-- by 'quoteSubst' — into the still-syntactic body. Unlike 'quoteScopedClosure',
+-- no beta\/delta reduction happens under the binder ('substitute' only renames),
+-- so a redex there survives. This is what makes 'whnfNbe' weak-head rather than
+-- full normalisation.
+freezeScopedClosure ::
+  ( Eval binder sig,
+    Foil.Distinct n,
+    Foil.HasNameBinders binder,
+    Foil.CoSinkable binder,
+    Foil.SinkableK binder
+  ) =>
+  Foil.Scope n ->
+  ScopedClosure binder sig n ->
+  ScopedAST binder sig n
+freezeScopedClosure scope (ScopedClosure env (ScopedAST bind body)) =
+  Foil.withRefreshedPattern scope bind $ \extendSubst bind' ->
+    case Foil.assertDistinct bind' of
+      Foil.Distinct ->
+        let scope' = Foil.extendScopePattern bind' scope
+            subst = extendSubst (quoteSubst scope env)
+         in ScopedAST bind' (substitute scope' subst body)
+
+-- | Quote every value in a substitution's codomain, turning a semantic
+-- environment into a syntactic one. Used by 'freezeScopedClosure' to substitute
+-- a closure's captured environment back into its body without normalising it.
+quoteSubst ::
+  ( Eval binder sig,
+    Foil.Distinct n,
+    Foil.HasNameBinders binder,
+    Foil.CoSinkable binder
+  ) =>
+  Foil.Scope n ->
+  Substitution (Value binder sig) i n ->
+  Substitution (AST binder sig) i n
+quoteSubst scope (UnsafeSubstitution m) =
+  UnsafeSubstitution (IntMap.map (quote scope) m)
