@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE BangPatterns #-}
 
 -- | Generic normalisation by evaluation (NbE) via free-foil.
 module FreeFoil.NbE
@@ -160,9 +161,9 @@ eval ::
   AST binder sig i ->
   Value binder sig o
 {-# INLINABLE eval #-}
-eval scope env = \case
+eval scope !env = \case
   Var x -> lookupSubst env x
-  Node node -> evalSig scope (bimap (ScopedClosure env) (eval scope env) node)
+  Node node -> evalSig scope $! bimap (ScopedClosure env) (eval scope env) node
 
 -- | Quote a value back into an AST. Each subterm is processed exactly once:
 -- term subterms recurse directly, scoped subterms are read back under their
@@ -176,7 +177,7 @@ quote ::
 quote scope = \case
   VVar x -> Var x
   VNode node ->
-    Node $
+    Node $!
       bimap
         (quoteScopedClosure scope)
         (quote scope)
