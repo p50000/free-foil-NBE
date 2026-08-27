@@ -31,8 +31,10 @@ Prerequisites: a modern GHC + cabal (tested: GHC 9.10.3, cabal 3.x).
 ```sh
 # from the free-foil-NBE repo root:
 
-# 1. clone the fork next to the harness (this path is gitignored)
-git clone https://github.com/KarinaTyulebaeva/lambda-n-ways.git \
+# 1. clone the fork next to the harness (this path is gitignored).
+#    --depth 1: the harness needs no history, and the fork carries a 166 MB
+#    results/ directory, so a shallow clone (~216 MB) is much smaller than full.
+git clone --depth 1 https://github.com/KarinaTyulebaeva/lambda-n-ways.git \
   bench/lambda-n-ways/lambda-n-ways-fork
 
 # 2. build & run

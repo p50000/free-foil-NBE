@@ -147,7 +147,7 @@ eval scope env = \case
   -- applies — suspend scoped subterms, evaluate term subterms. In particular a
   -- 'Pi' keeps its domain as an eager value and its codomain suspended (see
   -- 'NbE.Value'), so nothing is normalised here and 'quote' visits each once.
-  Node node -> NbE.evalNode (eval scope env) env node
+  Node node -> NbE.evalNode (eval scope) env node
 
 -- | Normal form via NbE: evaluate into the semantic domain, then quote back.
 --

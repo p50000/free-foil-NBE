@@ -61,7 +61,7 @@ substitutionDomain (UnsafeSubstitution m) = IntMap.keys m
 --
 -- The invariant is established by the object language's @eval@, which is the
 -- only place that knows which constructors of @sig@ are eliminators: it matches
--- on them and reduces (see the @App@ case in "LambdaPi"). Everything in this
+-- on them and reduces (see the @AppSig@ case in "LambdaPi"). Everything in this
 -- module preserves it — 'quote', 'quoteScopedClosure', 'sinkScopedClosure' and
 -- 'evalNode' only rebuild nodes and never apply an introduction form to an
 -- argument.
@@ -110,19 +110,22 @@ sinkScopedClosure rename (ScopedClosure env body) =
   ScopedClosure (Foil.sinkabilityProof rename env) body
 
 -- | The default evaluation of a node with /no/ elimination rule: suspend every
--- scoped subterm under the current environment and evaluate every term subterm
--- with @ev@. An object language's @eval@ is exactly its elimination rules
--- (which inspect the principal value and reduce) plus this one default for
--- every introduction form — so a new language only writes its redex cases.
--- Preserves the 'Value' invariant: it never applies an introduction form to an
--- argument.
+-- scoped subterm under the current environment @env@ and evaluate every term
+-- subterm with @ev env@. The evaluator is taken as @env -> AST -> Value@ (rather
+-- than a pre-applied @AST -> Value@) so that a single @env@ both captures into
+-- each 'ScopedClosure' and drives the term subterms — they cannot accidentally
+-- be evaluated under two different environments. An object language's @eval@ is
+-- exactly its elimination rules (which inspect the principal value and reduce)
+-- plus this one default for every introduction form — so a new language only
+-- writes its redex cases. Preserves the 'Value' invariant: it never applies an
+-- introduction form to an argument.
 evalNode ::
   (Bifunctor sig, Distinct i) =>
-  (AST binder sig i -> Value binder sig o) ->
+  (Substitution (Value binder sig) i o -> AST binder sig i -> Value binder sig o) ->
   Substitution (Value binder sig) i o ->
   sig (ScopedAST binder sig i) (AST binder sig i) ->
   Value binder sig o
-evalNode ev env = VNode . bimap (ScopedClosure env) ev
+evalNode ev env = VNode . bimap (ScopedClosure env) (ev env)
 
 -- | Quote a value back into an AST, using the provided evaluation function.
 -- Each subterm is processed exactly once: term subterms recurse directly,
