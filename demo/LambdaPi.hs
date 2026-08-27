@@ -36,11 +36,11 @@ import FreeFoil.NbE
       Distinct,
       Scope,
       NameBinder,
-      AST(Var),
+      AST(Var, Node),
       ScopedAST(ScopedAST),
       DistinctEvidence(Distinct),
       Substitution,
-      Closure(..),
+      ScopedClosure(ScopedClosure),
       assertDistinct,
       sink,
       nameOf,
@@ -51,13 +51,13 @@ import FreeFoil.NbE
       withFresh,
       substitute,
       lookupSubst,
-      quote',
-      quoteScoped
+      quote
     )
+import qualified FreeFoil.NbE as NbE
 
 import LambdaPi.Generated
     ( FFTerm,
-      TermSig(AppSig, LamSig, PiSig),
+      TermSig(AppSig, LamSig),
       FFPattern(FFPatternVar),
       pattern FFApp,
       pattern FFLam,
@@ -119,32 +119,35 @@ nfd :: LambdaPi VoidS -> LambdaPi VoidS
 nfd = nf emptyScope
 
 --- Impl of nf, whnf using NBE
-type Value = Closure FFPattern TermSig
+type Value = NbE.Value FFPattern TermSig
 
+-- | Evaluate a term into the semantic domain. This is the object language's
+-- @eval@ that establishes the 'NbE.Value' invariant: the single elimination
+-- rule (the @AppSig@ case) beta-reduces or leaves a stuck neutral; every other
+-- constructor is an introduction form, handled by the generic 'NbE.evalNode'
+-- default. No introduction form is ever applied to an argument.
+--
+-- NB: @scope@ is threaded only to satisfy the generic 'quote' interface —
+-- lambda-pi's 'eval' allocates no binders (only 'quote' does), so it never
+-- inspects @scope@. A language that needs fresh names /during/ evaluation
+-- would use it.
 eval :: (Distinct o, Distinct i) => Scope o -> Substitution Value i o -> LambdaPi i -> Value o
 eval scope env = \case
   Var x -> lookupSubst env x
-  FFApp f x ->
+  -- The one elimination rule: beta-reduce, or leave a stuck (neutral) App.
+  Node (AppSig f x) ->
     let fun = eval scope env f
         arg = eval scope env x
-      in case fun of
-        Closure env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
-          case assertDistinct binder of
-            Distinct ->
-              let env'' = addSubst env' binder arg
-              in eval scope env'' body
-        fun' -> Closure identitySubst (AppSig fun' arg)
-  FFLam pat body ->
-    Closure env (LamSig (ScopedAST pat body))
-  FFPi dom pat body ->
-    -- 'Pi' carries both a term position (the domain) and a scoped position
-    -- (the codomain), which must share one environment. We therefore evaluate
-    -- the domain eagerly under @env@ and normalise the codomain into the same
-    -- scope via the generic 'quoteScoped', then suspend the whole (now closed
-    -- over the identity substitution) node.
-    Closure identitySubst
-      (PiSig (eval scope env dom)
-             (quoteScoped eval scope env (ScopedAST pat body)))
+     in case fun of
+          NbE.VNode (LamSig (ScopedClosure env' (ScopedAST (FFPatternVar binder) body))) ->
+            case assertDistinct binder of
+              Distinct -> eval scope (addSubst env' binder arg) body
+          fun' -> NbE.VNode (AppSig fun' arg)
+  -- Introduction forms (Lam, Pi): no elimination rule, so the generic default
+  -- applies — suspend scoped subterms, evaluate term subterms. In particular a
+  -- 'Pi' keeps its domain as an eager value and its codomain suspended (see
+  -- 'NbE.Value'), so nothing is normalised here and 'quote' visits each once.
+  Node node -> NbE.evalNode (eval scope) env node
 
 -- | Normal form via NbE: evaluate into the semantic domain, then quote back.
 --
@@ -152,7 +155,7 @@ eval scope env = \case
 -- the test suite). For example, @(λx. x) (λy. y)@ normalises to @λy. y@ and the
 -- dependent type @(x : A) -> (λy. y) x@ normalises to @(x : A) -> x@.
 nfNbe :: (Distinct n) => Scope n -> LambdaPi n -> LambdaPi n
-nfNbe scope term = quote' eval scope (eval scope identitySubst term)
+nfNbe scope term = quote eval scope (eval scope identitySubst term)
 
 --- examples
 two :: LambdaPi VoidS

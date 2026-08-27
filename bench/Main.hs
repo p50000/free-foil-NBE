@@ -56,6 +56,28 @@ churchAdd a b = App (App addT (churchN a)) (churchN b)
 idTerm :: LambdaPi VoidS
 idTerm = withFresh emptyScope $ \x -> Lam x (Var (nameOf x))
 
+-- | The identity @\\x. x@ built directly in an arbitrary scope (a closed term,
+-- reusable as a domain type at any depth without sinking).
+idIn :: Distinct s => Scope s -> LambdaPi s
+idIn scope = withFresh scope $ \x -> Lam x (Var (nameOf x))
+
+-- | @n@ nested dependent function types
+-- @(x0 : id) -> (x1 : id) -> ... -> id@, with distinct, unused binders. There
+-- are no redexes in the types, so both normalisers do a single linear pass —
+-- unless NbE re-normalises each codomain, which is exponential in @n@. This is
+-- the worst case that motivated the eager-values representation.
+nestedPi :: Int -> LambdaPi VoidS
+nestedPi = go emptyScope
+  where
+    go :: Distinct s => Scope s -> Int -> LambdaPi s
+    go scope k
+      | k <= 0 = idIn scope
+      | otherwise =
+          withFresh scope $ \x ->
+            case assertDistinct x of
+              Distinct ->
+                Pi (idIn scope) x (go (extendScope x scope) (k - 1))
+
 -- | @n@ nested identity redexes: @id (id (... id))@, normalising to @id@.
 nestedRedexes :: Int -> LambdaPi VoidS
 nestedRedexes n = iterate (App idTerm) idTerm !! n
@@ -111,5 +133,10 @@ main =
         [ compareNormalisers "depth 100"  (nestedLet 100)
         , compareNormalisers "depth 500"  (nestedLet 500)
         , compareNormalisers "depth 1000" (nestedLet 1000)
+        ]
+    , bgroup "Nested Pi types"
+        [ compareNormalisers "depth 100"  (nestedPi 100)
+        , compareNormalisers "depth 500"  (nestedPi 500)
+        , compareNormalisers "depth 1000" (nestedPi 1000)
         ]
     ]
