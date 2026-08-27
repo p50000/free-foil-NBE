@@ -159,6 +159,7 @@ eval ::
   Substitution (Value binder sig) i o ->
   AST binder sig i ->
   Value binder sig o
+{-# INLINABLE eval #-}
 eval scope env = \case
   Var x -> lookupSubst env x
   Node node -> evalSig scope (bimap (ScopedClosure env) (eval scope env) node)
@@ -171,6 +172,7 @@ quote ::
   Foil.Scope n ->
   Value binder sig n ->
   AST binder sig n
+{-# INLINABLE quote #-}
 quote scope = \case
   VVar x -> Var x
   VNode node ->
@@ -192,6 +194,7 @@ quoteScopedClosure ::
   Foil.Scope n ->
   ScopedClosure binder sig n ->
   ScopedAST binder sig n
+{-# INLINABLE quoteScopedClosure #-}
 quoteScopedClosure scope (ScopedClosure env (ScopedAST bind body)) =
   Foil.withRefreshedPattern scope bind $ \extendEnv bind' ->
     case Foil.assertDistinct bind' of
@@ -213,6 +216,7 @@ nfNbe ::
   Foil.Scope n ->
   AST binder sig n ->
   AST binder sig n
+{-# INLINABLE nfNbe #-}
 nfNbe scope = quote scope . eval scope identitySubst
 
 -- | Weak-head normal form by NbE: evaluate into the semantic domain, then read
