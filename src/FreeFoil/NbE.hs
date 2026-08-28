@@ -94,9 +94,8 @@ data Value binder sig n where
   VNode ::
     sig Void (Value binder sig n) ->
     Value binder sig n
-  -- | This fuses the node box with the closure: a lambda value is a
-  -- 'VSuspended' around its sig cell, one heap object fewer than a node box
-  -- around a per-position closure.
+  -- | The environment sits in the constructor itself, so a suspended node
+  -- costs a single heap object beside its sig cell.
   VSuspended ::
     (Distinct i) =>
     Substitution (Value binder sig) i n ->

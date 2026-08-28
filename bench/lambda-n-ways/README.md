@@ -118,15 +118,18 @@ The gap was closed by a sequence of measured changes:
 - **Scoped pattern traversals** (fizruk/free-foil#88). `withPattern` and the
   refreshers hand back the extended scope, removing the second traversal per
   binder in the readback: −11% allocation, −7% time on the random corpora.
+- **Suspended nodes.** A node with binders is suspended as a whole
+  (`VSuspended`), fusing the node box with the closure; a lambda value is two
+  heap objects instead of three. This closed most of the remaining gap on the
+  factorial term.
 
 ### What remains
 
-The remaining gap is the two-level representation itself: `AST = Var | Node
-(sig …)` plus a `Value`/`ScopedClosure` semantic domain makes a lambda value
-several heap objects where the fork's monomorphic single-type GADT (`Expr`
-with an unpacked closure constructor) is one, and profiles put ~40% of the
-remaining allocation in those cells. A single-type value domain (or a
-flattened TH-generated AST) is the structural option; environment `IntMap`
+The remaining gap is the two-level representation itself. A generic node is
+a constructor box around a `sig` cell, so a value costs two heap objects
+where the fork's monomorphic GADT (`Expr` with an unpacked closure
+constructor) pays one. Merging the two objects requires monomorphic code,
+generated or hand-written, and is out of scope here; environment `IntMap`
 costs are shared with the baseline.
 
 The residual gap is the intrinsic price of a *signature-generic* representation
