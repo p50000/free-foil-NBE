@@ -90,8 +90,7 @@ stood at 4.3×/4.7× and 1.8×/2.4× respectively.
 
 ### Where the cost went
 
-The gap was closed by a sequence of measured changes (see
-`notes/perf-hypotheses.md` for the full investigation):
+The gap was closed by a sequence of measured changes:
 
 - **Concrete `CoSinkable` instances** (fizruk/free-foil#87). The empty-instance
   idiom left every binder operation on a GenericK representation traversal;

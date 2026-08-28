@@ -74,11 +74,11 @@ import LambdaPi.Generated
 -- @FFTerm@).
 type LambdaPi n = FFTerm n
 
--- Force the generic normaliser to be specialized to this concrete signature at
--- the library boundary (see the perf investigation): without this the recursive
--- eval/quote loop is dictionary-passing. The loop functions are specialized
--- individually — the nfNbe pragma alone does not devirtualise the recursive
--- eval/evalSig calls (visible as class-op selector time in profiles).
+-- Specialize the generic normaliser to this concrete signature at the library
+-- boundary. Without these pragmas the recursive eval/quote loop passes class
+-- dictionaries at run time. Note that the nfNbe pragma alone is not enough:
+-- the recursive eval and evalSig calls keep their dictionaries unless each
+-- loop function is specialized individually.
 {-# SPECIALIZE NbE.nfNbe :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n #-}
 {-# SPECIALIZE NbE.eval ::
       (Distinct o, Distinct i) =>
