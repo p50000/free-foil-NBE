@@ -49,6 +49,19 @@ ppValueStruct = \case
           "lam " ++ scoped sc
         PiSig d sc ->
           "pi " ++ ppValueStruct d ++ " " ++ scoped sc
+  NbE.VSuspended env node ->
+    "{" ++ body ++ "}"
+    where
+      envS = let dom = substitutionDomain env
+             in if null dom then "" else " |env=" ++ show dom
+      suspended (ScopedAST b t) = binder b ++ ". " ++ show t ++ envS
+      body = case node of
+        AppSig f a ->
+          "app " ++ ppValueStruct f ++ " " ++ ppValueStruct a
+        LamSig sc ->
+          "lam " ++ suspended sc
+        PiSig d sc ->
+          "pi " ++ ppValueStruct d ++ " " ++ suspended sc
   where
     scoped :: ScopedClosure FFPattern TermSig n -> String
     scoped (ScopedClosure env (ScopedAST b t)) =

@@ -13,6 +13,7 @@ module FreeFoil.NbE
   , module FreeFoil
   , Value (..)
   , ScopedClosure (..)
+  , quoteSuspendedScoped
   , Eval (..)
   , evalNode
   , eval
@@ -32,7 +33,9 @@ import Control.Monad.Foil.Internal
   )
 import Control.Monad.Free.Foil as FreeFoil
 
+import Data.Bifoldable
 import Data.Bifunctor
+import Data.Monoid (Any (..))
 
 import qualified Data.IntMap as IntMap
 
@@ -86,6 +89,16 @@ data Value binder sig n where
   VNode ::
     sig (ScopedClosure binder sig n) (Value binder sig n) ->
     Value binder sig n
+  -- | A node with binders, suspended as a whole: term subterms are already
+  -- values, scoped subterms stay raw syntax, and one captured environment
+  -- serves them all. This fuses the node box with the closure: a lambda value
+  -- is a 'VSuspended' around its sig cell, one heap object fewer than a
+  -- 'VNode' around per-position 'ScopedClosure's.
+  VSuspended ::
+    (Distinct i) =>
+    Substitution (Value binder sig) i n ->
+    sig (ScopedAST binder sig i) (Value binder sig n) ->
+    Value binder sig n
 
 -- | A suspended scoped subterm: a body together with the environment captured
 -- where it was introduced. Evaluation of the body is deferred until 'quote'
@@ -106,6 +119,8 @@ instance (Bifunctor sig) => Foil.Sinkable (Value pat sig) where
     VVar (rename n)
   sinkabilityProof rename (VNode node) =
     VNode (bimap (sinkScopedClosure rename) (Foil.sinkabilityProof rename) node)
+  sinkabilityProof rename (VSuspended env node) =
+    VSuspended (Foil.sinkabilityProof rename env) (bimap id (Foil.sinkabilityProof rename) node)
 
 -- | Sink a suspended scoped subterm: only the captured environment moves to
 -- the wider scope; the (still un-evaluated) body is untouched.
@@ -128,12 +143,20 @@ sinkScopedClosure rename (ScopedClosure env body) =
 -- writes its redex cases. Preserves the 'Value' invariant: it never applies an
 -- introduction form to an argument.
 evalNode ::
-  (Bifunctor sig, Distinct i) =>
+  (Bifunctor sig, Bifoldable sig, Distinct i) =>
   (Substitution (Value binder sig) i o -> AST binder sig i -> Value binder sig o) ->
   Substitution (Value binder sig) i o ->
   sig (ScopedAST binder sig i) (AST binder sig i) ->
   Value binder sig o
-evalNode ev env = VNode . bimap (ScopedClosure env) (ev env)
+evalNode ev env node
+  | hasScopedPositions node = VSuspended env (bimap id (ev env) node)
+  | otherwise = VNode (bimap (ScopedClosure env) (ev env) node)
+
+-- | Does this node have any scoped subterm? A node without one must not be
+-- suspended: a 'VSuspended' would keep the whole captured environment alive
+-- for no reason.
+hasScopedPositions :: Bifoldable sig => sig scopedTerm term -> Bool
+hasScopedPositions = getAny . bifoldMap (const (Any True)) (const (Any False))
 
 -- | Evaluation as a library: an object language becomes an NbE instance by
 -- giving its /elimination rules/. Everything else — variable lookup, suspending
@@ -149,7 +172,7 @@ evalNode ev env = VNode . bimap (ScopedClosure env) (ev env)
 -- avoid allocating an intermediate interpreted cell that a redex would discard
 -- immediately. Preserving the 'Value' invariant is the instance's
 -- responsibility.
-class (Bifunctor sig) => Eval binder sig where
+class (Bifunctor sig, Bifoldable sig) => Eval binder sig where
   evalSig ::
     (Distinct o, Distinct i) =>
     Scope o ->
@@ -189,6 +212,12 @@ quote scope = \case
         (quoteScopedClosure scope)
         (quote scope)
         node
+  VSuspended env node ->
+    Node $!
+      bimap
+        (quoteSuspendedScoped scope env)
+        (quote scope)
+        node
 
 -- | Read back a suspended scoped subterm: refresh the binder, extend the
 -- captured environment to map it to a fresh neutral, evaluate the body once
@@ -209,6 +238,26 @@ quoteScopedClosure scope (ScopedClosure env (ScopedAST bind body)) =
       Foil.Distinct ->
         let env' = extendEnv env
          in ScopedAST bind' (quote scope' (eval scope' env' body))
+
+-- | Read back one scoped subterm of a suspended node: as
+-- 'quoteScopedClosure', with the environment taken from the node.
+quoteSuspendedScoped ::
+  ( Eval binder sig,
+    Foil.Distinct n,
+    Foil.Distinct i,
+    Foil.CoSinkable binder,
+    Foil.HasNameBinders binder
+  ) =>
+  Foil.Scope n ->
+  Substitution (Value binder sig) i n ->
+  ScopedAST binder sig i ->
+  ScopedAST binder sig n
+{-# INLINABLE quoteSuspendedScoped #-}
+quoteSuspendedScoped scope env (ScopedAST bind body) =
+  Foil.withRefreshedPattern scope bind $ \extendEnv bind' scope' ->
+    case Foil.assertDistinct bind of
+      Foil.Distinct ->
+        ScopedAST bind' (quote scope' (eval scope' (extendEnv env) body))
 
 -- | Normal form by NbE: evaluate into the semantic domain, then quote fully.
 -- Generic over any 'Eval' instance — an object language gets @nfNbe@ for free.
@@ -268,6 +317,12 @@ quoteWhnf scope = \case
         (freezeScopedClosure scope)
         (quote scope)
         node
+  VSuspended env node ->
+    Node $
+      bimap
+        (freezeSuspendedScoped scope env)
+        (quote scope)
+        node
 
 -- | Read back a suspended scoped subterm /without/ evaluating under its binder:
 -- refresh the binder and substitute the captured environment — quoted to terms
@@ -286,6 +341,25 @@ freezeScopedClosure ::
   ScopedClosure binder sig n ->
   ScopedAST binder sig n
 freezeScopedClosure scope (ScopedClosure env (ScopedAST bind body)) =
+  Foil.withRefreshedPattern scope bind $ \extendSubst bind' scope' ->
+    let subst = extendSubst (quoteSubst scope env)
+     in ScopedAST bind' (substitute scope' subst body)
+
+-- | Freeze one scoped subterm of a suspended node: as
+-- 'freezeScopedClosure', with the environment taken from the node.
+freezeSuspendedScoped ::
+  ( Eval binder sig,
+    Foil.Distinct n,
+    Foil.Distinct i,
+    Foil.CoSinkable binder,
+    Foil.HasNameBinders binder,
+    Foil.SinkableK binder
+  ) =>
+  Foil.Scope n ->
+  Substitution (Value binder sig) i n ->
+  ScopedAST binder sig i ->
+  ScopedAST binder sig n
+freezeSuspendedScoped scope env (ScopedAST bind body) =
   Foil.withRefreshedPattern scope bind $ \extendSubst bind' scope' ->
     let subst = extendSubst (quoteSubst scope env)
      in ScopedAST bind' (substitute scope' subst body)
