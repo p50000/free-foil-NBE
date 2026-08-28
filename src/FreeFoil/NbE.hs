@@ -87,14 +87,17 @@ data Value binder sig n where
     sig (ScopedClosure binder sig n) (Value binder sig n) ->
     Value binder sig n
 
--- | A suspended scoped subterm: a body together with the environment captured
--- where it was introduced. Evaluation of the body is deferred until 'quote'
--- goes under the binder.
+-- | A suspended scoped subterm: a binder and a body together with the
+-- environment captured where they were introduced. Evaluation of the body is
+-- deferred until 'quote' goes under the binder. The binder and body are
+-- stored directly (rather than as the syntax's 'ScopedAST'), so reading a
+-- closure back does not go through an extra indirection.
 data ScopedClosure binder sig n where
   ScopedClosure ::
     (Distinct i) =>
     Substitution (Value binder sig) i n ->
-    ScopedAST binder sig i ->
+    binder i l ->
+    AST binder sig l ->
     ScopedClosure binder sig n
 
 instance Foil.InjectName (Value pat sig) where
@@ -114,8 +117,8 @@ sinkScopedClosure ::
   (Name n -> Name l) ->
   ScopedClosure pat sig n ->
   ScopedClosure pat sig l
-sinkScopedClosure rename (ScopedClosure env body) =
-  ScopedClosure (Foil.sinkabilityProof rename env) body
+sinkScopedClosure rename (ScopedClosure env binder body) =
+  ScopedClosure (Foil.sinkabilityProof rename env) binder body
 
 -- | The default evaluation of a node with /no/ elimination rule: suspend every
 -- scoped subterm under the current environment @env@ and evaluate every term
@@ -133,7 +136,7 @@ evalNode ::
   Substitution (Value binder sig) i o ->
   sig (ScopedAST binder sig i) (AST binder sig i) ->
   Value binder sig o
-evalNode ev env = VNode . bimap (ScopedClosure env) (ev env)
+evalNode ev env = VNode . bimap (\(ScopedAST binder body) -> ScopedClosure env binder body) (ev env)
 
 -- | Evaluation as a library: an object language becomes an NbE instance by
 -- giving its /elimination rules/. Everything else — variable lookup, suspending
@@ -203,7 +206,7 @@ quoteScopedClosure ::
   ScopedClosure binder sig n ->
   ScopedAST binder sig n
 {-# INLINABLE quoteScopedClosure #-}
-quoteScopedClosure scope (ScopedClosure env (ScopedAST bind body)) =
+quoteScopedClosure scope (ScopedClosure env bind body) =
   Foil.withRefreshedPattern scope bind $ \extendEnv bind' scope' ->
     case Foil.assertDistinct bind of
       Foil.Distinct ->
@@ -285,7 +288,7 @@ freezeScopedClosure ::
   Foil.Scope n ->
   ScopedClosure binder sig n ->
   ScopedAST binder sig n
-freezeScopedClosure scope (ScopedClosure env (ScopedAST bind body)) =
+freezeScopedClosure scope (ScopedClosure env bind body) =
   Foil.withRefreshedPattern scope bind $ \extendSubst bind' scope' ->
     let subst = extendSubst (quoteSubst scope env)
      in ScopedAST bind' (substitute scope' subst body)

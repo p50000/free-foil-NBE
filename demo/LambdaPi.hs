@@ -165,7 +165,7 @@ instance Eval FFPattern TermSig where
   evalSig scope env = \case
     AppSig fun arg ->
       case eval scope env fun of
-        NbE.VNode (LamSig (ScopedClosure env' (ScopedAST (FFPatternVar binder) body))) ->
+        NbE.VNode (LamSig (ScopedClosure env' (FFPatternVar binder) body)) ->
           case assertDistinct binder of
             Distinct -> eval scope (addSubst env' binder (eval scope env arg)) body
         fun' -> NbE.VNode (AppSig fun' (eval scope env arg))

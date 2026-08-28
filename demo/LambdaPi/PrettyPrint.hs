@@ -51,7 +51,7 @@ ppValueStruct = \case
           "pi " ++ ppValueStruct d ++ " " ++ scoped sc
   where
     scoped :: ScopedClosure FFPattern TermSig n -> String
-    scoped (ScopedClosure env (ScopedAST b t)) =
+    scoped (ScopedClosure env b t) =
       let dom = substitutionDomain env
           envS = if null dom then "" else " |env=" ++ show dom
       in binder b ++ ". " ++ show t ++ envS
