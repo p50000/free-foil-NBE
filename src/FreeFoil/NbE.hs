@@ -4,6 +4,8 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE BangPatterns #-}
 
 -- | Generic normalisation by evaluation (NbE) via free-foil.
 module FreeFoil.NbE
@@ -11,9 +13,15 @@ module FreeFoil.NbE
   , module FreeFoil
   , Value (..)
   , ScopedClosure (..)
+  , Eval (..)
   , evalNode
+  , eval
   , quote
   , quoteScopedClosure
+  , quoteWhnf
+  , freezeScopedClosure
+  , nfNbe
+  , whnfNbe
   , substitutionDomain
   ) where
 
@@ -127,50 +135,71 @@ evalNode ::
   Value binder sig o
 evalNode ev env = VNode . bimap (ScopedClosure env) (ev env)
 
--- | Quote a value back into an AST, using the provided evaluation function.
--- Each subterm is processed exactly once: term subterms recurse directly,
--- scoped subterms are read back under their binder via 'quoteScopedClosure'.
+-- | Evaluation as a library: an object language becomes an NbE instance by
+-- giving its /elimination rules/. Everything else — variable lookup, suspending
+-- scoped subterms, recursion, and quoting — is generic (see 'eval', 'quote').
+--
+-- 'evalSig' receives a node whose subterms are already interpreted: scoped
+-- subterms as 'ScopedClosure's (capturing the current environment) and term
+-- subterms as 'Value's. An /introduction/ form has no elimination rule and is
+-- simply rebuilt as a 'VNode' — that is the default. A language overrides
+-- 'evalSig' only to add its eliminators: inspect the principal 'Value' and
+-- either reduce (beta\/delta), or, when it is stuck on a neutral, rebuild the
+-- node. Preserving the 'Value' invariant is the instance's responsibility.
+class (Bifunctor sig) => Eval binder sig where
+  evalSig ::
+    (Distinct o) =>
+    Scope o ->
+    sig (ScopedClosure binder sig o) (Value binder sig o) ->
+    Value binder sig o
+  evalSig _ = VNode
+
+-- | Generic evaluation into the semantic domain. Looks up variables; for a node,
+-- suspends its scoped subterms and evaluates its term subterms (via 'evalNode''s
+-- 'bimap'), then hands the interpreted node to the language's 'evalSig'.
+eval ::
+  (Eval binder sig, Distinct o, Distinct i) =>
+  Scope o ->
+  Substitution (Value binder sig) i o ->
+  AST binder sig i ->
+  Value binder sig o
+{-# INLINABLE eval #-}
+eval scope !env = \case
+  Var x -> lookupSubst env x
+  Node node -> evalSig scope $! bimap (ScopedClosure env) (eval scope env) node
+
+-- | Quote a value back into an AST. Each subterm is processed exactly once:
+-- term subterms recurse directly, scoped subterms are read back under their
+-- binder via 'quoteScopedClosure' (which re-evaluates them via 'eval').
 quote ::
-  (Foil.Distinct n, Bifunctor sig, Foil.HasNameBinders pat, Foil.CoSinkable pat) =>
-  ( forall l m.
-    (Foil.Distinct m, Foil.Distinct l) =>
-    Foil.Scope m ->
-    Foil.Substitution (Value pat sig) l m ->
-    AST pat sig l ->
-    Value pat sig m
-  ) ->
+  (Eval binder sig, Foil.Distinct n, Foil.HasNameBinders binder, Foil.CoSinkable binder) =>
   Foil.Scope n ->
-  Value pat sig n ->
-  AST pat sig n
-quote eval scope = \case
+  Value binder sig n ->
+  AST binder sig n
+{-# INLINABLE quote #-}
+quote scope = \case
   VVar x -> Var x
   VNode node ->
-    Node $
+    Node $!
       bimap
-        (quoteScopedClosure eval scope)
-        (quote eval scope)
+        (quoteScopedClosure scope)
+        (quote scope)
         node
 
 -- | Read back a suspended scoped subterm: refresh the binder, extend the
 -- captured environment to map it to a fresh neutral, evaluate the body once
 -- under that environment, and quote the result.
 quoteScopedClosure ::
-  ( Foil.Distinct n,
-    Bifunctor sig,
+  ( Eval binder sig,
+    Foil.Distinct n,
     Foil.CoSinkable binder,
     Foil.HasNameBinders binder
   ) =>
-  ( forall l m.
-    (Foil.Distinct m, Foil.Distinct l) =>
-    Foil.Scope m ->
-    Foil.Substitution (Value binder sig) l m ->
-    AST binder sig l ->
-    Value binder sig m
-  ) ->
   Foil.Scope n ->
   ScopedClosure binder sig n ->
   ScopedAST binder sig n
-quoteScopedClosure eval scope (ScopedClosure env (ScopedAST bind body)) =
+{-# INLINABLE quoteScopedClosure #-}
+quoteScopedClosure scope (ScopedClosure env (ScopedAST bind body)) =
   Foil.withRefreshedPattern scope bind $ \extendEnv bind' ->
     case Foil.assertDistinct bind' of
       Foil.Distinct ->
@@ -178,4 +207,102 @@ quoteScopedClosure eval scope (ScopedClosure env (ScopedAST bind body)) =
           Foil.Distinct ->
             let scope' = Foil.extendScopePattern bind' scope
                 env' = extendEnv env
-             in ScopedAST bind' (quote eval scope' (eval scope' env' body))
+             in ScopedAST bind' (quote scope' (eval scope' env' body))
+
+-- | Normal form by NbE: evaluate into the semantic domain, then quote fully.
+-- Generic over any 'Eval' instance — an object language gets @nfNbe@ for free.
+nfNbe ::
+  ( Eval binder sig,
+    Foil.Distinct n,
+    Foil.HasNameBinders binder,
+    Foil.CoSinkable binder
+  ) =>
+  Foil.Scope n ->
+  AST binder sig n ->
+  AST binder sig n
+{-# INLINABLE nfNbe #-}
+nfNbe scope = quote scope . eval scope identitySubst
+
+-- | Weak-head normal form by NbE: evaluate into the semantic domain, then read
+-- back only the head. Shares 'eval' with 'nfNbe' and differs solely in how far
+-- quoting is driven — 'quoteWhnf' does /not/ go under binders.
+--
+-- One eager-values caveat. Because 'eval' evaluates term positions eagerly, the
+-- arguments of a stuck neutral are already normalised here, unlike a lazy whnf
+-- that would leave them untouched. The weak-head/full distinction therefore
+-- shows up only at /scoped/ positions: 'whnfNbe' leaves a redex under a binder
+-- alone (e.g. @whnfNbe (\\x. (\\y. y) x) = \\x. (\\y. y) x@), whereas 'nfNbe'
+-- reduces it. Both agree on head reduction and on neutral spines.
+whnfNbe ::
+  ( Eval binder sig,
+    Foil.Distinct n,
+    Foil.HasNameBinders binder,
+    Foil.CoSinkable binder,
+    Foil.SinkableK binder
+  ) =>
+  Foil.Scope n ->
+  AST binder sig n ->
+  AST binder sig n
+whnfNbe scope = quoteWhnf scope . eval scope identitySubst
+
+-- | Shallow readback producing a weak-head normal form: expose the head node,
+-- fully quote its term subterms (they are already normal — eager values), but
+-- /freeze/ its scoped subterms rather than normalising under their binders (see
+-- 'freezeScopedClosure').
+quoteWhnf ::
+  ( Eval binder sig,
+    Foil.Distinct n,
+    Foil.HasNameBinders binder,
+    Foil.CoSinkable binder,
+    Foil.SinkableK binder
+  ) =>
+  Foil.Scope n ->
+  Value binder sig n ->
+  AST binder sig n
+quoteWhnf scope = \case
+  VVar x -> Var x
+  VNode node ->
+    Node $
+      bimap
+        (freezeScopedClosure scope)
+        (quote scope)
+        node
+
+-- | Read back a suspended scoped subterm /without/ evaluating under its binder:
+-- refresh the binder and substitute the captured environment — quoted to terms
+-- by 'quoteSubst' — into the still-syntactic body. Unlike 'quoteScopedClosure',
+-- no beta\/delta reduction happens under the binder ('substitute' only renames),
+-- so a redex there survives. This is what makes 'whnfNbe' weak-head rather than
+-- full normalisation.
+freezeScopedClosure ::
+  ( Eval binder sig,
+    Foil.Distinct n,
+    Foil.HasNameBinders binder,
+    Foil.CoSinkable binder,
+    Foil.SinkableK binder
+  ) =>
+  Foil.Scope n ->
+  ScopedClosure binder sig n ->
+  ScopedAST binder sig n
+freezeScopedClosure scope (ScopedClosure env (ScopedAST bind body)) =
+  Foil.withRefreshedPattern scope bind $ \extendSubst bind' ->
+    case Foil.assertDistinct bind' of
+      Foil.Distinct ->
+        let scope' = Foil.extendScopePattern bind' scope
+            subst = extendSubst (quoteSubst scope env)
+         in ScopedAST bind' (substitute scope' subst body)
+
+-- | Quote every value in a substitution's codomain, turning a semantic
+-- environment into a syntactic one. Used by 'freezeScopedClosure' to substitute
+-- a closure's captured environment back into its body without normalising it.
+quoteSubst ::
+  ( Eval binder sig,
+    Foil.Distinct n,
+    Foil.HasNameBinders binder,
+    Foil.CoSinkable binder
+  ) =>
+  Foil.Scope n ->
+  Substitution (Value binder sig) i n ->
+  Substitution (AST binder sig) i n
+quoteSubst scope (UnsafeSubstitution m) =
+  UnsafeSubstitution (IntMap.map (quote scope) m)

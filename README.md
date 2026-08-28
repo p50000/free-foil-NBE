@@ -35,11 +35,12 @@ everything. All commands are run from the repository root.
 
 | Path | What it is |
 |------|-----------|
-| `src/FreeFoil/NbE.hs` | The generic NbE core: the `Value`/`ScopedClosure` semantic domain and generic `quote` (language-agnostic). |
+| `src/FreeFoil/NbE.hs` | The generic NbE core: the `Value`/`ScopedClosure` semantic domain, the `Eval` class (a language supplies only its elimination rules), and the generic `eval`/`quote`/`nfNbe`/`whnfNbe` (language-agnostic). |
 | `demo/grammar/Syntax.cf` | The lambda-pi grammar (LBNF). |
 | `gen/LambdaPi/Syntax/*` | BNFC/alex/happy output (lexer, parser, printer) — committed. |
 | `demo/LambdaPi/Raw.hs`, `Generated.hs` | free-foil TH: config + generated scope-safe types, patterns, conversions, `Show`, `NFData`. |
-| `demo/LambdaPi.hs` | The lambda-pi surface: `eval`, reference `nf`/`whnf`, NbE `nfNbe`. |
+| `demo/LambdaPi.hs` | The lambda-pi surface: its one-rule `Eval` instance (beta), reference `nf`/`whnf`, and the inherited NbE `nfNbe`/`whnfNbe`. |
+| `demo/Booleans.hs` | A second object language (Booleans with `if`) — one `Eval` instance, no binders — demonstrating the core is signature-generic, not lambda-pi-shaped. |
 | `demo/LambdaPi/Parser.hs`, `PrettyPrint.hs` | `IsString` parsing; value printers (`ppValue`, `ppValueStruct`). |
 | `demo/LambdaPi/LambdaNWays.hs` | Adapter to Weirich's `lambda-n-ways` harness (untyped `LC` bridge). |
 | `test/` | `tasty` test suite. |
@@ -119,7 +120,7 @@ cabal repl lambda-pi-demo
 ```
 ```haskell
 :set -XOverloadedStrings -XDataKinds
-import LambdaPi                                  -- eval, nf, whnf, nfNbe, Show (terms)
+import LambdaPi                                  -- eval, nf, whnf, nfNbe, whnfNbe, Show (terms)
 import LambdaPi.Parser ()                        -- IsString: write terms as string literals
 import LambdaPi.PrettyPrint (ppValue, ppValueStruct)
 import FreeFoil.NbE (emptyScope, identitySubst)
@@ -138,6 +139,17 @@ ghci> nfNbe emptyScope appTwo                                      -- Church 2·
 \ x1 . \ x2 . x1 (x1 (x1 (x1 x2)))
 ghci> nfNbe emptyScope ("(a : \\t. t) -> (\\y. y) a" :: LambdaPi VoidS)   -- Pi: codomain redex reduced
 (x0 : \ x0 . x0) -> x0
+```
+
+**Weak-head normal form** (`whnfNbe`) shares `eval` with `nfNbe` and differs only
+in how far quoting is driven: it reduces the head but stops at binders, so a redex
+under a lambda survives (whereas `nfNbe` reduces it):
+
+```haskell
+ghci> whnfNbe emptyScope ("\\f. (\\x. x) f" :: LambdaPi VoidS)   -- redex under the binder kept
+\ x0 . (\ x1 . x1) x0
+ghci> nfNbe   emptyScope ("\\f. (\\x. x) f" :: LambdaPi VoidS)   -- fully normalised
+\ x0 . x0
 ```
 
 (`\\` in a Haskell string is a single backslash `\`, the lambda. You can also
