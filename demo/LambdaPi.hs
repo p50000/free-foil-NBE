@@ -74,6 +74,11 @@ import LambdaPi.Generated
 -- @FFTerm@).
 type LambdaPi n = FFTerm n
 
+-- Force the generic normaliser to be specialized to this concrete signature at
+-- the library boundary (see the perf investigation): without this the recursive
+-- eval/quote loop is dictionary-passing.
+{-# SPECIALIZE NbE.nfNbe :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n #-}
+
 -- | Application. (@Var@ is re-exported from free-foil's generic 'AST'.)
 pattern App :: LambdaPi n -> LambdaPi n -> LambdaPi n
 pattern App fun arg = FFApp fun arg
