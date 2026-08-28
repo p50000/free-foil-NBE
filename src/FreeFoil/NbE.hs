@@ -1,4 +1,3 @@
-{-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -16,8 +15,11 @@ module FreeFoil.NbE
   , quoteSuspendedScoped
   , freezeSuspendedScoped
   , vacuous
+  , bivacuous
   , ensureVacuous
-  , ensureVacuous1
+  , ensureBivacuousFirst
+  , ensureBivacuousSecond
+  , ensureBivacuousBoth
   , Eval (..)
   , evalNode
   , eval
@@ -124,16 +126,17 @@ instance (Bifunctor sig) => Foil.Sinkable (Value pat sig) where
 -- writes its redex cases. Preserves the 'Value' invariant: it never applies an
 -- introduction form to an argument.
 evalNode ::
-  (Bifunctor sig, Bifoldable sig, Foldable (sig (ScopedAST binder sig i)), Distinct i) =>
+  (Bifunctor sig, Bifoldable sig, Distinct i) =>
   (Substitution (Value binder sig) i o -> AST binder sig i -> Value binder sig o) ->
   Substitution (Value binder sig) i o ->
   sig (ScopedAST binder sig i) (AST binder sig i) ->
   Value binder sig o
+{-# INLINE evalNode #-}
 evalNode ev env node =
-  case ensureVacuous1 node of
+  case ensureBivacuousFirst node of
     -- No scoped subterms: a plain node, and no environment to keep alive.
     Just node' -> VNode (bimap absurd (ev env) node')
-    Nothing -> VSuspended env $ case ensureVacuous node of
+    Nothing -> VSuspended env $ case ensureBivacuousSecond node of
       -- No term subterms either (e.g. a lambda): nothing to evaluate, so the
       -- cell is reused as it stands instead of being rebuilt.
       Just node' -> vacuous node'
@@ -147,22 +150,42 @@ evalNode ev env node =
 vacuous :: f Void -> f a
 vacuous = unsafeCoerce
 
+-- | As 'vacuous', for both parameters of a bifunctor at once.
+bivacuous :: f Void Void -> f a b
+bivacuous = unsafeCoerce
+
 -- | Witness that a container holds nothing at its parameter positions. The
 -- 'Just' result is the same heap object, not a rebuilt one — that is the
 -- point: combined with 'vacuous' it lets a node be reused at another type
 -- instead of being rebuilt field by field. The emptiness test constant-folds
--- per constructor in specialised code.
+-- per constructor in specialised code, and the same holds for the
+-- 'Bifoldable' variants below.
 ensureVacuous :: Foldable f => f a -> Maybe (f Void)
+{-# INLINE ensureVacuous #-}
 ensureVacuous x
   | null x = Just (unsafeCoerce x)
   | otherwise = Nothing
 
 -- | Witness that a node holds nothing at its /scoped/ (first) positions —
--- exactly what the 'Void' slots of 'VNode' require. As 'ensureVacuous', the
--- 'Just' result is the same heap object.
-ensureVacuous1 :: Bifoldable f => f a b -> Maybe (f Void b)
-ensureVacuous1 x
+-- exactly what the 'Void' slots of 'VNode' require.
+ensureBivacuousFirst :: Bifoldable f => f a b -> Maybe (f Void b)
+{-# INLINE ensureBivacuousFirst #-}
+ensureBivacuousFirst x
   | getAny (bifoldMap (const (Any True)) (const (Any False)) x) = Nothing
+  | otherwise = Just (unsafeCoerce x)
+
+-- | Witness that a node holds nothing at its /term/ (second) positions.
+ensureBivacuousSecond :: Bifoldable f => f a b -> Maybe (f a Void)
+{-# INLINE ensureBivacuousSecond #-}
+ensureBivacuousSecond x
+  | getAny (bifoldMap (const (Any False)) (const (Any True)) x) = Nothing
+  | otherwise = Just (unsafeCoerce x)
+
+-- | Witness that a node holds nothing at either kind of position.
+ensureBivacuousBoth :: Bifoldable f => f a b -> Maybe (f Void Void)
+{-# INLINE ensureBivacuousBoth #-}
+ensureBivacuousBoth x
+  | getAny (bifoldMap (const (Any True)) (const (Any True)) x) = Nothing
   | otherwise = Just (unsafeCoerce x)
 
 -- | Evaluation as a library: an object language becomes an NbE instance by
@@ -179,7 +202,7 @@ ensureVacuous1 x
 -- avoid allocating an intermediate interpreted cell that a redex would discard
 -- immediately. Preserving the 'Value' invariant is the instance's
 -- responsibility.
-class (Bifunctor sig, Bifoldable sig, forall scopedTerm. Foldable (sig scopedTerm)) => Eval binder sig where
+class (Bifunctor sig, Bifoldable sig) => Eval binder sig where
   evalSig ::
     (Distinct o, Distinct i) =>
     Scope o ->

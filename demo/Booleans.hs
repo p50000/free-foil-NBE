@@ -1,5 +1,4 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
@@ -33,7 +32,7 @@ data BoolSig scope term
   = TrueSig
   | FalseSig
   | IfSig term term term
-  deriving (Functor, Foldable)
+  deriving (Functor)
 
 deriveBifunctor ''BoolSig
 deriveBifoldable ''BoolSig
