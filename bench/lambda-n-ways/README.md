@@ -63,63 +63,59 @@ is meaningful.
 
 ## A sample run
 
-Numbers from one run (Apple M3 Pro, macOS 14.4, GHC 9.10.3, `-O2`); machine-
-specific, treat as relative. The first line is a correctness cross-check: the
-generic normaliser's normal forms are alpha-equal to the baseline's on every
-corpus term.
+Numbers from one run (Apple M-series, GHC 9.10.3, `-O2`, free-foil pinned to
+the HEAD carrying fizruk/free-foil#86, #87 and #88); machine-specific, treat
+as relative. The first line is a correctness cross-check: the generic
+normaliser's normal forms are alpha-equal to the baseline's on every corpus
+term.
 
 ```
 correctness: generic free-foil NbE vs fork baseline on 201 terms — ALL AGREE
 All
   nf
-    NBE.FreeFoil (generic): OK   1.78 ms,  8.4 MB allocated
-    NBE.Foil:               OK   759  µs,  4.7 MB allocated
+    NBE.FreeFoil (generic): OK   838  µs,  5.4 MB allocated
+    NBE.Foil:               OK   601  µs,  4.7 MB allocated
   random15
-    NBE.FreeFoil (generic): OK   485  µs,  4.0 MB allocated
-    NBE.Foil:               OK    95  µs,  924 KB allocated
+    NBE.FreeFoil (generic): OK   178  µs,  1.6 MB allocated
+    NBE.Foil:               OK    83  µs,  924 KB allocated
   random20
-    NBE.FreeFoil (generic): OK   456  µs,  3.9 MB allocated
-    NBE.Foil:               OK    94  µs,  936 KB allocated
+    NBE.FreeFoil (generic): OK   178  µs,  1.6 MB allocated
+    NBE.Foil:               OK    82  µs,  936 KB allocated
 ```
 
-The two normalisers produce identical normal forms on all 201 terms. The generic
-one costs about **4× the allocation** on the random corpora (≈1.8× on the big
-factorial term), and time tracks allocation closely.
+The generic normaliser costs about **1.7× the allocation and 2.2× the time**
+on the random corpora, and **1.15× the allocation and 1.4× the time** on the
+big factorial term. At the start of the investigation the same comparison
+stood at 4.3×/4.7× and 1.8×/2.4× respectively.
 
-### Where the cost comes from
+### Where the cost went
 
-Profiling attributes the gap to the **representation, not the algorithm or the
-scoping discipline**:
+The gap was closed by a sequence of measured changes (see
+`notes/perf-hypotheses.md` for the full investigation):
 
-- **Not names-vs-levels, not the environment.** Both normalisers use the *same*
-  name machinery — foil `Name`s and an `IntMap`-backed `Substitution` (the fork's
-  `Foil.NBE` uses the identical `IntMap` substitution). So the gap is not de
-  Bruijn indices/levels and not the environment structure.
-- **Not dictionary dispatch.** Both are built at `-O2`, and the generic loop is
-  specialized to the concrete signature (`INLINABLE` + `SPECIALIZE`), so the gap
-  is not type-class overhead — specializing changed time by only ~5% and
-  allocation not at all.
-- **The generic free-monad representation.** `AST = Var | Node (sig …)` plus a
-  two-level semantic domain (`Value` + per-scoped-subterm `ScopedClosure`) means
-  every node is several heap objects — a `VNode` box, the `sig` cell, and a
-  `ScopedClosure` — where the fork's monomorphic single-type GADT (`Expr` with an
-  unpacked closure constructor) is one. That extra object *count* per node is the
-  ~4×.
+- **Concrete `CoSinkable` instances** (fizruk/free-foil#87). The empty-instance
+  idiom left every binder operation on a GenericK representation traversal;
+  `mkFreeFoil` now generates the delegating instance. This alone was −40% time
+  and −45% allocation on the random corpora.
+- **Raw-node `evalSig`.** The `Eval` class hands the eliminator the raw syntax
+  node and the environment, so a redex no longer pays for an interpreted node
+  it immediately discards: −28% time and −29% allocation on lennart.
+- **Full specialisation.** The `nfNbe` pragma alone left the recursive
+  `eval`/`evalSig` calls dictionary-dispatched; explicit `SPECIALIZE` pragmas
+  for `eval`/`quote`/`quoteScopedClosure` gave another −12…−18% time.
+- **Scoped pattern traversals** (fizruk/free-foil#88). `withPattern` and the
+  refreshers hand back the extended scope, removing the second traversal per
+  binder in the readback: −11% allocation, −7% time on the random corpora.
 
-### How it could be reduced
+### What remains
 
-- **Force the eval/quote recursion (applied).** Forcing the recursive
-  constructions collapses intermediate thunks, cutting allocation ~13–30% (most
-  on deep, sharing-heavy terms) with identical normal forms. It must stay lazy
-  *under binders*: forcing a suspended `Pi` codomain eagerly regresses dependent
-  types.
-- **An eager `free-foil` AST (future).** Strict `AST`/`ScopedAST` fields would cut
-  per-node thunk allocation further; to avoid the same `Pi` regression it must be
-  *selectively* strict (strict spine, lazy scoped body), and belongs upstream as
-  an opt-in.
-- **A single-type value domain (future).** Collapsing `Value`/`ScopedClosure`
-  into a decorated `AST` (as the fork's `Expr` does) removes one object layer, at
-  some cost to the clean eval/quote split.
+The remaining gap is the two-level representation itself: `AST = Var | Node
+(sig …)` plus a `Value`/`ScopedClosure` semantic domain makes a lambda value
+several heap objects where the fork's monomorphic single-type GADT (`Expr`
+with an unpacked closure constructor) is one, and profiles put ~40% of the
+remaining allocation in those cells. A single-type value domain (or a
+flattened TH-generated AST) is the structural option; environment `IntMap`
+costs are shared with the baseline.
 
 The residual gap is the intrinsic price of a *signature-generic* representation
 over a hand-specialized monomorphic one that uses the same name machinery.
