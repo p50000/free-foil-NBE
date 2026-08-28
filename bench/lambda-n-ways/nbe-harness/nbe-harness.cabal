@@ -26,7 +26,7 @@ executable nbe-harness
                     , Util.Stats
                     , Util.Impl
                     , Foil.NBE
-    ghc-options:      -O2
+    ghc-options:      -O2 -rtsopts
     default-extensions:
                     DataKinds
                   , DeriveGeneric
