@@ -3,6 +3,17 @@ packages: .
 -- The project targets base 4.20 (GHC 9.10).
 with-compiler: ghc-9.10.3
 
+-- Track free-foil HEAD rather than the Hackage release: it carries changes
+-- relevant to the NbE overhead investigation (the O(1) sink family with its
+-- rewrite rules, and substitute short-circuiting on the empty substitution)
+-- that Hackage 0.3.2 does not have. The `free-foil ^>=0.3.2` bound in the
+-- cabal file still holds (HEAD is 0.3.3).
+source-repository-package
+  type: git
+  location: https://github.com/fizruk/free-foil.git
+  tag: 71fcfc12094ea7764602001481fbbe84339a6704
+  subdir: haskell/free-foil
+
 -- Build the test suite and benchmark as part of `cabal build all` (and CI),
 -- not only under `cabal test` / `cabal bench`.
 tests: True
