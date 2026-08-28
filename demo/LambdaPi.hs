@@ -140,21 +140,21 @@ type Value = NbE.Value FFPattern TermSig
 -- 'FreeFoil.NbE.eval' \/ 'FreeFoil.NbE.quote' and the derived
 -- 'FreeFoil.NbE.nfNbe' (both re-exported above) come for free.
 --
--- 'evalSig' receives the node already interpreted — scoped subterms as
--- 'ScopedClosure's, term subterms as 'Value's. Beta-reduction re-evaluates the
--- lambda body under the captured environment extended with the argument; a
--- function stuck on a neutral stays a 'NbE.VNode' application. This is the only
--- place that establishes the 'NbE.Value' invariant (no introduction form is
--- ever applied to an argument).
+-- 'evalSig' receives the raw node and the current environment. The 'AppSig'
+-- case evaluates the function itself; beta-reduction re-evaluates the lambda
+-- body under the captured environment extended with the (lazily evaluated)
+-- argument, and a function stuck on a neutral stays a 'NbE.VNode' application.
+-- This is the only place that establishes the 'NbE.Value' invariant (no
+-- introduction form is ever applied to an argument).
 instance Eval FFPattern TermSig where
-  evalSig scope = \case
+  evalSig scope env = \case
     AppSig fun arg ->
-      case fun of
+      case eval scope env fun of
         NbE.VNode (LamSig (ScopedClosure env' (ScopedAST (FFPatternVar binder) body))) ->
           case assertDistinct binder of
-            Distinct -> eval scope (addSubst env' binder arg) body
-        fun' -> NbE.VNode (AppSig fun' arg)
-    node -> NbE.VNode node
+            Distinct -> eval scope (addSubst env' binder (eval scope env arg)) body
+        fun' -> NbE.VNode (AppSig fun' (eval scope env arg))
+    node -> NbE.evalNode (eval scope) env node
 
 --- examples
 two :: LambdaPi VoidS
