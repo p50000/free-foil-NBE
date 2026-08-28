@@ -82,7 +82,7 @@ substitutionDomain (UnsafeSubstitution m) = IntMap.keys m
 -- with a single @eval@ and no further boilerplate.
 data Value binder sig n where
   VVar ::
-    Name n -> Value binder sig n
+    {-# UNPACK #-} !(Name n) -> Value binder sig n
   VNode ::
     sig (ScopedClosure binder sig n) (Value binder sig n) ->
     Value binder sig n
