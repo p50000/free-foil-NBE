@@ -204,14 +204,11 @@ quoteScopedClosure ::
   ScopedAST binder sig n
 {-# INLINABLE quoteScopedClosure #-}
 quoteScopedClosure scope (ScopedClosure env (ScopedAST bind body)) =
-  Foil.withRefreshedPattern scope bind $ \extendEnv bind' ->
-    case Foil.assertDistinct bind' of
+  Foil.withRefreshedPattern scope bind $ \extendEnv bind' scope' ->
+    case Foil.assertDistinct bind of
       Foil.Distinct ->
-        case Foil.assertDistinct bind of
-          Foil.Distinct ->
-            let scope' = Foil.extendScopePattern bind' scope
-                env' = extendEnv env
-             in ScopedAST bind' (quote scope' (eval scope' env' body))
+        let env' = extendEnv env
+         in ScopedAST bind' (quote scope' (eval scope' env' body))
 
 -- | Normal form by NbE: evaluate into the semantic domain, then quote fully.
 -- Generic over any 'Eval' instance — an object language gets @nfNbe@ for free.
@@ -289,12 +286,9 @@ freezeScopedClosure ::
   ScopedClosure binder sig n ->
   ScopedAST binder sig n
 freezeScopedClosure scope (ScopedClosure env (ScopedAST bind body)) =
-  Foil.withRefreshedPattern scope bind $ \extendSubst bind' ->
-    case Foil.assertDistinct bind' of
-      Foil.Distinct ->
-        let scope' = Foil.extendScopePattern bind' scope
-            subst = extendSubst (quoteSubst scope env)
-         in ScopedAST bind' (substitute scope' subst body)
+  Foil.withRefreshedPattern scope bind $ \extendSubst bind' scope' ->
+    let subst = extendSubst (quoteSubst scope env)
+     in ScopedAST bind' (substitute scope' subst body)
 
 -- | Quote every value in a substitution's codomain, turning a semantic
 -- environment into a syntactic one. Used by 'freezeScopedClosure' to substitute

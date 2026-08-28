@@ -14,5 +14,5 @@ optimization: 2
 source-repository-package
   type: git
   location: https://github.com/fizruk/free-foil.git
-  tag: 71fcfc12094ea7764602001481fbbe84339a6704
+  tag: 66bd934385604268f40f9b837a5f101f76d47c2f
   subdir: haskell/free-foil
