@@ -38,7 +38,19 @@ mkFreeFoil config
 deriveGenericK ''FFPattern
 instance Foil.SinkableK FFPattern
 instance Foil.HasNameBinders FFPattern
-instance Foil.CoSinkable FFPattern
+
+-- Hand-written, delegating to the NameBinder instance, instead of the empty
+-- instance whose GenericK-default 'withPattern' routes every binder operation
+-- (withRefreshedPattern, extendScopePattern) through a generic representation
+-- traversal. Perf experiment for hypothesis H2 (see notes/perf-hypotheses.md).
+instance Foil.CoSinkable FFPattern where
+  coSinkabilityProof rename (FFPatternVar binder) cont =
+    Foil.coSinkabilityProof rename binder $ \rename' binder' ->
+      cont rename' (FFPatternVar binder')
+  withPattern withBinder id_ comp scope (FFPatternVar binder) cont =
+    Foil.withPattern withBinder id_ comp scope binder $ \f binder' ->
+      cont f (FFPatternVar binder')
+
 instance Foil.UnifiablePattern FFPattern
 
 deriveBifunctor ''TermSig
