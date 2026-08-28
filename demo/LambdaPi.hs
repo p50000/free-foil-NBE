@@ -76,8 +76,23 @@ type LambdaPi n = FFTerm n
 
 -- Force the generic normaliser to be specialized to this concrete signature at
 -- the library boundary (see the perf investigation): without this the recursive
--- eval/quote loop is dictionary-passing.
+-- eval/quote loop is dictionary-passing. The loop functions are specialized
+-- individually — the nfNbe pragma alone does not devirtualise the recursive
+-- eval/evalSig calls (visible as class-op selector time in profiles).
 {-# SPECIALIZE NbE.nfNbe :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n #-}
+{-# SPECIALIZE NbE.eval ::
+      (Distinct o, Distinct i) =>
+      Scope o ->
+      NbE.Substitution (NbE.Value FFPattern TermSig) i o ->
+      LambdaPi i ->
+      NbE.Value FFPattern TermSig o #-}
+{-# SPECIALIZE NbE.quote ::
+      Distinct n => Scope n -> NbE.Value FFPattern TermSig n -> LambdaPi n #-}
+{-# SPECIALIZE NbE.quoteScopedClosure ::
+      Distinct n =>
+      Scope n ->
+      NbE.ScopedClosure FFPattern TermSig n ->
+      ScopedAST FFPattern TermSig n #-}
 
 -- | Application. (@Var@ is re-exported from free-foil's generic 'AST'.)
 pattern App :: LambdaPi n -> LambdaPi n -> LambdaPi n
