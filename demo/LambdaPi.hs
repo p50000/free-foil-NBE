@@ -44,7 +44,6 @@ import FreeFoil.NbE
       AST(Var),
       ScopedAST(ScopedAST),
       DistinctEvidence(Distinct),
-      ScopedClosure(ScopedClosure),
       Eval(..),
       eval,
       nfNbe,
@@ -88,10 +87,11 @@ type LambdaPi n = FFTerm n
       NbE.Value FFPattern TermSig o #-}
 {-# SPECIALIZE NbE.quote ::
       Distinct n => Scope n -> NbE.Value FFPattern TermSig n -> LambdaPi n #-}
-{-# SPECIALIZE NbE.quoteScopedClosure ::
-      Distinct n =>
+{-# SPECIALIZE NbE.quoteSuspendedScoped ::
+      (Distinct n, Distinct i) =>
       Scope n ->
-      NbE.ScopedClosure FFPattern TermSig n ->
+      NbE.Substitution (NbE.Value FFPattern TermSig) i n ->
+      ScopedAST FFPattern TermSig i ->
       ScopedAST FFPattern TermSig n #-}
 
 -- | Application. (@Var@ is re-exported from free-foil's generic 'AST'.)
@@ -151,7 +151,7 @@ type Value = NbE.Value FFPattern TermSig
 -- its one elimination rule, application: introduction forms (@Lam@, @Pi@) have
 -- no elimination rule and fall through to the generic default, which rebuilds
 -- them as a 'NbE.VNode'. So a @Pi@ keeps its domain as an eager value and its
--- codomain as a suspended 'ScopedClosure' (see 'NbE.Value'). The semantic
+-- codomain suspended in the node's environment (see 'NbE.Value'). The semantic
 -- 'FreeFoil.NbE.eval' \/ 'FreeFoil.NbE.quote' and the derived
 -- 'FreeFoil.NbE.nfNbe' (both re-exported above) come for free.
 --

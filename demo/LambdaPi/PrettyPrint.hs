@@ -19,10 +19,11 @@ module LambdaPi.PrettyPrint
   ) where
 
 import FreeFoil.NbE
-  ( ScopedClosure (ScopedClosure), ScopedAST (ScopedAST), Distinct, Scope
+  ( ScopedAST (ScopedAST), Distinct, Scope
   , nameId, nameOf, quote, substitutionDomain
   )
 import qualified FreeFoil.NbE as NbE
+import Data.Void (absurd)
 import LambdaPi (Value)
 import LambdaPi.Generated (TermSig (AppSig, LamSig, PiSig), FFPattern (FFPatternVar), fromTerm)
 import LambdaPi.Syntax.Print (printTree)
@@ -45,10 +46,8 @@ ppValueStruct = \case
       body = case node of
         AppSig f a ->
           "app " ++ ppValueStruct f ++ " " ++ ppValueStruct a
-        LamSig sc ->
-          "lam " ++ scoped sc
-        PiSig d sc ->
-          "pi " ++ ppValueStruct d ++ " " ++ scoped sc
+        LamSig sc -> absurd sc
+        PiSig _ sc -> absurd sc
   NbE.VSuspended env node ->
     "{" ++ body ++ "}"
     where
@@ -63,12 +62,6 @@ ppValueStruct = \case
         PiSig d sc ->
           "pi " ++ ppValueStruct d ++ " " ++ suspended sc
   where
-    scoped :: ScopedClosure FFPattern TermSig n -> String
-    scoped (ScopedClosure env (ScopedAST b t)) =
-      let dom = substitutionDomain env
-          envS = if null dom then "" else " |env=" ++ show dom
-      in binder b ++ ". " ++ show t ++ envS
-
     binder :: FFPattern i l -> String
     binder (FFPatternVar nb) = 'x' : show (nameId (nameOf nb))
 
