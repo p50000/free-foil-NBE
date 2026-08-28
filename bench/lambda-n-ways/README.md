@@ -16,7 +16,12 @@ groups:
   `AST` through the tested `LambdaPi.LambdaNWays` conversion — so this is the
   real code, not a copy that could drift.
 - **`NBE.Foil`** — the fork's self-contained, hand-written foil NbE
-  (`lib/Foil/NBE.hs`), which pays for no generic ("free") layer.
+  (`lib/Foil/NBE.hs`), which pays for no generic ("free") layer. The pinned
+  commit includes a strictness repair contributed from this investigation
+  (KarinaTyulebaeva/lambda-n-ways#1: `eval` made strict in its environment;
+  before it, the baseline allocated an `addSubst` thunk on every beta
+  reduction). Note that numbers published before that fix compared against
+  the pre-fix baseline, which was about 30% slower on these corpora.
 
 **The gap between the two columns is what we are measuring:** the cost of the
 generic free-monad/`AST` layer. (The corpus is untyped — plain lambda calculus,
@@ -37,7 +42,14 @@ Prerequisites: a modern GHC + cabal (tested: GHC 9.10.3, cabal 3.x).
 git clone --depth 1 https://github.com/KarinaTyulebaeva/lambda-n-ways.git \
   bench/lambda-n-ways/lambda-n-ways-fork
 
-# 2. build & run
+# 2. pin the baseline, so the numbers are a fixed reference (this is the
+#    merge of the strict-eval repair, KarinaTyulebaeva/lambda-n-ways#1)
+git -C bench/lambda-n-ways/lambda-n-ways-fork \
+  fetch --depth 1 origin 1f507f589ec12366757fdc3ee1fa499855615df3
+git -C bench/lambda-n-ways/lambda-n-ways-fork \
+  checkout 1f507f589ec12366757fdc3ee1fa499855615df3
+
+# 3. build & run
 cd bench/lambda-n-ways/nbe-harness
 cabal run nbe-harness
 ```
@@ -73,20 +85,21 @@ term.
 correctness: generic free-foil NbE vs fork baseline on 201 terms — ALL AGREE
 All
   nf
-    NBE.FreeFoil (generic): OK   838  µs,  5.4 MB allocated
-    NBE.Foil:               OK   601  µs,  4.7 MB allocated
+    NBE.FreeFoil (generic): OK   619  µs,  4.4 MB allocated
+    NBE.Foil:               OK   459  µs,  3.6 MB allocated
   random15
-    NBE.FreeFoil (generic): OK   178  µs,  1.6 MB allocated
-    NBE.Foil:               OK    83  µs,  924 KB allocated
+    NBE.FreeFoil (generic): OK   166  µs,  1.3 MB allocated
+    NBE.Foil:               OK    65  µs,  745 KB allocated
   random20
-    NBE.FreeFoil (generic): OK   178  µs,  1.6 MB allocated
-    NBE.Foil:               OK    82  µs,  936 KB allocated
+    NBE.FreeFoil (generic): OK   166  µs,  1.3 MB allocated
+    NBE.Foil:               OK    67  µs,  755 KB allocated
 ```
 
-The generic normaliser costs about **1.7× the allocation and 2.2× the time**
-on the random corpora, and **1.15× the allocation and 1.4× the time** on the
-big factorial term. At the start of the investigation the same comparison
-stood at 4.3×/4.7× and 1.8×/2.4× respectively.
+The generic normaliser costs about **1.2× the allocation and 1.3× the time**
+on the big factorial term, and **1.75× the allocation and 2.5× the time** on
+the random corpora. At the start of the investigation the comparison stood
+at 1.8×/2.4× and 4.3×/4.7× respectively — against the then-unrepaired
+baseline, so the true starting gap was wider still.
 
 ### Where the cost went
 
