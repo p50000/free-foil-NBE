@@ -23,7 +23,7 @@ module Booleans
 import Control.Monad.Free.Foil (AST (Node))
 import Data.Bifunctor.TH (deriveBifunctor)
 
-import FreeFoil.NbE (Eval (evalSig), Value (VNode), NameBinder, Scope, Distinct, nfNbe)
+import FreeFoil.NbE (Eval (evalSig), Value (VNode), NameBinder, Scope, Distinct, eval, evalNode, nfNbe)
 
 -- | Signature for a Booleans language: two introduction forms ('TrueSig',
 -- 'FalseSig') and one eliminator ('IfSig'). There are no scoped positions —
@@ -58,15 +58,16 @@ pattern If c t f = Node (IfSig c t f)
 -- and fall through to the generic default. Everything else — variable lookup,
 -- recursion, quoting, 'nf' — is inherited unchanged from "FreeFoil.NbE".
 --
--- ('evalSig' receives the node already interpreted: term subterms as 'Value's.
--- Booleans have no scoped positions, so no 'FreeFoil.NbE.ScopedClosure' arises.)
+-- ('evalSig' receives the raw node and the current environment; the eliminator
+-- evaluates its own subterms. Booleans have no scoped positions, so no
+-- 'FreeFoil.NbE.ScopedClosure' arises.)
 instance Eval NameBinder BoolSig where
-  evalSig _ = \case
-    IfSig cond t f -> case cond of
-      VNode TrueSig  -> t
-      VNode FalseSig -> f
-      _              -> VNode (IfSig cond t f)
-    node -> VNode node
+  evalSig scope env = \case
+    IfSig cond t f -> case eval scope env cond of
+      VNode TrueSig  -> eval scope env t
+      VNode FalseSig -> eval scope env f
+      cond'          -> VNode (IfSig cond' (eval scope env t) (eval scope env f))
+    node -> evalNode (eval scope) env node
 
 -- | Normal form by NbE, inherited unchanged from the generic 'nfNbe'.
 nf :: Distinct n => Scope n -> BoolTm n -> BoolTm n

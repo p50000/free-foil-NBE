@@ -82,7 +82,7 @@ substitutionDomain (UnsafeSubstitution m) = IntMap.keys m
 -- with a single @eval@ and no further boilerplate.
 data Value binder sig n where
   VVar ::
-    Name n -> Value binder sig n
+    {-# UNPACK #-} !(Name n) -> Value binder sig n
   VNode ::
     sig (ScopedClosure binder sig n) (Value binder sig n) ->
     Value binder sig n
@@ -139,24 +139,28 @@ evalNode ev env = VNode . bimap (ScopedClosure env) (ev env)
 -- giving its /elimination rules/. Everything else — variable lookup, suspending
 -- scoped subterms, recursion, and quoting — is generic (see 'eval', 'quote').
 --
--- 'evalSig' receives a node whose subterms are already interpreted: scoped
--- subterms as 'ScopedClosure's (capturing the current environment) and term
--- subterms as 'Value's. An /introduction/ form has no elimination rule and is
--- simply rebuilt as a 'VNode' — that is the default. A language overrides
--- 'evalSig' only to add its eliminators: inspect the principal 'Value' and
--- either reduce (beta\/delta), or, when it is stuck on a neutral, rebuild the
--- node. Preserving the 'Value' invariant is the instance's responsibility.
+-- 'evalSig' receives the /raw/ syntax node together with the current
+-- environment. An /introduction/ form has no elimination rule and falls
+-- through to the default, 'evalNode', which suspends scoped subterms as
+-- 'ScopedClosure's and evaluates term subterms. A language overrides 'evalSig'
+-- only to add its eliminators: evaluate the principal subterm and either
+-- reduce (beta\/delta), or, when it is stuck on a neutral, rebuild the node.
+-- Receiving the raw node (rather than an interpreted one) lets an eliminator
+-- avoid allocating an intermediate interpreted cell that a redex would discard
+-- immediately. Preserving the 'Value' invariant is the instance's
+-- responsibility.
 class (Bifunctor sig) => Eval binder sig where
   evalSig ::
-    (Distinct o) =>
+    (Distinct o, Distinct i) =>
     Scope o ->
-    sig (ScopedClosure binder sig o) (Value binder sig o) ->
+    Substitution (Value binder sig) i o ->
+    sig (ScopedAST binder sig i) (AST binder sig i) ->
     Value binder sig o
-  evalSig _ = VNode
+  evalSig scope env = evalNode (eval scope) env
 
--- | Generic evaluation into the semantic domain. Looks up variables; for a node,
--- suspends its scoped subterms and evaluates its term subterms (via 'evalNode''s
--- 'bimap'), then hands the interpreted node to the language's 'evalSig'.
+-- | Generic evaluation into the semantic domain. Looks up variables and hands
+-- a node, still raw, to the language's 'evalSig' together with the current
+-- environment.
 eval ::
   (Eval binder sig, Distinct o, Distinct i) =>
   Scope o ->
@@ -166,7 +170,7 @@ eval ::
 {-# INLINABLE eval #-}
 eval scope !env = \case
   Var x -> lookupSubst env x
-  Node node -> evalSig scope $! bimap (ScopedClosure env) (eval scope env) node
+  Node node -> evalSig scope env node
 
 -- | Quote a value back into an AST. Each subterm is processed exactly once:
 -- term subterms recurse directly, scoped subterms are read back under their
@@ -200,14 +204,11 @@ quoteScopedClosure ::
   ScopedAST binder sig n
 {-# INLINABLE quoteScopedClosure #-}
 quoteScopedClosure scope (ScopedClosure env (ScopedAST bind body)) =
-  Foil.withRefreshedPattern scope bind $ \extendEnv bind' ->
-    case Foil.assertDistinct bind' of
+  Foil.withRefreshedPattern scope bind $ \extendEnv bind' scope' ->
+    case Foil.assertDistinct bind of
       Foil.Distinct ->
-        case Foil.assertDistinct bind of
-          Foil.Distinct ->
-            let scope' = Foil.extendScopePattern bind' scope
-                env' = extendEnv env
-             in ScopedAST bind' (quote scope' (eval scope' env' body))
+        let env' = extendEnv env
+         in ScopedAST bind' (quote scope' (eval scope' env' body))
 
 -- | Normal form by NbE: evaluate into the semantic domain, then quote fully.
 -- Generic over any 'Eval' instance — an object language gets @nfNbe@ for free.
@@ -285,12 +286,9 @@ freezeScopedClosure ::
   ScopedClosure binder sig n ->
   ScopedAST binder sig n
 freezeScopedClosure scope (ScopedClosure env (ScopedAST bind body)) =
-  Foil.withRefreshedPattern scope bind $ \extendSubst bind' ->
-    case Foil.assertDistinct bind' of
-      Foil.Distinct ->
-        let scope' = Foil.extendScopePattern bind' scope
-            subst = extendSubst (quoteSubst scope env)
-         in ScopedAST bind' (substitute scope' subst body)
+  Foil.withRefreshedPattern scope bind $ \extendSubst bind' scope' ->
+    let subst = extendSubst (quoteSubst scope env)
+     in ScopedAST bind' (substitute scope' subst body)
 
 -- | Quote every value in a substitution's codomain, turning a semantic
 -- environment into a syntactic one. Used by 'freezeScopedClosure' to substitute

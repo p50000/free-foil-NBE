@@ -74,10 +74,25 @@ import LambdaPi.Generated
 -- @FFTerm@).
 type LambdaPi n = FFTerm n
 
--- Force the generic normaliser to be specialized to this concrete signature at
--- the library boundary (see the perf investigation): without this the recursive
--- eval/quote loop is dictionary-passing.
+-- Specialize the generic normaliser to this concrete signature at the library
+-- boundary. Without these pragmas the recursive eval/quote loop passes class
+-- dictionaries at run time. Note that the nfNbe pragma alone is not enough:
+-- the recursive eval and evalSig calls keep their dictionaries unless each
+-- loop function is specialized individually.
 {-# SPECIALIZE NbE.nfNbe :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n #-}
+{-# SPECIALIZE NbE.eval ::
+      (Distinct o, Distinct i) =>
+      Scope o ->
+      NbE.Substitution (NbE.Value FFPattern TermSig) i o ->
+      LambdaPi i ->
+      NbE.Value FFPattern TermSig o #-}
+{-# SPECIALIZE NbE.quote ::
+      Distinct n => Scope n -> NbE.Value FFPattern TermSig n -> LambdaPi n #-}
+{-# SPECIALIZE NbE.quoteScopedClosure ::
+      Distinct n =>
+      Scope n ->
+      NbE.ScopedClosure FFPattern TermSig n ->
+      ScopedAST FFPattern TermSig n #-}
 
 -- | Application. (@Var@ is re-exported from free-foil's generic 'AST'.)
 pattern App :: LambdaPi n -> LambdaPi n -> LambdaPi n
@@ -140,21 +155,21 @@ type Value = NbE.Value FFPattern TermSig
 -- 'FreeFoil.NbE.eval' \/ 'FreeFoil.NbE.quote' and the derived
 -- 'FreeFoil.NbE.nfNbe' (both re-exported above) come for free.
 --
--- 'evalSig' receives the node already interpreted — scoped subterms as
--- 'ScopedClosure's, term subterms as 'Value's. Beta-reduction re-evaluates the
--- lambda body under the captured environment extended with the argument; a
--- function stuck on a neutral stays a 'NbE.VNode' application. This is the only
--- place that establishes the 'NbE.Value' invariant (no introduction form is
--- ever applied to an argument).
+-- 'evalSig' receives the raw node and the current environment. The 'AppSig'
+-- case evaluates the function itself; beta-reduction re-evaluates the lambda
+-- body under the captured environment extended with the (lazily evaluated)
+-- argument, and a function stuck on a neutral stays a 'NbE.VNode' application.
+-- This is the only place that establishes the 'NbE.Value' invariant (no
+-- introduction form is ever applied to an argument).
 instance Eval FFPattern TermSig where
-  evalSig scope = \case
+  evalSig scope env = \case
     AppSig fun arg ->
-      case fun of
+      case eval scope env fun of
         NbE.VNode (LamSig (ScopedClosure env' (ScopedAST (FFPatternVar binder) body))) ->
           case assertDistinct binder of
-            Distinct -> eval scope (addSubst env' binder arg) body
-        fun' -> NbE.VNode (AppSig fun' arg)
-    node -> NbE.VNode node
+            Distinct -> eval scope (addSubst env' binder (eval scope env arg)) body
+        fun' -> NbE.VNode (AppSig fun' (eval scope env arg))
+    node -> NbE.evalNode (eval scope) env node
 
 --- examples
 two :: LambdaPi VoidS
