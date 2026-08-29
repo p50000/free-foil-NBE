@@ -12,14 +12,19 @@ module FreeFoil.NbE
   ( module Foil
   , module FreeFoil
   , Value (..)
-  , ScopedClosure (..)
+  , quoteSuspendedScoped
+  , freezeSuspendedScoped
+  , vacuous
+  , bivacuous
+  , ensureVacuous
+  , ensureBivacuousFirst
+  , ensureBivacuousSecond
+  , ensureBivacuousBoth
   , Eval (..)
   , evalNode
   , eval
   , quote
-  , quoteScopedClosure
   , quoteWhnf
-  , freezeScopedClosure
   , nfNbe
   , whnfNbe
   , substitutionDomain
@@ -32,12 +37,16 @@ import Control.Monad.Foil.Internal
   )
 import Control.Monad.Free.Foil as FreeFoil
 
+import Data.Bifoldable
+import Data.Void (Void, absurd)
+import Unsafe.Coerce (unsafeCoerce)
 import Data.Bifunctor
+import Data.Monoid (Any (..))
 
 import qualified Data.IntMap as IntMap
 
 -- | The raw name identifiers a substitution currently maps (its domain).
--- Handy for inspecting the captured environment of a 'ScopedClosure' without
+-- Handy for inspecting the captured environment of a 'VSuspended' without
 -- reaching into foil internals.
 substitutionDomain :: Substitution e i o -> [Int]
 substitutionDomain (UnsafeSubstitution m) = IntMap.keys m
@@ -45,34 +54,33 @@ substitutionDomain (UnsafeSubstitution m) = IntMap.keys m
 -- | A semantic value for NbE, in the /eager-values/ representation.
 --
 -- 'VVar' is a neutral variable (a stuck computation whose head is a free
--- variable). 'VNode' is an evaluated syntax node whose /term/ subterms are
--- themselves values (already in the ambient scope @n@) and whose /scoped/
--- subterms are 'ScopedClosure's — suspended bodies that each carry their own
--- captured environment. Storing the two positions differently is exactly what
--- a node with both needs: a @Pi@'s domain is a term position (an eager 'Value'
--- in the ambient scope) while its codomain is a scoped position (a
--- 'ScopedClosure' deferred under the binder), so the two no longer have to
--- share one environment.
+-- variable). 'VNode' is an evaluated syntax node with /no/ scoped subterms:
+-- its term subterms are themselves values (already in the ambient scope @n@),
+-- and its scoped positions are 'Void', so the type itself rules them out.
+-- 'VSuspended' is a node /with/ scoped subterms, suspended as a whole: term
+-- subterms are values, scoped subterms stay raw syntax, and one captured
+-- environment serves them all. For example, a @Pi@ value keeps its domain as
+-- an eager 'Value' while its codomain waits, un-evaluated, for the node's
+-- environment. Every value thus has exactly one representation.
 --
 -- Because term subterms are already values, every subterm is evaluated and
 -- quoted exactly once. This is what keeps 'quote' linear in the term size —
 -- in particular, nested 'Pi' types do not re-normalise their codomains.
 --
 -- The type does not rule out redexes: nothing prevents one from building
--- @VNode (AppSig (VNode (LamSig …)) v)@, a beta-redex sitting in the semantic
+-- @VNode (AppSig (VSuspended …) v)@, a beta-redex sitting in the semantic
 -- domain. We rely on an invariant instead.
 --
 -- /Invariant./ Every value produced by 'eval' is weak-head normal at every
--- position: no 'VNode' is an eliminator applied to the introduction form it
--- eliminates. Equivalently, each 'VNode' is either an introduction form, or a
+-- position: no node is an eliminator applied to the introduction form it
+-- eliminates. Equivalently, each node is either an introduction form, or a
 -- stuck eliminator whose principal argument is 'VVar'-headed.
 --
 -- The invariant is established by the object language's @eval@, which is the
 -- only place that knows which constructors of @sig@ are eliminators: it matches
 -- on them and reduces (see the @AppSig@ case in "LambdaPi"). Everything in this
--- module preserves it — 'quote', 'quoteScopedClosure', 'sinkScopedClosure' and
--- 'evalNode' only rebuild nodes and never apply an introduction form to an
--- argument.
+-- module preserves it — 'quote', 'quoteSuspendedScoped' and 'evalNode' only
+-- rebuild nodes and never apply an introduction form to an argument.
 --
 -- We do not enforce the invariant with types because the library is generic in
 -- @sig@ and so cannot tell introductions from eliminators. A neutral\/normal
@@ -84,18 +92,15 @@ data Value binder sig n where
   VVar ::
     {-# UNPACK #-} !(Name n) -> Value binder sig n
   VNode ::
-    sig (ScopedClosure binder sig n) (Value binder sig n) ->
+    sig Void (Value binder sig n) ->
     Value binder sig n
-
--- | A suspended scoped subterm: a body together with the environment captured
--- where it was introduced. Evaluation of the body is deferred until 'quote'
--- goes under the binder.
-data ScopedClosure binder sig n where
-  ScopedClosure ::
+  -- | The environment sits in the constructor itself, so a suspended node
+  -- costs a single heap object beside its sig cell.
+  VSuspended ::
     (Distinct i) =>
     Substitution (Value binder sig) i n ->
-    ScopedAST binder sig i ->
-    ScopedClosure binder sig n
+    sig (ScopedAST binder sig i) (Value binder sig n) ->
+    Value binder sig n
 
 instance Foil.InjectName (Value pat sig) where
   injectName = VVar
@@ -105,35 +110,82 @@ instance (Bifunctor sig) => Foil.Sinkable (Value pat sig) where
   sinkabilityProof rename (VVar n) =
     VVar (rename n)
   sinkabilityProof rename (VNode node) =
-    VNode (bimap (sinkScopedClosure rename) (Foil.sinkabilityProof rename) node)
-
--- | Sink a suspended scoped subterm: only the captured environment moves to
--- the wider scope; the (still un-evaluated) body is untouched.
-sinkScopedClosure ::
-  (Bifunctor sig) =>
-  (Name n -> Name l) ->
-  ScopedClosure pat sig n ->
-  ScopedClosure pat sig l
-sinkScopedClosure rename (ScopedClosure env body) =
-  ScopedClosure (Foil.sinkabilityProof rename env) body
+    VNode (bimap id (Foil.sinkabilityProof rename) node)
+  sinkabilityProof rename (VSuspended env node) =
+    VSuspended (Foil.sinkabilityProof rename env) (bimap id (Foil.sinkabilityProof rename) node)
 
 -- | The default evaluation of a node with /no/ elimination rule: suspend every
 -- scoped subterm under the current environment @env@ and evaluate every term
 -- subterm with @ev env@. The evaluator is taken as @env -> AST -> Value@ (rather
--- than a pre-applied @AST -> Value@) so that a single @env@ both captures into
--- each 'ScopedClosure' and drives the term subterms — they cannot accidentally
+-- than a pre-applied @AST -> Value@) so that a single @env@ both suspends the
+-- node and drives the term subterms — they cannot accidentally
 -- be evaluated under two different environments. An object language's @eval@ is
 -- exactly its elimination rules (which inspect the principal value and reduce)
 -- plus this one default for every introduction form — so a new language only
 -- writes its redex cases. Preserves the 'Value' invariant: it never applies an
 -- introduction form to an argument.
 evalNode ::
-  (Bifunctor sig, Distinct i) =>
+  (Bifunctor sig, Bifoldable sig, Distinct i) =>
   (Substitution (Value binder sig) i o -> AST binder sig i -> Value binder sig o) ->
   Substitution (Value binder sig) i o ->
   sig (ScopedAST binder sig i) (AST binder sig i) ->
   Value binder sig o
-evalNode ev env = VNode . bimap (ScopedClosure env) (ev env)
+{-# INLINE evalNode #-}
+evalNode ev env node =
+  case ensureBivacuousFirst node of
+    -- No scoped subterms: a plain node, and no environment to keep alive.
+    Just node' -> VNode (bimap absurd (ev env) node')
+    Nothing -> VSuspended env $ case ensureBivacuousSecond node of
+      -- No term subterms either (e.g. a lambda): nothing to evaluate, so the
+      -- cell is reused as it stands instead of being rebuilt.
+      Just node' -> vacuous node'
+      Nothing    -> bimap id (ev env) node
+
+-- | Reuse a container that provably holds nothing at its parameter positions
+-- at any other parameter type. Base's 'Data.Void.vacuous' is @fmap absurd@
+-- and rebuilds the container; this one is a coercion. It is sound because a
+-- value of @f 'Void'@ has no occupied parameter positions and the parameter
+-- of a signature bifunctor is representational.
+vacuous :: f Void -> f a
+vacuous = unsafeCoerce
+
+-- | As 'vacuous', for both parameters of a bifunctor at once.
+bivacuous :: f Void Void -> f a b
+bivacuous = unsafeCoerce
+
+-- | Witness that a container holds nothing at its parameter positions. The
+-- 'Just' result is the same heap object, not a rebuilt one — that is the
+-- point: combined with 'vacuous' it lets a node be reused at another type
+-- instead of being rebuilt field by field. The emptiness test constant-folds
+-- per constructor in specialised code, and the same holds for the
+-- 'Bifoldable' variants below.
+ensureVacuous :: Foldable f => f a -> Maybe (f Void)
+{-# INLINE ensureVacuous #-}
+ensureVacuous x
+  | null x = Just (unsafeCoerce x)
+  | otherwise = Nothing
+
+-- | Witness that a node holds nothing at its /scoped/ (first) positions —
+-- exactly what the 'Void' slots of 'VNode' require.
+ensureBivacuousFirst :: Bifoldable f => f a b -> Maybe (f Void b)
+{-# INLINE ensureBivacuousFirst #-}
+ensureBivacuousFirst x
+  | getAny (bifoldMap (const (Any True)) (const (Any False)) x) = Nothing
+  | otherwise = Just (unsafeCoerce x)
+
+-- | Witness that a node holds nothing at its /term/ (second) positions.
+ensureBivacuousSecond :: Bifoldable f => f a b -> Maybe (f a Void)
+{-# INLINE ensureBivacuousSecond #-}
+ensureBivacuousSecond x
+  | getAny (bifoldMap (const (Any False)) (const (Any True)) x) = Nothing
+  | otherwise = Just (unsafeCoerce x)
+
+-- | Witness that a node holds nothing at either kind of position.
+ensureBivacuousBoth :: Bifoldable f => f a b -> Maybe (f Void Void)
+{-# INLINE ensureBivacuousBoth #-}
+ensureBivacuousBoth x
+  | getAny (bifoldMap (const (Any True)) (const (Any True)) x) = Nothing
+  | otherwise = Just (unsafeCoerce x)
 
 -- | Evaluation as a library: an object language becomes an NbE instance by
 -- giving its /elimination rules/. Everything else — variable lookup, suspending
@@ -141,15 +193,15 @@ evalNode ev env = VNode . bimap (ScopedClosure env) (ev env)
 --
 -- 'evalSig' receives the /raw/ syntax node together with the current
 -- environment. An /introduction/ form has no elimination rule and falls
--- through to the default, 'evalNode', which suspends scoped subterms as
--- 'ScopedClosure's and evaluates term subterms. A language overrides 'evalSig'
+-- through to the default, 'evalNode', which suspends a node with scoped
+-- subterms whole and evaluates term subterms. A language overrides 'evalSig'
 -- only to add its eliminators: evaluate the principal subterm and either
 -- reduce (beta\/delta), or, when it is stuck on a neutral, rebuild the node.
 -- Receiving the raw node (rather than an interpreted one) lets an eliminator
 -- avoid allocating an intermediate interpreted cell that a redex would discard
 -- immediately. Preserving the 'Value' invariant is the instance's
 -- responsibility.
-class (Bifunctor sig) => Eval binder sig where
+class (Bifunctor sig, Bifoldable sig) => Eval binder sig where
   evalSig ::
     (Distinct o, Distinct i) =>
     Scope o ->
@@ -174,7 +226,7 @@ eval scope !env = \case
 
 -- | Quote a value back into an AST. Each subterm is processed exactly once:
 -- term subterms recurse directly, scoped subterms are read back under their
--- binder via 'quoteScopedClosure' (which re-evaluates them via 'eval').
+-- binder via 'quoteSuspendedScoped' (which re-evaluates them via 'eval').
 quote ::
   (Eval binder sig, Foil.Distinct n, Foil.HasNameBinders binder, Foil.CoSinkable binder) =>
   Foil.Scope n ->
@@ -186,29 +238,36 @@ quote scope = \case
   VNode node ->
     Node $!
       bimap
-        (quoteScopedClosure scope)
+        absurd
+        (quote scope)
+        node
+  VSuspended env node ->
+    Node $!
+      bimap
+        (quoteSuspendedScoped scope env)
         (quote scope)
         node
 
--- | Read back a suspended scoped subterm: refresh the binder, extend the
--- captured environment to map it to a fresh neutral, evaluate the body once
--- under that environment, and quote the result.
-quoteScopedClosure ::
+-- | Read back one scoped subterm of a suspended node: refresh the binder,
+-- extend the captured environment to map it to a fresh neutral, evaluate the
+-- body once under that environment, and quote the result.
+quoteSuspendedScoped ::
   ( Eval binder sig,
     Foil.Distinct n,
+    Foil.Distinct i,
     Foil.CoSinkable binder,
     Foil.HasNameBinders binder
   ) =>
   Foil.Scope n ->
-  ScopedClosure binder sig n ->
+  Substitution (Value binder sig) i n ->
+  ScopedAST binder sig i ->
   ScopedAST binder sig n
-{-# INLINABLE quoteScopedClosure #-}
-quoteScopedClosure scope (ScopedClosure env (ScopedAST bind body)) =
+{-# INLINABLE quoteSuspendedScoped #-}
+quoteSuspendedScoped scope env (ScopedAST bind body) =
   Foil.withRefreshedPattern scope bind $ \extendEnv bind' scope' ->
     case Foil.assertDistinct bind of
       Foil.Distinct ->
-        let env' = extendEnv env
-         in ScopedAST bind' (quote scope' (eval scope' env' body))
+        ScopedAST bind' (quote scope' (eval scope' (extendEnv env) body))
 
 -- | Normal form by NbE: evaluate into the semantic domain, then quote fully.
 -- Generic over any 'Eval' instance — an object language gets @nfNbe@ for free.
@@ -249,7 +308,7 @@ whnfNbe scope = quoteWhnf scope . eval scope identitySubst
 -- | Shallow readback producing a weak-head normal form: expose the head node,
 -- fully quote its term subterms (they are already normal — eager values), but
 -- /freeze/ its scoped subterms rather than normalising under their binders (see
--- 'freezeScopedClosure').
+-- 'freezeSuspendedScoped').
 quoteWhnf ::
   ( Eval binder sig,
     Foil.Distinct n,
@@ -265,33 +324,41 @@ quoteWhnf scope = \case
   VNode node ->
     Node $
       bimap
-        (freezeScopedClosure scope)
+        absurd
+        (quote scope)
+        node
+  VSuspended env node ->
+    Node $
+      bimap
+        (freezeSuspendedScoped scope env)
         (quote scope)
         node
 
--- | Read back a suspended scoped subterm /without/ evaluating under its binder:
--- refresh the binder and substitute the captured environment — quoted to terms
--- by 'quoteSubst' — into the still-syntactic body. Unlike 'quoteScopedClosure',
--- no beta\/delta reduction happens under the binder ('substitute' only renames),
--- so a redex there survives. This is what makes 'whnfNbe' weak-head rather than
--- full normalisation.
-freezeScopedClosure ::
+-- | Freeze one scoped subterm of a suspended node /without/ evaluating under
+-- its binder: refresh the binder and substitute the captured environment —
+-- quoted to terms by 'quoteSubst' — into the still-syntactic body. Unlike
+-- 'quoteSuspendedScoped', no beta\/delta reduction happens under the binder
+-- ('substitute' only renames), so a redex there survives. This is what makes
+-- 'whnfNbe' weak-head rather than full normalisation.
+freezeSuspendedScoped ::
   ( Eval binder sig,
     Foil.Distinct n,
-    Foil.HasNameBinders binder,
+    Foil.Distinct i,
     Foil.CoSinkable binder,
+    Foil.HasNameBinders binder,
     Foil.SinkableK binder
   ) =>
   Foil.Scope n ->
-  ScopedClosure binder sig n ->
+  Substitution (Value binder sig) i n ->
+  ScopedAST binder sig i ->
   ScopedAST binder sig n
-freezeScopedClosure scope (ScopedClosure env (ScopedAST bind body)) =
+freezeSuspendedScoped scope env (ScopedAST bind body) =
   Foil.withRefreshedPattern scope bind $ \extendSubst bind' scope' ->
     let subst = extendSubst (quoteSubst scope env)
      in ScopedAST bind' (substitute scope' subst body)
 
 -- | Quote every value in a substitution's codomain, turning a semantic
--- environment into a syntactic one. Used by 'freezeScopedClosure' to substitute
+-- environment into a syntactic one. Used by 'freezeSuspendedScoped' to substitute
 -- a closure's captured environment back into its body without normalising it.
 quoteSubst ::
   ( Eval binder sig,

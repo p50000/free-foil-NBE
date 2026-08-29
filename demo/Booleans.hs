@@ -21,7 +21,7 @@ module Booleans
   ) where
 
 import Control.Monad.Free.Foil (AST (Node))
-import Data.Bifunctor.TH (deriveBifunctor)
+import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor)
 
 import FreeFoil.NbE (Eval (evalSig), Value (VNode), NameBinder, Scope, Distinct, eval, evalNode, nfNbe)
 
@@ -35,6 +35,7 @@ data BoolSig scope term
   deriving (Functor)
 
 deriveBifunctor ''BoolSig
+deriveBifoldable ''BoolSig
 
 -- | Boolean terms. The binder type is the standard 'NameBinder', but it is
 -- never used (the signature has no scoped positions).
