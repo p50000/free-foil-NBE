@@ -25,6 +25,9 @@ import LambdaPi.PrettyPrint (ppValue, ppValueStruct)
 import LambdaPi.Gen (Closed (..), OpenTerm (..), freeVars)
 import qualified LambdaPi.LambdaNWays as LNW
 import qualified Booleans as B
+import qualified LambdaLet as LL
+import qualified LambdaLet.Examples as LLE
+import qualified LambdaLet.Parser as LLP
 
 main :: IO ()
 main =
@@ -41,6 +44,7 @@ main =
         , valueTests
         , lambdaNWaysTests
         , booleansTests
+        , lambdaLetTests
         , propertyTests
         ]
 
@@ -87,6 +91,43 @@ booleansTests =
           let scope = extendScope x emptyScope
               term  = B.If (Var (nameOf x)) B.TT B.FF
            in sb (B.nf scope term) @?= SBIf (SBVar (nameId (nameOf x))) SBTrue SBFalse
+    ]
+
+-- Lambda-let: zoo series step 1 (let / definitions). An eliminator that
+-- always fires: no let survives normalisation, and NbE gets it with one
+-- 'evalSig' case and no framework change. ------------------------------------
+
+-- | Alpha-equivalence for closed lambda-let terms.
+llAlphaEq :: LL.LambdaLet VoidS -> LL.LambdaLet VoidS -> Assertion
+llAlphaEq a b = alphaEquiv emptyScope a b @?= True
+
+lambdaLetTests :: TestTree
+lambdaLetTests =
+  testGroup "lambda-let (zoo step 1: let / definitions)"
+    [ testGroup "nfNbe agrees with reference nf on every example"
+        [ testCase nm $
+            alphaEquiv emptyScope (LL.nfNbe emptyScope t) (LL.nf emptyScope t) @?= True
+        | (nm, t) <- LLE.examples
+        ]
+    , testCase "a let-bound definition is applied: letId is the identity" $
+        llAlphaEq (LL.nfNbe emptyScope LLE.letId) "\\y. y"
+    , testCase "definition used twice: letChurch is Church four" $
+        llAlphaEq (LL.nfNbe emptyScope LLE.letChurch) "\\s. \\z. s (s (s (s z)))"
+    , testCase "an inner let shadows the outer binding" $
+        llAlphaEq (LL.nfNbe emptyScope LLE.letShadow) "\\b. b b"
+    , testCase "whnfNbe reduces a top-level let (let is a head redex)" $
+        llAlphaEq (LL.whnfNbe emptyScope "let i = \\x. x in i") "\\x. x"
+    , testCase "whnfNbe leaves a let under a lambda untouched" $
+        llAlphaEq (LL.whnfNbe emptyScope LLE.letUnderLam) LLE.letUnderLam
+    , testCase "nfNbe, in contrast, reduces the let under the lambda" $
+        llAlphaEq (LL.nfNbe emptyScope LLE.letUnderLam) "\\f. f f"
+    , testCase "a let bound to a neutral still reduces (open term)" $
+        LLP.withFreeVars emptyScope Map.empty ["f"] $ \scope env ->
+          case (,) <$> LLP.parseOpen scope env "let y = f in y y"
+                   <*> LLP.parseOpen scope env "f f" of
+            Left err            -> assertFailure ("parse failed: " ++ err)
+            Right (t, expected) ->
+              alphaEquiv scope (LL.nfNbe scope t) expected @?= True
     ]
 
 -- Beta-reduction on closed terms. -------------------------------------------
