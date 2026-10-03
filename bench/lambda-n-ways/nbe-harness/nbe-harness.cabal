@@ -1,13 +1,14 @@
 cabal-version:      3.0
 name:               nbe-harness
 version:            0.1.0.0
-synopsis:           lambda-n-ways NbE benchmark: generic free-foil NbE vs the fork's foil NbE
+synopsis:           lambda-n-ways NbE benchmark: generic free-foil NbE vs hand-written foil NbEs
 build-type:         Simple
 
 -- Benchmarks the REAL generic normaliser (`free-foil-nbe` + `lambda-pi-demo`,
--- via `LambdaPi.LambdaNWays`) against the fork's hand-written foil NbE
--- (`Foil.NBE`), on the fork's own corpus. The gap between the two is the cost
--- of the generic free-monad ("free") layer.
+-- via `LambdaPi.LambdaNWays`) against two hand-written ones, on the fork's own
+-- corpus: a monomorphic NbE over the same free-foil syntax
+-- (`LambdaPi.Monomorphic`), and the fork's foil NbE (`Foil.NBE`). The gaps
+-- measure the cost of the generic value domain and of the generic syntax.
 --
 -- Compiled with a modern GHC (native aarch64) because the fork's own GHC 8.10.7
 -- has no native aarch64 codegen; only the fork's self-contained `Util.*` and
