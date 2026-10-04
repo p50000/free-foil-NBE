@@ -1,5 +1,6 @@
--- LBNF grammar for the lambda-pi demonstration language.
--- Generated modules live under LambdaPi.Syntax.* (see demo/grammar/regen.sh).
+-- LBNF grammar for the lambda-let demonstration language: the untyped
+-- lambda-calculus plus let-bindings (the first feature of the zoo series).
+-- Generated modules live under LambdaLet.Syntax.* (see ../../../grammar-regen.sh).
 
 comment "--" ;
 comment "{-" "-}" ;
@@ -9,7 +10,7 @@ token VarIdent letter (letter | digit | '_' | '\'')* ;
 Var. Term2 ::= VarIdent ;
 App. Term1 ::= Term1 Term2 ;
 Lam. Term  ::= "\\" Pattern "." ScopedTerm ;
-Pi.  Term  ::= "(" Pattern ":" Term ")" "->" ScopedTerm ;
+Let. Term  ::= "let" Pattern "=" Term "in" ScopedTerm ;
 coercions Term 2 ;
 
 AScopedTerm. ScopedTerm ::= Term ;

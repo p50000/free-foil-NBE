@@ -9,14 +9,18 @@ into an evaluator into semantic values and a `quote` function back into syntax.
 
 This realises the generic-`Closure` sketch (Figure 14) that the Free Foil paper
 ([Kudasov, Shakirova, Shalagin, Tyulebaeva, ICCQ 2024](https://arxiv.org/abs/2405.16384))
-left as future work. The framework is demonstrated on a lambda-pi object
-language.
+left as future work. The framework is demonstrated on a series of small object
+languages.
 
-**Current status.** The generic NbE core and a lambda-pi demonstration are in
-place: a BNFC-generated parser/printer, free-foil Template Haskell for the
-scope-safe syntax, a `tasty` test suite, and a `tasty-bench` benchmark suite (see
-[bench/README.md](bench/README.md)). Next up is lifting the evaluator into a
-reusable type class, so a new language is just a signature plus one instance.
+**Current status.** The generic NbE core is in place: an object language is a
+signature plus one `Eval` instance (its elimination rules), and evaluation,
+quoting, and `nfNbe`/`whnfNbe` are inherited. Three demo languages exercise
+it — **lambda-pi** (functions and `Pi`, plus the benchmark harnesses),
+**Booleans** (`if`, no binders), and **lambda-let** (`let`-bindings — the
+first entry of a planned series of per-feature demo languages, each a BNFC
+grammar, the free-foil TH wiring, one hand-written module, and a file of
+examples). A `tasty` test suite and a `tasty-bench` benchmark suite cover
+them (see [bench/README.md](bench/README.md)).
 
 The rest of this file is a practical guide to building, verifying, and running
 everything. All commands are run from the repository root.
@@ -35,12 +39,13 @@ everything. All commands are run from the repository root.
 
 | Path | What it is |
 |------|-----------|
-| `src/FreeFoil/NbE.hs` | The generic NbE core: the `Value`/`ScopedClosure` semantic domain, the `Eval` class (a language supplies only its elimination rules), and the generic `eval`/`quote`/`nfNbe`/`whnfNbe` (language-agnostic). |
-| `demo/grammar/Syntax.cf` | The lambda-pi grammar (LBNF). |
-| `gen/LambdaPi/Syntax/*` | BNFC/alex/happy output (lexer, parser, printer) — committed. |
+| `src/FreeFoil/NbE.hs` | The generic NbE core: the `Value` semantic domain (`VVar`/`VNode`/`VSuspended`), the `Eval` class (a language supplies only its elimination rules), and the generic `eval`/`quote`/`nfNbe`/`whnfNbe` (language-agnostic). |
+| `demo/grammar/<Lang>/Syntax.cf` | The LBNF grammars (one directory per demo language: `LambdaPi`, `LambdaLet`). |
+| `gen/<Lang>/Syntax/*` | BNFC/alex/happy output (lexer, parser, printer) — committed. |
 | `demo/LambdaPi/Raw.hs`, `Generated.hs` | free-foil TH: config + generated scope-safe types, patterns, conversions, `Show`, `NFData`. |
 | `demo/LambdaPi.hs` | The lambda-pi surface: its one-rule `Eval` instance (beta), reference `nf`/`whnf`, and the inherited NbE `nfNbe`/`whnfNbe`. |
 | `demo/Booleans.hs` | A second object language (Booleans with `if`) — one `Eval` instance, no binders — demonstrating the core is signature-generic, not lambda-pi-shaped. |
+| `demo/LambdaLet.hs`, `demo/LambdaLet/*` | The lambda-let demo language (zoo series, step 1): untyped lambda plus `let` — an eliminator that always fires, so no `let` survives normalisation. Same four-part shape: grammar, `Raw.hs`/`Generated.hs` TH wiring, the hand-written surface with the `Eval` instance and reference normalisers, and `Examples.hs`. |
 | `demo/LambdaPi/Parser.hs`, `PrettyPrint.hs` | `IsString` parsing; value printers (`ppValue`, `ppValueStruct`). |
 | `demo/LambdaPi/LambdaNWays.hs` | Adapter to Weirich's `lambda-n-ways` harness (untyped `LC` bridge). |
 | `demo/LambdaPi/Monomorphic.hs` | A hand-written NbE for lambda-pi with a monomorphic value type (`nfMono`), over the same syntax as `nfNbe`: a baseline that measures the cost of the generic value domain. |
@@ -53,9 +58,10 @@ everything. All commands are run from the repository root.
 cabal build all
 ```
 
-This builds the `free-foil-nbe` library, the internal `lambda-pi-syntax`
-(generated parser) library, the `lambda-pi-demo` library, the `lambda-pi` test
-suite, and the `nbe-bench` benchmark. It is warning-clean under `-Wall`.
+This builds the `free-foil-nbe` library, the generated-parser libraries
+(`lambda-pi-syntax`, `lambda-let-syntax`), the demo libraries
+(`lambda-pi-demo`, `lambda-let-demo`), the `lambda-pi` test suite, and the
+`nbe-bench` benchmark. It is warning-clean under `-Wall`.
 
 ## Run the tests
 
@@ -65,7 +71,7 @@ cabal test
 cabal test --test-show-details=direct
 ```
 
-Expected: **`All 65 tests passed`**. The suite covers:
+Expected: **`All 79 tests passed`**. The suite covers:
 
 - **beta-reduction** on closed terms;
 - **normalisation under binders**;
@@ -77,6 +83,10 @@ Expected: **`All 65 tests passed`**. The suite covers:
 - **value inspection** (`ppValue` / `ppValueStruct` / `Show`);
 - the **lambda-n-ways adapter** (round-trip + `nbeNf`/`monoNf`-vs-`refNf`
   agreement);
+- **lambda-let** (zoo step 1): `nfNbe` vs reference `nf` on every example,
+  shadowing, `let` bound to a neutral, call-by-need (an unused divergent
+  binding is never evaluated), and the `whnfNbe`/`nfNbe` split on a `let`
+  under a binder;
 - **properties**: `nfNbe == nf` and `nfMono == nf` up to alpha-equivalence
   (free-foil's `alphaEquiv`) on random closed and open terms.
 
@@ -161,6 +171,21 @@ ghci> nfNbe   emptyScope ("\\f. (\\x. x) f" :: LambdaPi VoidS)   -- fully normal
 build terms directly with the `Var`/`App`/`Lam`/`Pi` pattern synonyms and the
 foil combinators — see `two`/`appTwo`/`neutralNbeOk` in `demo/LambdaPi.hs`.)
 
+**Lambda-let** works the same way from its own library
+(`cabal repl lambda-let-demo`); ready-made terms live in `LambdaLet.Examples`:
+
+```haskell
+ghci> import LambdaLet
+ghci> import LambdaLet.Examples
+ghci> import FreeFoil.NbE (emptyScope)
+ghci> nfNbe emptyScope letChurch          -- let two = \s. \z. s (s z) in two two
+\ x1 . \ x2 . x1 (x1 (x1 (x1 x2)))
+ghci> whnfNbe emptyScope letUnderLam      -- a let under a lambda survives whnf…
+\ x0 . let x1 = x0 in x1 x1
+ghci> nfNbe emptyScope letUnderLam        -- …and is reduced by nf
+\ x0 . x0 x0
+```
+
 **Inspect a semantic value.** `eval` produces a `Value`; two views:
 
 ```haskell
@@ -189,11 +214,11 @@ ghci> LNW.aeq (LNW.nbeNf idId) (LNW.refNf idId)   -- agrees with reference nf
 True
 ```
 
-## Regenerate the grammar (only if `Syntax.cf` changes)
+## Regenerate the grammars (only if a `Syntax.cf` changes)
 
 ```sh
 cabal install BNFC alex happy      # once, if not already installed
-./grammar-regen.sh                 # regenerates gen/LambdaPi/Syntax/{Abs,Lex,Par,Print}.hs
+./grammar-regen.sh                 # regenerates gen/<Lang>/Syntax/{Abs,Lex,Par,Print}.hs
 cabal build all && cabal test
 ```
 

@@ -61,6 +61,41 @@ library lambda-pi-demo
         , template-haskell
     default-language: Haskell2010
 
+-- BNFC-generated parser/printer for lambda-let, from
+-- demo/grammar/LambdaLet/Syntax.cf. Kept in its own library so -Wall does not
+-- apply to generated code. Regenerate with ./grammar-regen.sh.
+library lambda-let-syntax
+    hs-source-dirs:   gen
+    exposed-modules:  LambdaLet.Syntax.Abs
+        , LambdaLet.Syntax.Lex
+        , LambdaLet.Syntax.Par
+        , LambdaLet.Syntax.Print
+    build-depends:    base ^>=4.20.2.0
+        , array
+    default-language: Haskell2010
+
+-- The lambda-let demo language (zoo series, step 1: let / definitions):
+-- grammar-generated syntax, one Eval instance, parsing, and example terms.
+library lambda-let-demo
+    import:           warnings
+    visibility:       public
+    hs-source-dirs:   demo
+    exposed-modules:  LambdaLet
+        , LambdaLet.Examples
+        , LambdaLet.Parser
+        , LambdaLet.Raw
+    other-modules:    LambdaLet.Generated
+    build-depends:    base ^>=4.20.2.0
+        , bifunctors
+        , containers ^>=0.7
+        , free-foil ^>=0.3.2
+        , free-foil-nbe
+        , kind-generics >=0.5.0 && <0.6
+        , kind-generics-th
+        , lambda-let-syntax
+        , template-haskell
+    default-language: Haskell2010
+
 -- Exercises the generic NbE on the lambda-pi language.
 test-suite lambda-pi
     import:           warnings
@@ -73,6 +108,7 @@ test-suite lambda-pi
         , containers ^>=0.7
         , deepseq
         , free-foil-nbe
+        , lambda-let-demo
         , lambda-pi-demo
         , lambda-pi-syntax
         , tasty

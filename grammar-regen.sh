@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Regenerate the BNFC lexer/parser/printer for the lambda-pi demo language
-# from demo/grammar/Syntax.cf into gen/LambdaPi/Syntax/.
+# Regenerate the BNFC lexers/parsers/printers for the demo languages
+# from demo/grammar/*.cf into gen/<Lang>/Syntax/.
 #
 # Requires bnfc, alex, and happy on PATH:
 #   cabal install BNFC alex happy
@@ -11,20 +11,31 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 OUT=gen
-rm -rf "$OUT/LambdaPi/Syntax"
-bnfc --haskell -d -p LambdaPi -o "$OUT" demo/grammar/Syntax.cf
-(
-  cd "$OUT"
-  alex  -o LambdaPi/Syntax/Lex.hs LambdaPi/Syntax/Lex.x
-  happy -o LambdaPi/Syntax/Par.hs --ghc LambdaPi/Syntax/Par.y
+
+# Each language keeps its grammar at demo/grammar/<Lang>/Syntax.cf; the file
+# must be called Syntax.cf because BNFC names the generated module after it.
+GRAMMARS=(
+  "LambdaPi demo/grammar/LambdaPi/Syntax.cf"
+  "LambdaLet demo/grammar/LambdaLet/Syntax.cf"
 )
 
-# Keep only the modules the library actually compiles.
-rm -f "$OUT"/LambdaPi/Syntax/ErrM.hs \
-      "$OUT"/LambdaPi/Syntax/Skel.hs \
-      "$OUT"/LambdaPi/Syntax/Test.hs \
-      "$OUT"/LambdaPi/Syntax/Doc.txt \
-      "$OUT"/LambdaPi/Syntax/Lex.x \
-      "$OUT"/LambdaPi/Syntax/Par.y
+for entry in "${GRAMMARS[@]}"; do
+  read -r LANG_PREFIX GRAMMAR <<< "$entry"
+  rm -rf "$OUT/$LANG_PREFIX/Syntax"
+  bnfc --haskell -d -p "$LANG_PREFIX" -o "$OUT" "$GRAMMAR"
+  (
+    cd "$OUT"
+    alex  -o "$LANG_PREFIX/Syntax/Lex.hs" "$LANG_PREFIX/Syntax/Lex.x"
+    happy -o "$LANG_PREFIX/Syntax/Par.hs" --ghc "$LANG_PREFIX/Syntax/Par.y"
+  )
 
-echo "Regenerated $OUT/LambdaPi/Syntax/{Abs,Lex,Par,Print}.hs"
+  # Keep only the modules the libraries actually compile.
+  rm -f "$OUT/$LANG_PREFIX"/Syntax/ErrM.hs \
+        "$OUT/$LANG_PREFIX"/Syntax/Skel.hs \
+        "$OUT/$LANG_PREFIX"/Syntax/Test.hs \
+        "$OUT/$LANG_PREFIX"/Syntax/Doc.txt \
+        "$OUT/$LANG_PREFIX"/Syntax/Lex.x \
+        "$OUT/$LANG_PREFIX"/Syntax/Par.y
+
+  echo "Regenerated $OUT/$LANG_PREFIX/Syntax/{Abs,Lex,Par,Print}.hs"
+done
