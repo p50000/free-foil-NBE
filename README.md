@@ -70,7 +70,7 @@ cabal test
 cabal test --test-show-details=direct
 ```
 
-Expected: **`All 62 tests passed`**. The suite covers:
+Expected: **`All 64 tests passed`**. The suite covers:
 
 - **beta-reduction** on closed terms;
 - **normalisation under binders**;
@@ -82,8 +82,9 @@ Expected: **`All 62 tests passed`**. The suite covers:
 - **value inspection** (`ppValue` / `ppValueStruct` / `Show`);
 - the **lambda-n-ways adapter** (round-trip + `nbeNf`-vs-`refNf` agreement);
 - **lambda-let** (zoo step 1): `nfNbe` vs reference `nf` on every example,
-  shadowing, `let` bound to a neutral, and the `whnfNbe`/`nfNbe` split on a
-  `let` under a binder;
+  shadowing, `let` bound to a neutral, call-by-need (an unused divergent
+  binding is never evaluated), and the `whnfNbe`/`nfNbe` split on a `let`
+  under a binder;
 - **properties**: `nfNbe == nf` up to alpha-equivalence (free-foil's
   `alphaEquiv`) on random closed and open terms.
 

@@ -18,6 +18,7 @@ module LambdaLet.Examples
   , letShadow
   , letUnderLam
   , letSharing
+  , letUnused
   , examples
   ) where
 
@@ -51,14 +52,23 @@ letUnderLam :: LambdaLet VoidS
 letUnderLam = "\\f. let y = f in y y"
 
 -- | Sharing: the bound expression is itself a redex, used twice. NbE
--- evaluates @(\\a. a) (\\b. b)@ /once/, when the @let@ extends the
--- environment; a substitution-based normaliser copies the redex into both
--- occurrences and reduces it twice. Same normal form (@\\z. z@), different
--- work — the first taste of why @let@ matters for evaluators even before
--- glued evaluation. (See @FEATURE_ZOO_DESIGN.md@ on top-level definitions
--- and lazy unfolding.)
+-- evaluates @(\\a. a) (\\b. b)@ at most once — the environment holds one
+-- thunk, forced on the first use of @d@ and shared by the second; a
+-- substitution-based normaliser copies the redex into both occurrences and
+-- reduces it twice. Same normal form (@\\z. z@), different work — the first
+-- taste of why @let@ matters for evaluators even before glued evaluation.
+-- (See @FEATURE_ZOO_DESIGN.md@ on top-level definitions and lazy unfolding.)
 letSharing :: LambdaLet VoidS
 letSharing = "let d = (\\a. a) (\\b. b) in d d"
+
+-- | The flip side of laziness: an /unused/ binding is never evaluated at
+-- all. The bound expression here is Ω — it diverges if forced — yet the
+-- term normalises to @\\y. y@, because the environment entry stays an
+-- untouched thunk. (The substitution-based 'LambdaLet.nf' agrees for its
+-- own reason: zero occurrences, so the expression is dropped.) This pins
+-- down the evaluation order: call-by-need, not call-by-value.
+letUnused :: LambdaLet VoidS
+letUnused = "let w = (\\x. x x) (\\x. x x) in \\y. y"
 
 -- | All examples with their names, for harnesses and tests.
 examples :: [(String, LambdaLet VoidS)]
@@ -68,4 +78,5 @@ examples =
   , ("letShadow", letShadow)
   , ("letUnderLam", letUnderLam)
   , ("letSharing", letSharing)
+  , ("letUnused", letUnused)
   ]

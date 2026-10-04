@@ -122,8 +122,11 @@ type Value = NbE.Value FFPattern TermSig
 -- beta evaluates a lambda body. There is no stuck case (nothing to inspect,
 -- nothing to be neutral in), so a @let@ never survives into a value and the
 -- generic quote needs no extension. Note the bound expression is evaluated
--- once, up front: @let x = e in x x@ evaluates @e@ one time — 'eval'-level
--- sharing that a substitution-based normaliser (see 'nf') does not have.
+-- lazily, /at most once/: the environment entry is a thunk, shared by every
+-- occurrence of @x@ — forced the first time @x@ is looked up, never if the
+-- binding is unused (even a divergent bound expression is harmless then).
+-- A substitution-based normaliser (see 'nf') has neither property: it copies
+-- the unevaluated expression into every occurrence and reduces each copy.
 --
 -- 'LamSig' is the sole introduction form and falls through to the generic
 -- default.

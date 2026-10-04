@@ -121,6 +121,8 @@ lambdaLetTests =
         llAlphaEq (LL.whnfNbe emptyScope LLE.letUnderLam) LLE.letUnderLam
     , testCase "nfNbe, in contrast, reduces the let under the lambda" $
         llAlphaEq (LL.nfNbe emptyScope LLE.letUnderLam) "\\f. f f"
+    , testCase "an unused divergent binding is never evaluated (call-by-need)" $
+        llAlphaEq (LL.nfNbe emptyScope LLE.letUnused) "\\y. y"
     , testCase "a let bound to a neutral still reduces (open term)" $
         LLP.withFreeVars emptyScope Map.empty ["f"] $ \scope env ->
           case (,) <$> LLP.parseOpen scope env "let y = f in y y"
