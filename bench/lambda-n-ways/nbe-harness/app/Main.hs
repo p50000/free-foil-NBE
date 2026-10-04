@@ -19,7 +19,7 @@
 --     for no generic ("free") layer in either its syntax or its values.
 --
 -- The difference between the generic and the monomorphic column is the cost
--- of the generic value domain; the difference between the monomorphic column
+-- of the generic value domain. The difference between the monomorphic column
 -- and the fork is the cost of free-foil's generic syntax. A correctness check
 -- first confirms that each column agrees with the fork (up to alpha) on every
 -- term.

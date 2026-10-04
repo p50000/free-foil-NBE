@@ -7,30 +7,17 @@
 -- | A hand-written, monomorphic NbE for lambda-pi.
 --
 -- This is a baseline for measuring the generic normaliser of "FreeFoil.NbE",
--- not a part of the framework. It normalises the same scope-safe syntax as
--- 'LambdaPi.nfNbe' (free-foil's generated @AST FFPattern TermSig@), with the
--- same evaluation strategy and the same foil name handling, but its semantic
--- domain is a monomorphic data type with one constructor per value form.
+-- not a part of the framework. It normalises the same syntax as
+-- 'LambdaPi.nfNbe' (@AST FFPattern TermSig@) with the same algorithm, but its
+-- values form a monomorphic data type with one constructor per value form,
+-- so every value is a single heap object. The difference between the two
+-- normalisers estimates what generated monomorphic code could gain while
+-- keeping free-foil syntax as input and output.
 --
--- Thus every value is a single heap object: a lambda value is one 'VLam'
--- carrying its environment, an unpacked binder and the body, and a stuck
--- application is one 'VApp'. The generic domain cannot do this, since it can
--- only speak about a node through the signature bifunctor, so a generic value
--- is a constructor box around a @sig@ cell. The gap between the two
--- normalisers therefore bounds what a generated (rather than hand-written)
--- monomorphic value type could gain while keeping free-foil syntax as input
--- and output.
---
--- The algorithm mirrors the generic one step by step:
---
--- * evaluation is call-by-need: an argument is suspended as a thunk, both in
---   a beta-reduction and in a stuck application;
--- * a binder node (@Lam@, @Pi@) captures the current environment and keeps
---   its scoped body as raw syntax, while the domain of a @Pi@ is a (lazy)
---   value;
--- * readback refreshes each binder against the ambient scope, maps it to a
---   fresh neutral in the captured environment, and evaluates the body once,
---   so nested @Pi@ types are read back in linear time.
+-- As in the generic normaliser, evaluation is call-by-need, a binder node
+-- captures the environment and keeps its body as syntax, and readback
+-- refreshes each binder and evaluates the body once, so nested @Pi@ types are
+-- read back in linear time.
 module LambdaPi.Monomorphic
   ( Val (..)
   , eval

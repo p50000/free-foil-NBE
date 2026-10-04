@@ -43,6 +43,7 @@ everything. All commands are run from the repository root.
 | `demo/Booleans.hs` | A second object language (Booleans with `if`) — one `Eval` instance, no binders — demonstrating the core is signature-generic, not lambda-pi-shaped. |
 | `demo/LambdaPi/Parser.hs`, `PrettyPrint.hs` | `IsString` parsing; value printers (`ppValue`, `ppValueStruct`). |
 | `demo/LambdaPi/LambdaNWays.hs` | Adapter to Weirich's `lambda-n-ways` harness (untyped `LC` bridge). |
+| `demo/LambdaPi/Monomorphic.hs` | A hand-written NbE for lambda-pi with a monomorphic value type (`nfMono`), over the same syntax as `nfNbe`: a baseline that measures the cost of the generic value domain. |
 | `test/` | `tasty` test suite. |
 | `bench/` | `tasty-bench` microbenchmarks (NbE vs reference); `bench/lambda-n-ways/` is a guide + harness benchmarking the generic normaliser against Weirich's `lambda-n-ways` suite. |
 
@@ -64,7 +65,7 @@ cabal test
 cabal test --test-show-details=direct
 ```
 
-Expected: **`All 41 tests passed`**. The suite covers:
+Expected: **`All 65 tests passed`**. The suite covers:
 
 - **beta-reduction** on closed terms;
 - **normalisation under binders**;
@@ -74,9 +75,13 @@ Expected: **`All 41 tests passed`**. The suite covers:
 - **neutrals with free variables**;
 - **`parse . show` round-trips**;
 - **value inspection** (`ppValue` / `ppValueStruct` / `Show`);
-- the **lambda-n-ways adapter** (round-trip + `nbeNf`-vs-`refNf` agreement);
-- **properties**: `nfNbe == nf` up to alpha-equivalence (free-foil's
-  `alphaEquiv`) on random closed and open terms.
+- the **lambda-n-ways adapter** (round-trip + `nbeNf`/`monoNf`-vs-`refNf`
+  agreement);
+- **properties**: `nfNbe == nf` and `nfMono == nf` up to alpha-equivalence
+  (free-foil's `alphaEquiv`) on random closed and open terms.
+
+The beta, under-binder, `Pi` and deep-nesting cases also check the monomorphic
+baseline `nfMono` beside `nfNbe`.
 
 Useful flags:
 

@@ -5,13 +5,13 @@
 
 -- | Microbenchmarks for lambda-pi normalisation.
 --
--- Each input is normalised three ways — by the generic NbE ('nfNbe'), by the
--- hand-written monomorphic NbE ('Mono.nfMono', a baseline for the generic
--- one) and by the reference substitution normaliser ('nf') — so they are
--- directly comparable on the same terms, and future implementation variants
--- can be added as extra rows without changing the inputs. Following free-foil's own normalisation
--- benchmark, results are forced with 'sizeOf' (walking the whole normal form);
--- an 'NFData' instance also exists ("LambdaPi.Generated") if preferred.
+-- Each input is normalised in three ways: by the generic NbE ('nfNbe'), by the
+-- hand-written monomorphic NbE ('Mono.nfMono', a baseline for the generic one)
+-- and by the reference substitution normaliser ('nf'). New implementation
+-- variants can be added as extra rows without changing the inputs. Following
+-- free-foil's own normalisation benchmark, results are forced with 'sizeOf'
+-- (walking the whole normal form); an 'NFData' instance also exists
+-- ("LambdaPi.Generated") if preferred.
 module Main (main) where
 
 import Test.Tasty.Bench hiding (nf)
