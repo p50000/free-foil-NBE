@@ -3,24 +3,32 @@
 {-# LANGUAGE BangPatterns #-}
 
 -- | lambda-n-ways `nf` / `random15` / `random20` normalisation benchmark,
--- comparing the __real generic free-foil normaliser__ against the fork's
--- hand-written foil NbE.
+-- comparing the __real generic free-foil normaliser__ against two
+-- hand-written ones.
 --
 --   * @NBE.FreeFoil (generic)@ — `LambdaPi.nfNbe` from @lambda-pi-demo@, i.e.
---     the actual @Value@/@ScopedClosure@/@quote@ machinery of
+--     the actual @Value@/@VSuspended@/@quote@ machinery of
 --     @FreeFoil.NbE@ running over the generic free-monad @AST@. The harness'
 --     @LC IdInt@ is bridged to the scope-safe @AST@ via the tested
 --     @LambdaPi.LambdaNWays@ conversion.
+--   * @NBE.FreeFoil (monomorphic)@ — `LambdaPi.Monomorphic.nfMono`: the same
+--     algorithm over the same free-foil syntax, but with a hand-written
+--     monomorphic value type in place of the generic @Value@. It uses the
+--     same conversion as the generic column.
 --   * @NBE.Foil@ — the fork's self-contained hand-written foil NbE, which pays
---     for no generic ("free") layer.
+--     for no generic ("free") layer in either its syntax or its values.
 --
--- The difference between the two columns is the cost of that layer. A
--- correctness check first confirms the two agree (up to alpha) on every term.
+-- The difference between the generic and the monomorphic column is the cost
+-- of the generic value domain. The difference between the monomorphic column
+-- and the fork is the cost of free-foil's generic syntax. A correctness check
+-- first confirms that each column agrees with the fork (up to alpha) on every
+-- term.
 --
 -- Corpus dir defaults to @../lambda-n-ways-fork/lams/@; override with @LAMS_DIR@.
 module Main (main) where
 
 import Control.DeepSeq (force, rnf)
+import Control.Monad (forM_)
 import Data.Maybe (fromMaybe)
 import System.Environment (lookupEnv)
 import Test.Tasty.Bench
@@ -33,6 +41,7 @@ import qualified Foil.NBE
 import FreeFoil.NbE (alphaEquiv, emptyScope)
 import qualified LambdaPi as LP
 import qualified LambdaPi.LambdaNWays as LNW
+import qualified LambdaPi.Monomorphic as Mono
 
 -- Bridge the harness' own LC/IdInt to the mirrored ones in LambdaPi.LambdaNWays,
 -- whose fromLC/toLC build/read the real scope-safe AST. (Structural identity.)
@@ -64,8 +73,21 @@ genericImpl =
       impl_aeq = alphaEquiv emptyScope
     }
 
+-- | The hand-written monomorphic NbE over the same scope-safe AST as
+-- 'genericImpl'. Only @impl_nf@ differs between the two.
+monoImpl :: LambdaImpl
+monoImpl =
+  LambdaImpl
+    { impl_name = "NBE.FreeFoil (monomorphic)",
+      impl_fromLC = LNW.fromLC . toLNW,
+      impl_toLC = fromLNW . LNW.toLC,
+      impl_nf = Mono.nfMono emptyScope,
+      impl_nfi = error "nfi unimplemented",
+      impl_aeq = alphaEquiv emptyScope
+    }
+
 impls :: [LambdaImpl]
-impls = [genericImpl, Foil.NBE.impl]
+impls = [genericImpl, monoImpl, Foil.NBE.impl]
 
 benchOne :: LambdaImpl -> U.LC U.IdInt -> Benchmark
 benchOne LambdaImpl{..} lc =
@@ -81,12 +103,12 @@ benchMany LambdaImpl{..} lcs =
 nfLC :: LambdaImpl -> U.LC U.IdInt -> U.LC U.IdInt
 nfLC LambdaImpl{..} = impl_toLC . impl_nf . impl_fromLC
 
--- | Does the generic NbE agree with the fork baseline (up to alpha) on @t@?
-agrees :: U.LC U.IdInt -> Bool
-agrees t =
+-- | Does an implementation agree with the fork baseline (up to alpha) on @t@?
+agrees :: LambdaImpl -> U.LC U.IdInt -> Bool
+agrees impl t =
   case Foil.NBE.impl of
     LambdaImpl{..} ->
-      impl_aeq (impl_fromLC (nfLC genericImpl t))
+      impl_aeq (impl_fromLC (nfLC impl t))
                (impl_fromLC (nfLC Foil.NBE.impl t))
 
 main :: IO ()
@@ -96,10 +118,11 @@ main = do
   random15 <- getTerms (dir ++ "random15.lam")
   random20 <- getTerms (dir ++ "random20.lam")
   let corpus = lennart : random15 ++ random20
-      bad = length (filter (not . agrees) corpus)
-  putStrLn $ "correctness: generic free-foil NbE vs fork baseline on "
-    ++ show (length corpus) ++ " terms — "
-    ++ (if bad == 0 then "ALL AGREE" else show bad ++ " MISMATCH(ES)")
+  forM_ [genericImpl, monoImpl] $ \impl -> do
+    let bad = length (filter (not . agrees impl) corpus)
+    putStrLn $ "correctness: " ++ impl_name impl ++ " vs fork baseline on "
+      ++ show (length corpus) ++ " terms — "
+      ++ (if bad == 0 then "ALL AGREE" else show bad ++ " MISMATCH(ES)")
   defaultMain
     [ bgroup "nf"       [ benchOne  i lennart  | i <- impls ]
     , bgroup "random15" [ benchMany i random15 | i <- impls ]

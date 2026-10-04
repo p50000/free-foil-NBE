@@ -48,6 +48,7 @@ everything. All commands are run from the repository root.
 | `demo/LambdaLet.hs`, `demo/LambdaLet/*` | The lambda-let demo language (zoo series, step 1): untyped lambda plus `let` — an eliminator that always fires, so no `let` survives normalisation. Same four-part shape: grammar, `Raw.hs`/`Generated.hs` TH wiring, the hand-written surface with the `Eval` instance and reference normalisers, and `Examples.hs`. |
 | `demo/LambdaPi/Parser.hs`, `PrettyPrint.hs` | `IsString` parsing; value printers (`ppValue`, `ppValueStruct`). |
 | `demo/LambdaPi/LambdaNWays.hs` | Adapter to Weirich's `lambda-n-ways` harness (untyped `LC` bridge). |
+| `demo/LambdaPi/Monomorphic.hs` | A hand-written NbE for lambda-pi with a monomorphic value type (`nfMono`), over the same syntax as `nfNbe`: a baseline that measures the cost of the generic value domain. |
 | `test/` | `tasty` test suite. |
 | `bench/` | `tasty-bench` microbenchmarks (NbE vs reference); `bench/lambda-n-ways/` is a guide + harness benchmarking the generic normaliser against Weirich's `lambda-n-ways` suite. |
 
@@ -70,7 +71,7 @@ cabal test
 cabal test --test-show-details=direct
 ```
 
-Expected: **`All 64 tests passed`**. The suite covers:
+Expected: **`All 79 tests passed`**. The suite covers:
 
 - **beta-reduction** on closed terms;
 - **normalisation under binders**;
@@ -80,13 +81,17 @@ Expected: **`All 64 tests passed`**. The suite covers:
 - **neutrals with free variables**;
 - **`parse . show` round-trips**;
 - **value inspection** (`ppValue` / `ppValueStruct` / `Show`);
-- the **lambda-n-ways adapter** (round-trip + `nbeNf`-vs-`refNf` agreement);
+- the **lambda-n-ways adapter** (round-trip + `nbeNf`/`monoNf`-vs-`refNf`
+  agreement);
 - **lambda-let** (zoo step 1): `nfNbe` vs reference `nf` on every example,
   shadowing, `let` bound to a neutral, call-by-need (an unused divergent
   binding is never evaluated), and the `whnfNbe`/`nfNbe` split on a `let`
   under a binder;
-- **properties**: `nfNbe == nf` up to alpha-equivalence (free-foil's
-  `alphaEquiv`) on random closed and open terms.
+- **properties**: `nfNbe == nf` and `nfMono == nf` up to alpha-equivalence
+  (free-foil's `alphaEquiv`) on random closed and open terms.
+
+The beta, under-binder, `Pi` and deep-nesting cases also check the monomorphic
+baseline `nfMono` beside `nfNbe`.
 
 Useful flags:
 

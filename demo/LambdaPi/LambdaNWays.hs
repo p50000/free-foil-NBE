@@ -25,6 +25,7 @@ module LambdaPi.LambdaNWays
   , fromLC
   , toLC
   , nbeNf
+  , monoNf
   , refNf
   , aeq
   ) where
@@ -39,6 +40,7 @@ import FreeFoil.NbE
   , alphaEquiv, assertDistinct, emptyScope, extendScope, nameId, nameOf, sink, withFresh
   )
 import qualified LambdaPi as LP
+import qualified LambdaPi.Monomorphic as Mono
 
 -- | Integer variable identifiers (mirrors @Util.IdInt.IdInt@).
 newtype IdInt = IdInt Int
@@ -81,6 +83,10 @@ toLC = \case
 -- | @impl_nf@ via NbE.
 nbeNf :: LC IdInt -> LC IdInt
 nbeNf = toLC . LP.nfNbe emptyScope . fromLC
+
+-- | @impl_nf@ via the hand-written monomorphic NbE ("LambdaPi.Monomorphic").
+monoNf :: LC IdInt -> LC IdInt
+monoNf = toLC . Mono.nfMono emptyScope . fromLC
 
 -- | @impl_nf@ via the reference substitution normaliser (for cross-checking).
 refNf :: LC IdInt -> LC IdInt
