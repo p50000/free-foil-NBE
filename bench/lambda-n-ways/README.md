@@ -1,20 +1,25 @@
 # Benchmarking against `lambda-n-ways`
 
-This directory benchmarks free-foil-NBE's **real generic normaliser** against a
-hand-written foil NbE, using the corpus of Weirich's
+This directory benchmarks free-foil-NBE's **real generic normaliser** against
+two hand-written foil NbEs, using the corpus of Weirich's
 [`lambda-n-ways`](https://github.com/sweirich/lambda-n-ways) suite — specifically
 Karina Tyulebaeva's foil fork,
 [`KarinaTyulebaeva/lambda-n-ways`](https://github.com/KarinaTyulebaeva/lambda-n-ways).
 
-Two implementations are compared on the fork's `nf` / `random15` / `random20`
+Three implementations are compared on the fork's `nf` / `random15` / `random20`
 groups:
 
 - **`NBE.FreeFoil (generic)`** — `LambdaPi.nfNbe` from this repo's
-  `lambda-pi-demo` library: the actual `Value` / `ScopedClosure` / `quote`
+  `lambda-pi-demo` library: the actual `Value` / `VSuspended` / `quote`
   machinery of [`FreeFoil.NbE`](../../src/FreeFoil/NbE.hs) running over the
   generic free-monad `AST`. The harness' `LC IdInt` is bridged to the scope-safe
   `AST` through the tested `LambdaPi.LambdaNWays` conversion — so this is the
   real code, not a copy that could drift.
+- **`NBE.FreeFoil (monomorphic)`** — `LambdaPi.Monomorphic.nfMono`, a
+  hand-written NbE with a monomorphic value type (one constructor per value
+  form). It runs the same algorithm on the same scope-safe `AST`, with the
+  same conversion, so it differs from the generic column only in the
+  normaliser.
 - **`NBE.Foil`** — the fork's self-contained, hand-written foil NbE
   (`lib/Foil/NBE.hs`), which pays for no generic ("free") layer. The pinned
   commit includes a strictness repair contributed from this investigation
@@ -23,8 +28,11 @@ groups:
   reduction). Note that numbers published before that fix compared against
   the pre-fix baseline, which was about 30% slower on these corpora.
 
-**The gap between the two columns is what we are measuring:** the cost of the
-generic free-monad/`AST` layer. (The corpus is untyped — plain lambda calculus,
+**The gaps between the columns are what we measure.** Generic against
+monomorphic is the cost of genericity in the normaliser, roughly what
+generated monomorphic code could save. Monomorphic against the fork is the
+cost of the generic `AST`, which both free-foil columns read, build and force.
+(The corpus is untyped — plain lambda calculus,
 no `Pi` — so this exercises the *representation and generic machinery*, not the
 dependent-type `Pi` fix. For the `Pi` numbers see the `nbe-bench` suite in
 [`../`](../).)
@@ -73,33 +81,26 @@ compiles only its *self-contained* `Util.*` and `Foil.NBE` modules (via
 columns use the same compiler and flags (`-O2`), so the difference between them
 is meaningful.
 
-## A sample run
+## Results
 
-Numbers from one run (Apple M-series, GHC 9.10.3, `-O2`, free-foil pinned to
+Medians of 12 runs (Apple M-series, GHC 9.10.3, `-O2`, free-foil pinned to
 the HEAD carrying fizruk/free-foil#86, #87 and #88); machine-specific, treat
-as relative. The first line is a correctness cross-check: the generic
-normaliser's normal forms are alpha-equal to the baseline's on every corpus
-term.
+as relative. Each run measures one column in a separate process, with the
+column order rotated, and first checks that both free-foil columns agree with
+the baseline (up to alpha) on every corpus term.
 
-```
-correctness: generic free-foil NbE vs fork baseline on 201 terms — ALL AGREE
-All
-  nf
-    NBE.FreeFoil (generic): OK   619  µs,  4.4 MB allocated
-    NBE.Foil:               OK   459  µs,  3.6 MB allocated
-  random15
-    NBE.FreeFoil (generic): OK   166  µs,  1.3 MB allocated
-    NBE.Foil:               OK    65  µs,  745 KB allocated
-  random20
-    NBE.FreeFoil (generic): OK   166  µs,  1.3 MB allocated
-    NBE.Foil:               OK    67  µs,  755 KB allocated
-```
+| corpus | generic | monomorphic | `NBE.Foil` |
+|---|---|---|---|
+| nf (lennart) | 628 µs, 4.4 MB | 502 µs, 3.6 MB | 488 µs, 3.6 MB |
+| random15 | 169 µs, 1.3 MB | 122 µs, 829 KB | 68 µs, 745 KB |
+| random20 | 174 µs, 1.3 MB | 124 µs, 837 KB | 69 µs, 755 KB |
 
-The generic normaliser costs about **1.2× the allocation and 1.3× the time**
-on the big factorial term, and **1.75× the allocation and 2.5× the time** on
-the random corpora. At the start of the investigation the comparison stood
-at 1.8×/2.4× and 4.3×/4.7× respectively — against the then-unrepaired
-baseline, so the true starting gap was wider still.
+Against the baseline, the generic normaliser costs about **1.3× the time and
+1.2× the allocation** on the factorial term, and **2.5× the time and 1.8× the
+allocation** on the random corpora. At the start of the investigation these
+were 2.4×/1.8× and 4.7×/4.3×, against the then-unrepaired baseline. Against
+the monomorphic column, it costs 1.25× the time and 1.2× the allocation on the
+factorial term, and 1.4× and 1.6× on the random corpora.
 
 ### Where the cost went
 
@@ -125,12 +126,15 @@ The gap was closed by a sequence of measured changes:
 
 ### What remains
 
-The remaining gap is the two-level representation itself. A generic node is
-a constructor box around a `sig` cell, so a value costs two heap objects
-where the fork's monomorphic GADT (`Expr` with an unpacked closure
-constructor) pays one. Merging the two objects requires monomorphic code,
-generated or hand-written, and is out of scope here; environment `IntMap`
-costs are shared with the baseline.
+A generic node is a constructor box around a `sig` cell, so a stuck
+application or a `Pi` value costs two heap objects where the monomorphic value
+type pays one, and the generic readback refreshes binders through the
+pattern-generic `withRefreshedPattern`. On the factorial term the monomorphic
+column runs within 3% of the baseline; on the random corpora it closes about
+half of the time gap.
 
-The residual gap is the intrinsic price of a *signature-generic* representation
-over a hand-specialized monomorphic one that uses the same name machinery.
+The rest lies outside the normaliser. Both free-foil columns read and build
+the generic `AST`, in which a lambda is at least four heap objects, and the
+harness forces their results through free-foil's generic `NFData` instance.
+Generated monomorphic code could remove the first part of the gap, but not
+the second, as long as the normaliser works on free-foil's `AST`.

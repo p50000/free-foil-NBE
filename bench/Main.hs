@@ -5,12 +5,13 @@
 
 -- | Microbenchmarks for lambda-pi normalisation.
 --
--- Each input is normalised two ways — by NbE ('nfNbe') and by the reference
--- substitution normaliser ('nf') — so the two are directly comparable on the
--- same terms, and future implementation variants can be added as extra rows
--- without changing the inputs. Following free-foil's own normalisation
--- benchmark, results are forced with 'sizeOf' (walking the whole normal form);
--- an 'NFData' instance also exists ("LambdaPi.Generated") if preferred.
+-- Each input is normalised in three ways: by the generic NbE ('nfNbe'), by the
+-- hand-written monomorphic NbE ('Mono.nfMono', a baseline for the generic one)
+-- and by the reference substitution normaliser ('nf'). New implementation
+-- variants can be added as extra rows without changing the inputs. Following
+-- free-foil's own normalisation benchmark, results are forced with 'sizeOf'
+-- (walking the whole normal form); an 'NFData' instance also exists
+-- ("LambdaPi.Generated") if preferred.
 module Main (main) where
 
 import Test.Tasty.Bench hiding (nf)
@@ -20,6 +21,7 @@ import FreeFoil.NbE
   , assertDistinct, emptyScope, extendScope, nameOf, sink, withFresh
   )
 import LambdaPi hiding (whnf)
+import qualified LambdaPi.Monomorphic as Mono
 import LambdaPi.Parser ()  -- IsString instance for writing terms as strings
 
 -- | The size of a term, used to force the whole normal form.
@@ -105,8 +107,9 @@ nestedLet n =
 compareNormalisers :: String -> LambdaPi VoidS -> Benchmark
 compareNormalisers name t =
   bgroup name
-    [ bench "nfNbe" $ whnf (sizeOf . nfNbe emptyScope) t
-    , bench "nf"    $ whnf (sizeOf . nf emptyScope) t
+    [ bench "nfNbe"  $ whnf (sizeOf . nfNbe emptyScope) t
+    , bench "nfMono" $ whnf (sizeOf . Mono.nfMono emptyScope) t
+    , bench "nf"     $ whnf (sizeOf . nf emptyScope) t
     ]
 
 main :: IO ()
