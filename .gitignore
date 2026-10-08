@@ -39,3 +39,5 @@ baseline.txt
 
 # Local clone of the lambda-n-ways fork for benchmarking (see bench/lambda-n-ways/README.md)
 bench/lambda-n-ways/lambda-n-ways-fork
+# Output of bench/lambda-n-ways/nbe-harness/medians.sh
+bench/lambda-n-ways/nbe-harness/results*
