@@ -1,24 +1,13 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE DeriveGeneric       #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-
--- | Adapter that plugs the generic NbE normaliser into Weirich's
--- @lambda-n-ways@ benchmark harness (Karina Tyulebaeva's free-foil fork).
---
--- The harness works over an /untyped/ named lambda calculus and packages every
--- implementation as a @LambdaImpl@ record with fields
--- @impl_fromLC@ / @impl_toLC@ / @impl_nf@ / @impl_nfi@ / @impl_aeq@ (see
--- @Util.Impl@) over @LC IdInt@ (see @Util.Syntax.Lambda@ / @Util.IdInt@).
---
--- The 'LC' and 'IdInt' types below /mirror/ those harness types so this bridge
--- is self-contained and testable here. To land an actual entry in the harness,
--- drop these mirrors, import the real harness modules, and assemble the
--- functions below into a @LambdaImpl@ registered in the fork's @Suite@ — the
--- foil entries live under @lib/FreeScoped@ and follow exactly this shape (with
--- @impl_nfi = error "unimplemented"@, which we also leave out).
+-- | Bridge to Weirich's @lambda-n-ways@ benchmark harness, which works over
+-- an untyped named lambda calculus @LC IdInt@. 'LC' and 'IdInt' mirror the
+-- harness's types so that the bridge is testable here; the harness under
+-- @bench/lambda-n-ways@ maps them onto the real ones.
 module LambdaPi.LambdaNWays
   ( IdInt (..)
   , LC (..)
@@ -35,26 +24,24 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import GHC.Generics (Generic)
 
-import FreeFoil.NbE
-  ( S (VoidS), Scope, Name, Distinct, DistinctEvidence (Distinct)
-  , alphaEquiv, assertDistinct, emptyScope, extendScope, nameId, nameOf, sink, withFresh
-  )
+import Control.Monad.Foil
+import Control.Monad.Free.Foil (alphaEquiv)
 import qualified LambdaPi as LP
 import qualified LambdaPi.Monomorphic as Mono
 
--- | Integer variable identifiers (mirrors @Util.IdInt.IdInt@).
+-- | Integer variable identifiers.
 newtype IdInt = IdInt Int
   deriving (Eq, Ord, Show, Generic)
 
 instance NFData IdInt
 
--- | Untyped named lambda terms (mirrors @Util.Syntax.Lambda.LC@).
+-- | Untyped named lambda terms.
 data LC v = Var v | Lam v (LC v) | App (LC v) (LC v)
   deriving (Eq, Show, Generic)
 
 instance NFData v => NFData (LC v)
 
--- | Convert a (closed) named lambda term into scope-safe lambda-pi syntax.
+-- | Convert a closed named term into scope-safe lambda-pi syntax.
 fromLC :: LC IdInt -> LP.LambdaPi VoidS
 fromLC = go emptyScope IntMap.empty
   where
@@ -70,9 +57,8 @@ fromLC = go emptyScope IntMap.empty
             let env' = IntMap.insert i (nameOf binder) (fmap sink env)
             in LP.Lam binder (go (extendScope binder scope) env' body)
 
--- | Convert scope-safe syntax back to a named lambda term. Names come from the
--- foil identifiers. Errors on 'LP.Pi' (outside the untyped fragment the harness
--- exercises).
+-- | Convert scope-safe syntax back to a named term, naming variables by their
+-- foil identifiers. @Pi@ is outside the untyped fragment and is an error.
 toLC :: LP.LambdaPi n -> LC IdInt
 toLC = \case
   LP.Var x        -> Var (IdInt (nameId x))
@@ -80,18 +66,18 @@ toLC = \case
   LP.Lam binder b -> Lam (IdInt (nameId (nameOf binder))) (toLC b)
   LP.Pi _ _ _     -> error "toLC: Pi is outside the untyped lambda fragment"
 
--- | @impl_nf@ via NbE.
+-- | Normal form by the generic NbE.
 nbeNf :: LC IdInt -> LC IdInt
 nbeNf = toLC . LP.nfNbe emptyScope . fromLC
 
--- | @impl_nf@ via the hand-written monomorphic NbE ("LambdaPi.Monomorphic").
+-- | Normal form by the monomorphic NbE.
 monoNf :: LC IdInt -> LC IdInt
 monoNf = toLC . Mono.nfMono emptyScope . fromLC
 
--- | @impl_nf@ via the reference substitution normaliser (for cross-checking).
+-- | Normal form by the reference substitution normaliser.
 refNf :: LC IdInt -> LC IdInt
 refNf = toLC . LP.nf emptyScope . fromLC
 
--- | @impl_aeq@ via free-foil's alpha-equivalence on the scope-safe terms.
+-- | α-equivalence, through the scope-safe terms.
 aeq :: LC IdInt -> LC IdInt -> Bool
 aeq a b = alphaEquiv emptyScope (fromLC a) (fromLC b)

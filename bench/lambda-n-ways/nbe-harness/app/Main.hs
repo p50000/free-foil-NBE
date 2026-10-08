@@ -2,29 +2,14 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE BangPatterns #-}
 
--- | lambda-n-ways `nf` / `random15` / `random20` normalisation benchmark,
--- comparing the __real generic free-foil normaliser__ against two
--- hand-written ones.
---
---   * @NBE.FreeFoil (generic)@ — `LambdaPi.nfNbe` from @lambda-pi-demo@, i.e.
---     the actual @Value@/@VSuspended@/@quote@ machinery of
---     @FreeFoil.NbE@ running over the generic free-monad @AST@. The harness'
---     @LC IdInt@ is bridged to the scope-safe @AST@ via the tested
---     @LambdaPi.LambdaNWays@ conversion.
---   * @NBE.FreeFoil (monomorphic)@ — `LambdaPi.Monomorphic.nfMono`: the same
---     algorithm over the same free-foil syntax, but with a hand-written
---     monomorphic value type in place of the generic @Value@. It uses the
---     same conversion as the generic column.
---   * @NBE.Foil@ — the fork's self-contained hand-written foil NbE, which pays
---     for no generic ("free") layer in either its syntax or its values.
---
--- The difference between the generic and the monomorphic column is the cost
--- of the generic value domain. The difference between the monomorphic column
--- and the fork is the cost of free-foil's generic syntax. A correctness check
--- first confirms that each column agrees with the fork (up to alpha) on every
--- term.
---
--- Corpus dir defaults to @../lambda-n-ways-fork/lams/@; override with @LAMS_DIR@.
+-- | The lambda-n-ways benchmark, @nf@, @random15@ and @random20@, over three
+-- normalisers: the generic 'LP.nfNbe' through the "LambdaPi.LambdaNWays"
+-- bridge, the monomorphic 'Mono.nfMono' over the same syntax, and the fork's
+-- own hand-written foil NbE. Generic against monomorphic measures the cost of
+-- the generic value domain; monomorphic against the fork, the cost of the
+-- generic syntax. A check first confirms that both free-foil columns agree
+-- with the fork, up to α, on every corpus term. The corpus directory is
+-- @../lambda-n-ways-fork/lams/@ or @LAMS_DIR@.
 module Main (main) where
 
 import Control.DeepSeq (force, rnf)
@@ -38,13 +23,13 @@ import qualified Util.Syntax.Lambda as U
 import Util.Impl (LambdaImpl (..), getTerm, getTerms, toIdInt)
 import qualified Foil.NBE
 
-import FreeFoil.NbE (alphaEquiv, emptyScope)
+import Control.Monad.Foil
+import Control.Monad.Free.Foil
 import qualified LambdaPi as LP
 import qualified LambdaPi.LambdaNWays as LNW
 import qualified LambdaPi.Monomorphic as Mono
 
--- Bridge the harness' own LC/IdInt to the mirrored ones in LambdaPi.LambdaNWays,
--- whose fromLC/toLC build/read the real scope-safe AST. (Structural identity.)
+-- The harness's LC and the bridge's LC are structurally identical.
 toLNW :: U.LC U.IdInt -> LNW.LC LNW.IdInt
 toLNW = \case
   U.Var (U.IdInt i)   -> LNW.Var (LNW.IdInt i)
@@ -57,11 +42,8 @@ fromLNW = \case
   LNW.Lam (LNW.IdInt i) b -> U.Lam (U.IdInt i) (fromLNW b)
   LNW.App f a             -> U.App (fromLNW f) (fromLNW a)
 
--- | The generic free-foil NbE as a harness `LambdaImpl`. Internal type is the
--- real scope-safe AST (@LambdaPi VoidS@); @impl_nf@ is the real generic
--- @nfNbe@, so this measures the free-monad layer, not a re-implementation.
--- @impl_fromLC@/@impl_toLC@ (the conversion) run outside the timed @impl_nf@,
--- matching how @Foil.NBE@ is measured.
+-- | The generic NbE as a harness implementation. The conversions run outside
+-- the timed @impl_nf@, as for the fork's own column.
 genericImpl :: LambdaImpl
 genericImpl =
   LambdaImpl
@@ -73,8 +55,7 @@ genericImpl =
       impl_aeq = alphaEquiv emptyScope
     }
 
--- | The hand-written monomorphic NbE over the same scope-safe AST as
--- 'genericImpl'. Only @impl_nf@ differs between the two.
+-- | The monomorphic NbE over the same syntax; only @impl_nf@ differs.
 monoImpl :: LambdaImpl
 monoImpl =
   LambdaImpl
@@ -99,11 +80,11 @@ benchMany LambdaImpl{..} lcs =
   let !tms = force (map impl_fromLC lcs)
    in bench impl_name (nf (rnf . map impl_nf) tms)
 
--- | Normal form of a term as a named 'LC', via a given implementation.
+-- | Normal form as a named term, through a given implementation.
 nfLC :: LambdaImpl -> U.LC U.IdInt -> U.LC U.IdInt
 nfLC LambdaImpl{..} = impl_toLC . impl_nf . impl_fromLC
 
--- | Does an implementation agree with the fork baseline (up to alpha) on @t@?
+-- | Does an implementation agree with the fork, up to α, on @t@?
 agrees :: LambdaImpl -> U.LC U.IdInt -> Bool
 agrees impl t =
   case Foil.NBE.impl of
@@ -121,7 +102,7 @@ main = do
   forM_ [genericImpl, monoImpl] $ \impl -> do
     let bad = length (filter (not . agrees impl) corpus)
     putStrLn $ "correctness: " ++ impl_name impl ++ " vs fork baseline on "
-      ++ show (length corpus) ++ " terms — "
+      ++ show (length corpus) ++ " terms: "
       ++ (if bad == 0 then "ALL AGREE" else show bad ++ " MISMATCH(ES)")
   defaultMain
     [ bgroup "nf"       [ benchOne  i lennart  | i <- impls ]

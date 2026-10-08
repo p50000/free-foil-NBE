@@ -1,17 +1,8 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 
--- | Example lambda-let terms — the demo file of the language, meant to be
--- played with from the REPL:
---
--- > cabal repl lambda-let-demo
--- > ghci> import LambdaLet.Examples
--- > ghci> nfNbe emptyScope letChurch
--- > \s. \z. s (s (s (s z)))
---
--- Each example states its normal form and what it demonstrates about @let@.
--- Written as string literals (parsed by "LambdaLet.Parser") so the concrete
--- syntax doubles as documentation.
+-- | Example lambda-let terms, written as string literals (parsed by
+-- "LambdaLet.Parser"). Each states what it shows and its normal form.
 module LambdaLet.Examples
   ( letId
   , letChurch
@@ -22,51 +13,34 @@ module LambdaLet.Examples
   , examples
   ) where
 
-import FreeFoil.NbE (S (VoidS))
+import Control.Monad.Foil
 import LambdaLet (LambdaLet)
 import LambdaLet.Parser ()
 
--- | @let@ as a definition: bind the identity, apply it to itself.
--- Normalises to @\\y. y@.
+-- | A definition applied to itself; normalises to @\\y. y@.
 letId :: LambdaLet VoidS
 letId = "let id = \\x. x in id id"
 
--- | A Church-numeral computation phrased with a definition:
--- @let two = \\s. \\z. s (s z) in two two@. Normalises to Church 4 — the
--- @let@-bound definition is used as a function and disappears entirely.
+-- | Church arithmetic through a definition; normalises to Church 4.
 letChurch :: LambdaLet VoidS
 letChurch = "let two = \\s. \\z. s (s z) in two two"
 
--- | Shadowing: the inner @let@ rebinds @x@, and scope-safe syntax makes the
--- occurrence unambiguously refer to the inner binding. Normalises to
--- @\\b. b b@ (the outer binding is unused).
+-- | The inner @let@ shadows the outer one; normalises to @\\b. b b@.
 letShadow :: LambdaLet VoidS
 letShadow = "let x = \\a. a in let x = \\b. b b in x"
 
--- | A @let@ under a lambda. 'LambdaLet.nf'\/'FreeFoil.NbE.nfNbe' reduce it
--- (to @\\f. f f@); 'FreeFoil.NbE.whnfNbe' leaves it untouched, because
--- weak-head normalisation stops at binders — the lambda body is a scoped
--- position, and the @let@ inside it is exactly the kind of redex 'whnfNbe'
--- deliberately does not touch.
+-- | A @let@ under a lambda: @nfNbe@ reduces it to @\\f. f f@, while
+-- @whnfNbe@ stops at the binder and leaves it in place.
 letUnderLam :: LambdaLet VoidS
 letUnderLam = "\\f. let y = f in y y"
 
--- | Sharing: the bound expression is itself a redex, used twice. NbE
--- evaluates @(\\a. a) (\\b. b)@ at most once — the environment holds one
--- thunk, forced on the first use of @d@ and shared by the second; a
--- substitution-based normaliser copies the redex into both occurrences and
--- reduces it twice. Same normal form (@\\z. z@), different work — the first
--- taste of why @let@ matters for evaluators even before glued evaluation.
--- (See @FEATURE_ZOO_DESIGN.md@ on top-level definitions and lazy unfolding.)
+-- | The bound redex is used twice but evaluated at most once: the environment
+-- holds one shared thunk. Normalises to @\\z. z@.
 letSharing :: LambdaLet VoidS
 letSharing = "let d = (\\a. a) (\\b. b) in d d"
 
--- | The flip side of laziness: an /unused/ binding is never evaluated at
--- all. The bound expression here is Ω — it diverges if forced — yet the
--- term normalises to @\\y. y@, because the environment entry stays an
--- untouched thunk. (The substitution-based 'LambdaLet.nf' agrees for its
--- own reason: zero occurrences, so the expression is dropped.) This pins
--- down the evaluation order: call-by-need, not call-by-value.
+-- | An unused binding is never evaluated, even a divergent one (Ω here);
+-- normalises to @\\y. y@. This is what makes @let@ call-by-need.
 letUnused :: LambdaLet VoidS
 letUnused = "let w = (\\x. x x) (\\x. x x) in \\y. y"
 

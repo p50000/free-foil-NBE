@@ -1,16 +1,13 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE DeriveFunctor         #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE TemplateHaskell #-}
-
--- | A second object language — Booleans with @if@ — used to demonstrate that
--- the 'FreeFoil.NbE.Eval' class and the generic 'FreeFoil.NbE.nfNbe' are
--- genuinely signature-generic, not lambda-pi-shaped. The whole language is this
--- signature plus one 'FreeFoil.NbE.Eval' instance (see below); evaluation and
--- normalisation are inherited unchanged from "FreeFoil.NbE".
+{-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE TemplateHaskell       #-}
+-- | Booleans with @if@: a second object language, without binders, showing
+-- that the core is generic in the signature. The language is this signature
+-- plus one 'Eval' instance; evaluation and normalisation are inherited.
 module Booleans
   ( BoolSig (..)
   , BoolTm
@@ -20,14 +17,13 @@ module Booleans
   , nf
   ) where
 
-import Control.Monad.Free.Foil (AST (Node))
+import Control.Monad.Foil
+import Control.Monad.Free.Foil
 import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor)
 
-import FreeFoil.NbE (Eval (evalSig), Value (VNode), NameBinder, Scope, Distinct, eval, evalNode, nfNbe)
+import FreeFoil.NbE (Eval (evalSig), Value (VNode), eval, evalNode, nfNbe)
 
--- | Signature for a Booleans language: two introduction forms ('TrueSig',
--- 'FalseSig') and one eliminator ('IfSig'). There are no scoped positions —
--- Booleans bind nothing — so the @scope@ parameter is unused.
+-- | Two introduction forms and one eliminator; no scoped positions.
 data BoolSig scope term
   = TrueSig
   | FalseSig
@@ -37,8 +33,7 @@ data BoolSig scope term
 deriveBifunctor ''BoolSig
 deriveBifoldable ''BoolSig
 
--- | Boolean terms. The binder type is the standard 'NameBinder', but it is
--- never used (the signature has no scoped positions).
+-- | Boolean terms. The binder type is never used.
 type BoolTm = AST NameBinder BoolSig
 
 -- | @true@.
@@ -53,15 +48,8 @@ pattern FF = Node FalseSig
 pattern If :: BoolTm n -> BoolTm n -> BoolTm n -> BoolTm n
 pattern If c t f = Node (IfSig c t f)
 
--- | The whole object-language contribution: the one elimination rule, @if@. A
--- 'True'\/'False' condition selects a branch; a neutral (e.g. variable-headed)
--- condition leaves the @if@ stuck. 'TrueSig'\/'FalseSig' are introduction forms
--- and fall through to the generic default. Everything else — variable lookup,
--- recursion, quoting, 'nf' — is inherited unchanged from "FreeFoil.NbE".
---
--- ('evalSig' receives the raw node and the current environment; the eliminator
--- evaluates its own subterms. Booleans have no scoped positions, so no
--- 'FreeFoil.NbE.ScopedClosure' arises.)
+-- | The one elimination rule: a canonical condition selects a branch, a
+-- neutral condition leaves the @if@ stuck.
 instance Eval NameBinder BoolSig where
   evalSig scope env = \case
     IfSig cond t f -> case eval scope env cond of
@@ -70,6 +58,6 @@ instance Eval NameBinder BoolSig where
       cond'          -> VNode (IfSig cond' (eval scope env t) (eval scope env f))
     node -> evalNode (eval scope) env node
 
--- | Normal form by NbE, inherited unchanged from the generic 'nfNbe'.
+-- | Normal form, inherited from the generic 'nfNbe'.
 nf :: Distinct n => Scope n -> BoolTm n -> BoolTm n
 nf = nfNbe

@@ -56,6 +56,7 @@ executable nbe-harness
                     , QuickCheck
                     , pretty
                     , tasty-bench
+                    , free-foil
                     , free-foil-nbe
                     , free-foil-nbe:lambda-pi-demo
     default-language: Haskell2010

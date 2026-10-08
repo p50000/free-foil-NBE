@@ -16,9 +16,8 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.QuickCheck
 
-import FreeFoil.NbE
-  ( Distinct, Scope, S (VoidS), alphaEquiv, emptyScope, identitySubst
-  , extendScope, nameId, nameOf, withFresh )
+import Control.Monad.Foil
+import Control.Monad.Free.Foil
 import LambdaPi
 import LambdaPi.Parser (parseLambdaPi, parseOpen, resolve, withFreeVars)
 import LambdaPi.PrettyPrint (ppValue, ppValueStruct)
@@ -53,9 +52,8 @@ main =
 alphaEq :: LambdaPi VoidS -> LambdaPi VoidS -> Assertion
 alphaEq a b = alphaEquiv emptyScope a b @?= True
 
--- | The reference normaliser and both NbE normalisers (the generic one and
--- the monomorphic baseline) reduce @term@ to something alpha-equivalent to
--- @expected@.
+-- | The reference normaliser and both NbE normalisers reduce @term@ to
+-- something α-equivalent to @expected@.
 bothNormaliseTo :: TestName -> LambdaPi VoidS -> LambdaPi VoidS -> TestTree
 bothNormaliseTo name term expected =
   testGroup name
@@ -64,11 +62,9 @@ bothNormaliseTo name term expected =
     , testCase "nfMono"       (alphaEq (Mono.nfMono emptyScope term) expected)
     ]
 
--- Booleans: a second Eval instance, exercising the generic nfNbe on a
--- different signature and a non-application eliminator (if). -----------------
+-- Booleans
 
--- | A structural view of a Boolean normal form. These terms have no binders, so
--- ordinary equality (not alpha-equivalence) is the right notion.
+-- | A Boolean normal form, compared by plain equality: there are no binders.
 data SB = SBTrue | SBFalse | SBIf SB SB SB | SBVar Int
   deriving (Eq, Show)
 
@@ -96,17 +92,14 @@ booleansTests =
            in sb (B.nf scope term) @?= SBIf (SBVar (nameId (nameOf x))) SBTrue SBFalse
     ]
 
--- Lambda-let: zoo series step 1 (let / definitions). An eliminator that
--- always fires: no let survives normalisation, and NbE gets it with one
--- 'evalSig' case and no framework change. ------------------------------------
+-- Lambda-let
 
--- | Alpha-equivalence for closed lambda-let terms.
 llAlphaEq :: LL.LambdaLet VoidS -> LL.LambdaLet VoidS -> Assertion
 llAlphaEq a b = alphaEquiv emptyScope a b @?= True
 
 lambdaLetTests :: TestTree
 lambdaLetTests =
-  testGroup "lambda-let (zoo step 1: let / definitions)"
+  testGroup "lambda-let"
     [ testGroup "nfNbe agrees with reference nf on every example"
         [ testCase nm $
             alphaEquiv emptyScope (LL.nfNbe emptyScope t) (LL.nf emptyScope t) @?= True
@@ -135,7 +128,7 @@ lambdaLetTests =
               alphaEquiv scope (LL.nfNbe scope t) expected @?= True
     ]
 
--- Beta-reduction on closed terms. -------------------------------------------
+-- Beta-reduction
 
 betaTests :: TestTree
 betaTests =
@@ -151,7 +144,7 @@ betaTests =
     -- Written as a string to double as a parser check; equals 'appTwo'.
     appTwoStr = "(\\s. \\z. s (s z)) (\\s. \\z. s (s z))"
 
--- Normalisation under binders. ----------------------------------------------
+-- Normalisation under binders
 
 underBinderTests :: TestTree
 underBinderTests =
@@ -164,7 +157,7 @@ underBinderTests =
         alphaEq (nfNbe emptyScope appTwo) "\\s. \\z. s (s (s (s z)))"
     ]
 
--- Dependent function types. -------------------------------------------------
+-- Pi
 
 piTests :: TestTree
 piTests =
@@ -177,11 +170,8 @@ piTests =
         "(q : \\z. z) -> \\w. w" "(q : \\z. z) -> \\w. w"
     ]
 
--- Weak-head normal form. -----------------------------------------------------
+-- Weak-head normal form
 
--- | 'whnfNbe' reduces the head but stops at binders. It shares 'eval' with
--- 'nfNbe' and differs only in how far quoting is driven: a redex under a binder
--- survives 'whnfNbe' but is reduced by 'nfNbe'.
 whnfTests :: TestTree
 whnfTests =
   testGroup "whnfNbe (weak-head normal form)"
@@ -196,10 +186,8 @@ whnfTests =
                 "\\f. (a : f) -> (\\y. y) a"
     ]
 
--- Deep Pi nesting must stay linear (regression for the exponential blow-up
--- where each nested codomain was normalised once by 'eval' and again by
--- 'quote'). At depth 100 a quadratic-or-worse normaliser would never finish;
--- the eager-values representation visits each subterm once, so this is instant.
+-- Deep Pi nesting stays linear: a regression test for the exponential blow-up
+-- in which each codomain was normalised by eval and once more by quote.
 piDepthTests :: TestTree
 piDepthTests =
   testGroup "deep Pi nesting stays linear (regression)"
@@ -211,16 +199,13 @@ piDepthTests =
     , (name, normalise) <- [("nfNbe", nfNbe), ("nfMono", Mono.nfMono)]
     ]
 
--- | A chain of @n@ nested dependent function types
--- @(v0 : \\t. t) -> ... -> (v_{n-1} : \\t. t) -> \\w. w@, with distinct,
--- unused binders. There are no redexes in the types, so both normalisers do a
--- single linear pass — unless NbE re-normalises codomains, which is
--- exponential in @n@.
+-- | @n@ nested dependent function types with distinct, unused binders and no
+-- redexes: @(v0 : \\t. t) -> ... -> (v_{n-1} : \\t. t) -> \\w. w@.
 deepPi :: Int -> String
 deepPi n =
   concatMap (\i -> "(v" ++ show i ++ " : \\t. t) -> ") [0 .. n - 1] ++ "\\w. w"
 
--- Neutrals with free variables. ---------------------------------------------
+-- Neutrals
 
 neutralTests :: TestTree
 neutralTests =
@@ -233,8 +218,8 @@ neutralTests =
         openAgrees ["a", "b"] "(\\x. a x) (b a)" @?= True
     ]
 
--- | Parse @s@ in a scope holding the named free variables, then check that NbE
--- and the reference normaliser agree up to alpha-equivalence.
+-- | Parse @s@ in a scope holding the named free variables; NbE and the
+-- reference normaliser agree on it up to α.
 openAgrees :: [String] -> String -> Bool
 openAgrees names s =
   withFreeVars emptyScope Map.empty names $ \scope env ->
@@ -242,7 +227,7 @@ openAgrees names s =
       Left _  -> False
       Right t -> alphaEquiv scope (nfNbe scope t) (nf scope t)
 
--- Round-tripping (parser/printer regression). -------------------------------
+-- Parser and printer
 
 roundTripTests :: TestTree
 roundTripTests =
@@ -264,7 +249,7 @@ roundTripExamples =
   , "(q : \\z. z) -> \\w. w"
   ]
 
--- Inspecting semantic values. ------------------------------------------------
+-- Value inspection
 
 valueTests :: TestTree
 valueTests =
@@ -282,7 +267,7 @@ valueTests =
     idVal = eval emptyScope identitySubst ("\\x. x" :: LambdaPi VoidS)
     s = ppValueStruct idVal
 
--- lambda-n-ways adapter (untyped fragment). ----------------------------------
+-- lambda-n-ways bridge
 
 lambdaNWaysTests :: TestTree
 lambdaNWaysTests =
@@ -312,7 +297,7 @@ lcTerms =
     lam i b = LNW.Lam (LNW.IdInt i) b
     church2 = lam 0 (lam 1 (LNW.App (var 0) (LNW.App (var 0) (var 1))))
 
--- Properties. ---------------------------------------------------------------
+-- Properties
 
 propertyTests :: TestTree
 propertyTests =
@@ -339,9 +324,8 @@ propOpen normalise (OpenTerm raw) =
   withFreeVars emptyScope Map.empty freeVars $ \scope env ->
     ioProperty (agrees normalise scope (resolve scope env raw))
 
--- | Weak-head normalising and then fully normalising yields the same normal
--- form as the reference @nf@: @whnfNbe@ reduces a prefix of the work @nfNbe@
--- does, so completing it must agree. (Same time-budget discipline as 'agrees'.)
+-- | Fully normalising a weak-head normal form gives the reference normal
+-- form; same time budget as 'agrees'.
 propWhnf :: Closed -> Property
 propWhnf (Closed t) = ioProperty (agrees' emptyScope t)
   where
@@ -359,15 +343,10 @@ propWhnf (Closed t) = ioProperty (agrees' emptyScope t)
           (property False)
     finished act = isJust <$> timeout 1000000 act
 
--- | An NbE normaliser and the reference normaliser produce alpha-equivalent
--- normal forms.
---
--- The untyped language admits non-normalising terms, so each normal form is
--- forced under a time budget. The two outcomes are compared rather than
--- silently discarded on any timeout: a case is discarded only when the
--- /reference/ 'nf' also fails to terminate (a genuinely divergent term). If
--- 'nf' finishes but the NbE normaliser does not, that is a real regression
--- (e.g. an exponential blow-up) and the property fails instead of hiding it.
+-- | An NbE normaliser agrees with the reference normaliser up to α. The
+-- untyped language has divergent terms, so each side is forced under a time
+-- budget: a case is discarded only when the reference 'nf' diverges too, and
+-- if 'nf' finishes while the NbE normaliser does not, the property fails.
 agrees :: Distinct n => Normaliser -> Scope n -> LambdaPi n -> IO Property
 agrees normalise scope t = do
   let a = nf scope t
@@ -378,11 +357,11 @@ agrees normalise scope t = do
     (True, True) ->
       counterexample "NbE and nf disagree" (property (alphaEquiv scope a b))
     (False, _) ->
-      property Discard  -- reference diverged: nothing to compare against
+      property Discard
     (True, False) ->
       counterexample
         "NbE did not finish within the budget though reference nf did"
         (property False)
   where
     finished act = isJust <$> timeout budgetMicros act
-    budgetMicros = 1000000  -- 1 second
+    budgetMicros = 1000000
