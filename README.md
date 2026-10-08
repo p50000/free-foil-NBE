@@ -28,7 +28,8 @@ everything. All commands are run from the repository root.
 ## Prerequisites
 
 - **GHC 9.10.3 and cabal.** The compiler is pinned in `cabal.project`
-  (`with-compiler: ghc-9.10.3`); install it via `ghcup` if needed.
+  (`with-compiler: ghc-9.10.3`); install it via `ghcup` if needed. All
+  dependencies, free-foil 0.5.0 included, come from Hackage.
 - **Nothing else for normal use.** The BNFC-generated parser/printer are
   committed under `gen/`, so building, testing, and benchmarking need no extra
   tools.
@@ -123,8 +124,8 @@ cabal bench nbe-bench --benchmark-options '--baseline bench/baseline.csv'
 ```
 
 See [bench/README.md](bench/README.md) for a sample run and its interpretation
-(headline: NbE beats substitution ~30× on `2^10` and ~13000× on nested `let`,
-but ~1.7× slower on the linear redex chain).
+(headline: NbE beats substitution ~9× on `2^10` and ~6000× on nested `let`,
+but is ~1.4× slower on the linear redex chain).
 
 ## Run NbE examples by hand (REPL)
 

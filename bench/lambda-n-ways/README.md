@@ -60,6 +60,10 @@ git -C bench/lambda-n-ways/lambda-n-ways-fork \
 # 3. build & run
 cd bench/lambda-n-ways/nbe-harness
 cabal run nbe-harness
+
+# 4. or reproduce the table below: medians of 12 runs, one column per process,
+#    column order rotated, allocations from the RTS (+RTS -T)
+cabal build nbe-harness && ./medians.sh
 ```
 
 The harness pulls the generic normaliser from this repo (`free-foil-nbe` +
@@ -83,24 +87,26 @@ is meaningful.
 
 ## Results
 
-Medians of 12 runs (Apple M-series, GHC 9.10.3, `-O2`, free-foil pinned to
-the HEAD carrying fizruk/free-foil#86, #87 and #88); machine-specific, treat
-as relative. Each run measures one column in a separate process, with the
-column order rotated, and first checks that both free-foil columns agree with
-the baseline (up to alpha) on every corpus term.
+Medians of 12 runs (`medians.sh`; Apple M3 Pro, GHC 9.10.3, `-O2`, free-foil
+0.5.0); machine-specific, treat as relative. Each run measures one column in
+a separate process, with the column order rotated, and first checks that both
+free-foil columns agree with the baseline (up to alpha) on every corpus term.
 
 | corpus | generic | monomorphic | `NBE.Foil` |
 |---|---|---|---|
-| nf (lennart) | 628 µs, 4.4 MB | 502 µs, 3.6 MB | 488 µs, 3.6 MB |
-| random15 | 169 µs, 1.3 MB | 122 µs, 829 KB | 68 µs, 745 KB |
-| random20 | 174 µs, 1.3 MB | 124 µs, 837 KB | 69 µs, 755 KB |
+| nf (lennart) | 738 µs, 4.6 MB | 595 µs, 3.8 MB | 583 µs, 3.8 MB |
+| random15 | 191 µs, 1.4 MB | 136 µs, 836 KB | 80 µs, 763 KB |
+| random20 | 193 µs, 1.4 MB | 141 µs, 844 KB | 80 µs, 773 KB |
 
 Against the baseline, the generic normaliser costs about **1.3× the time and
-1.2× the allocation** on the factorial term, and **2.5× the time and 1.8× the
+1.2× the allocation** on the factorial term, and **2.4× the time and 1.8× the
 allocation** on the random corpora. At the start of the investigation these
 were 2.4×/1.8× and 4.7×/4.3×, against the then-unrepaired baseline. Against
 the monomorphic column, it costs 1.25× the time and 1.2× the allocation on the
-factorial term, and 1.4× and 1.6× on the random corpora.
+factorial term, and 1.4× and 1.7× on the random corpora. Moving from the
+pinned pre-release of free-foil to the 0.5.0 release, which generates
+single-binder patterns as newtypes, changed none of these figures beyond
+run-to-run noise.
 
 ### Where the cost went
 
