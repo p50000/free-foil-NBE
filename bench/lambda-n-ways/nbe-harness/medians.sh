@@ -3,7 +3,9 @@
 #
 # Each process benchmarks one column only, so the columns do not share a heap,
 # and the column order rotates from run to run. Allocation figures need the
-# RTS statistics (+RTS -T). Usage, from this directory, after `cabal build`:
+# RTS statistics (+RTS -T). For each force-* group, the script also prints the
+# median of the main group minus the median of forcing alone, an estimate of
+# normalisation without forcing. Usage, from this directory, after `cabal build`:
 #
 #   ./medians.sh [results-dir]        # N=12 by default; override with N=...
 set -euo pipefail
@@ -54,4 +56,16 @@ for name in sorted(data):
     ts = [t for t, _ in data[name]]
     bs = [b for _, b in data[name]]
     print(f"{name}: {time_(statistics.median(ts))}, {bytes_(statistics.median(bs))}")
+
+def median_time(name):
+    return statistics.median(t for t, _ in data[name])
+
+print()
+print("without forcing (main group minus force group, medians)")
+for name in sorted(data):
+    prefix, group, column = name.split(".", 2)
+    if group.startswith("force-"):
+        main = f"{prefix}.{group[len('force-'):]}.{column}"
+        if main in data:
+            print(f"{main}: {time_(median_time(main) - median_time(name))}")
 EOF

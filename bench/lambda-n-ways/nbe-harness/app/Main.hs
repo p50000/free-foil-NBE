@@ -10,6 +10,12 @@
 -- generic syntax. A check first confirms that both free-foil columns agree
 -- with the fork, up to α, on every corpus term. The corpus directory is
 -- @../lambda-n-ways-fork/lams/@ or @LAMS_DIR@.
+--
+-- As in lambda-n-ways, the timed region of the @nf@, @random15@ and
+-- @random20@ groups includes forcing the result with @rnf@. The groups
+-- @force-nf@, @force-random15@ and @force-random20@ time that forcing alone
+-- for each column, on normal forms computed and forced beforehand; the
+-- difference of the two estimates normalisation without forcing.
 module Main (main) where
 
 import Control.DeepSeq (force, rnf)
@@ -81,6 +87,14 @@ benchMany LambdaImpl{..} lcs =
   let !tms = force (map impl_fromLC lcs)
    in bench impl_name (nf (rnf . map impl_nf) tms)
 
+-- | The cost of forcing alone: 'rnf' of normal forms that were computed and
+-- fully forced outside the timed region, with the column's own 'NFData'
+-- instance as in 'benchOne' and 'benchMany'.
+benchForce :: LambdaImpl -> [U.LC U.IdInt] -> Benchmark
+benchForce LambdaImpl{..} lcs =
+  let !nfs = force (map (impl_nf . impl_fromLC) lcs)
+   in bench impl_name (nf rnf nfs)
+
 -- | Normal form as a named term, through a given implementation.
 nfLC :: LambdaImpl -> U.LC U.IdInt -> U.LC U.IdInt
 nfLC LambdaImpl{..} = impl_toLC . impl_nf . impl_fromLC
@@ -111,4 +125,7 @@ main = do
     [ bgroup "nf"       [ benchOne  i lennart  | i <- impls ]
     , bgroup "random15" [ benchMany i random15 | i <- impls ]
     , bgroup "random20" [ benchMany i random20 | i <- impls ]
+    , bgroup "force-nf"       [ benchForce i [lennart] | i <- impls ]
+    , bgroup "force-random15" [ benchForce i random15  | i <- impls ]
+    , bgroup "force-random20" [ benchForce i random20  | i <- impls ]
     ]
