@@ -3,23 +3,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
--- | Microbenchmarks for lambda-pi normalisation.
---
--- Each input is normalised in three ways: by the generic NbE ('nfNbe'), by the
--- hand-written monomorphic NbE ('Mono.nfMono', a baseline for the generic one)
--- and by the reference substitution normaliser ('nf'). New implementation
--- variants can be added as extra rows without changing the inputs. Following
--- free-foil's own normalisation benchmark, results are forced with 'sizeOf'
--- (walking the whole normal form); an 'NFData' instance also exists
--- ("LambdaPi.Generated") if preferred.
+-- | Microbenchmarks for lambda-pi normalisation. Each input is normalised by
+-- the generic NbE ('nfNbe'), the monomorphic NbE ('Mono.nfMono') and the
+-- reference substitution normaliser ('nf'); results are forced by walking the
+-- whole normal form, as in free-foil's own benchmark.
 module Main (main) where
 
 import Test.Tasty.Bench hiding (nf)
 
-import FreeFoil.NbE
-  ( S (VoidS), Scope, Name, Distinct, DistinctEvidence (Distinct)
-  , assertDistinct, emptyScope, extendScope, nameOf, sink, withFresh
-  )
+import Control.Monad.Foil
 import LambdaPi hiding (whnf)
 import qualified LambdaPi.Monomorphic as Mono
 import LambdaPi.Parser ()  -- IsString instance for writing terms as strings
@@ -58,16 +50,14 @@ churchAdd a b = App (App addT (churchN a)) (churchN b)
 idTerm :: LambdaPi VoidS
 idTerm = withFresh emptyScope $ \x -> Lam x (Var (nameOf x))
 
--- | The identity @\\x. x@ built directly in an arbitrary scope (a closed term,
--- reusable as a domain type at any depth without sinking).
+-- | The identity built directly in a scope, for use as a domain at any depth.
 idIn :: Distinct s => Scope s -> LambdaPi s
 idIn scope = withFresh scope $ \x -> Lam x (Var (nameOf x))
 
--- | @n@ nested dependent function types
--- @(x0 : id) -> (x1 : id) -> ... -> id@, with distinct, unused binders. There
--- are no redexes in the types, so both normalisers do a single linear pass —
--- unless NbE re-normalises each codomain, which is exponential in @n@. This is
--- the worst case that motivated the eager-values representation.
+-- | @n@ nested dependent function types @(x0 : id) -> (x1 : id) -> ... -> id@
+-- with distinct, unused binders. There are no redexes, so a normaliser that
+-- re-normalised each codomain would be exponential in @n@; this is the case
+-- the value representation is designed around.
 nestedPi :: Int -> LambdaPi VoidS
 nestedPi = go emptyScope
   where
@@ -84,10 +74,9 @@ nestedPi = go emptyScope
 nestedRedexes :: Int -> LambdaPi VoidS
 nestedRedexes n = iterate (App idTerm) idTerm !! n
 
--- | A faithful chain of @n@ nested @let@s: @let x0 = id in let x1 = x0 in
--- ... in x_{n-1}@, encoded as @(\\x0. (\\x1. ... x_{n-1}) x0) id@ (the demo
--- language has no @let@; @let x = e in b@ is @(\\x. b) e@). Each binding copies
--- the previous one, so normalising performs a chain of @n@ substitutions.
+-- | A chain of @n@ nested lets @let x0 = id in let x1 = x0 in ... in x_{n-1}@,
+-- encoded as @(\\x0. (\\x1. ... x_{n-1}) x0) id@ since lambda-pi has no @let@.
+-- Each binding copies the previous one, so substitution performs @n@ copies.
 nestedLet :: Int -> LambdaPi VoidS
 nestedLet n =
   withFresh emptyScope $ \x0 ->
@@ -103,7 +92,7 @@ nestedLet n =
           Distinct ->
             App (Lam xi (go (extendScope xi scope) (nameOf xi) (k - 1))) (Var prev)
 
--- | Normalise @t@ both ways and force each result fully.
+-- | Normalise @t@ three ways and force each result fully.
 compareNormalisers :: String -> LambdaPi VoidS -> Benchmark
 compareNormalisers name t =
   bgroup name

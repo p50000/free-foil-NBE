@@ -1,22 +1,14 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RankNTypes #-}
-
--- | A hand-written, monomorphic NbE for lambda-pi.
---
--- This is a baseline for measuring the generic normaliser of "FreeFoil.NbE",
--- not a part of the framework. It normalises the same syntax as
--- 'LambdaPi.nfNbe' (@AST FFPattern TermSig@) with the same algorithm, but its
--- values form a monomorphic data type with one constructor per value form,
--- so every value is a single heap object. The difference between the two
--- normalisers estimates what generated monomorphic code could gain while
--- keeping free-foil syntax as input and output.
---
--- As in the generic normaliser, evaluation is call-by-need, a binder node
--- captures the environment and keeps its body as syntax, and readback
--- refreshes each binder and evaluates the body once, so nested @Pi@ types are
+{-# LANGUAGE DataKinds    #-}
+{-# LANGUAGE GADTs        #-}
+{-# LANGUAGE LambdaCase   #-}
+{-# LANGUAGE RankNTypes   #-}
+-- | A hand-written NbE for lambda-pi with a monomorphic value type: one
+-- constructor per value form, so every value is a single heap object. It
+-- runs the same algorithm as the generic normaliser on the same syntax and
+-- serves as a baseline for the cost of the generic value domain. Evaluation
+-- is call-by-need, a binder node captures its environment and keeps its body
+-- as syntax, and readback evaluates each body once, so nested @Pi@ types
 -- read back in linear time.
 module LambdaPi.Monomorphic
   ( Val (..)
@@ -26,44 +18,26 @@ module LambdaPi.Monomorphic
   ) where
 
 import Control.Monad.Foil
-  ( Distinct
-  , InjectName (..)
-  , Name
-  , NameBinder
-  , Scope
-  , Sinkable (..)
-  , Substitution
-  , addRename
-  , addSubst
-  , extendScope
-  , identitySubst
-  , lookupSubst
-  , nameOf
-  , sink
-  , withRefreshed
-  )
-import Control.Monad.Free.Foil (AST (..), ScopedAST (..))
+import Control.Monad.Free.Foil
 
 import LambdaPi.Generated (FFPattern (..), FFTerm, TermSig (..))
 
--- | Semantic values of lambda-pi in scope @n@.
---
--- The invariant is that of 'FreeFoil.NbE.Value': a value is weak-head normal
--- at every position, i.e. the head of a 'VApp' is never a 'VLam'. Here 'eval'
--- is the only producer of values, and its application case maintains this.
+-- | Values in scope @n@, weak-head normal at every position as in
+-- 'FreeFoil.NbE.Value': the head of a 'VApp' is never a 'VLam'. 'eval' is
+-- the only producer of values and maintains this in its application case.
 data Val n where
   -- | A neutral variable.
   VVar :: {-# UNPACK #-} !(Name n) -> Val n
-  -- | A stuck application. The head is neutral; the argument is suspended.
+  -- | A stuck application: neutral head, suspended argument.
   VApp :: !(Val n) -> Val n -> Val n
-  -- | A lambda closure: the captured environment, the binder and the body.
+  -- | A lambda closure: captured environment, binder and body.
   VLam ::
     !(Substitution Val i n) ->
     {-# UNPACK #-} !(NameBinder i l) ->
     FFTerm l ->
     Val n
-  -- | A dependent function type: the domain as a value, then a closure for
-  -- the codomain, as in 'VLam'.
+  -- | A dependent function type: the domain as a value, the codomain as a
+  -- closure.
   VPi ::
     Val n ->
     !(Substitution Val i n) ->
@@ -74,8 +48,8 @@ data Val n where
 instance InjectName Val where
   injectName = VVar
 
--- | Needed to 'sink' a captured environment into an extended scope. In
--- practice 'sink' is a coercion, and this instance only serves as evidence.
+-- | Evidence for sinking a captured environment into an extended scope;
+-- 'sink' itself is a coercion.
 instance Sinkable Val where
   sinkabilityProof rename = \case
     VVar x -> VVar (rename x)
@@ -84,8 +58,8 @@ instance Sinkable Val where
     VPi dom env b body ->
       VPi (sinkabilityProof rename dom) (sinkabilityProof rename env) b body
 
--- | Evaluate a term under an environment that maps its free variables to
--- values. Variables outside the environment's domain become neutrals.
+-- | Evaluate a term under an environment; variables outside its domain
+-- become neutrals.
 eval :: Substitution Val i o -> FFTerm i -> Val o
 eval !env = \case
   Var x -> lookupSubst env x
@@ -108,9 +82,8 @@ quote scope = \case
   VPi dom env binder body ->
     Node (PiSig (quote scope dom) (quoteScoped scope env binder body))
 
--- | Read back the body of a closure under its binder: refresh the binder
--- against the ambient scope, map it to the fresh name in the captured
--- environment, evaluate the body once and quote the result.
+-- | Read back a closure body under its binder: refresh the binder, map it to
+-- the fresh name in the captured environment, evaluate the body once, quote.
 quoteScoped ::
   Distinct n =>
   Scope n ->

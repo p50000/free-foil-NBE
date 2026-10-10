@@ -1,88 +1,61 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE ScopedTypeVariables #-}
--- The 'Eval TermSig' instance lives here, with the language's dynamics (next to
--- the reference 'nf'), rather than in the generated-syntax module.
+{-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+-- The Eval instance is an orphan on purpose: it belongs with the language's
+-- dynamics, next to the reference normaliser.
 {-# OPTIONS_GHC -Wno-orphans #-}
-
--- | The lambda-pi demonstration language.
---
--- The scope-safe syntax, its signature bifunctor, and the raw/scoped
--- conversions are generated from "LambdaPi.Raw" by free-foil's Template
--- Haskell (see "LambdaPi.Generated"). This module only adds the friendly
--- surface API — a 'LambdaPi' type synonym and 'Var'\/'App'\/'Lam'\/'Pi'
--- pattern synonyms that hide the generated @FFPattern@ wrapper — and the
--- normalisers ('nf', 'whnf', and the NbE-based 'nfNbe').
+-- | The lambda-pi demonstration language: the untyped lambda calculus with
+-- the dependent function type @Pi@ as a term former. The syntax is generated
+-- in "LambdaPi.Generated"; this module adds pattern synonyms over it, the
+-- one 'Eval' instance (β), and a substitution-based reference normaliser.
 module LambdaPi
-  ( LambdaPi,
-    pattern Var,
-    pattern App,
-    pattern Lam,
-    pattern Pi,
-    whnf,
-    nf,
-    nfd,
-    Value,
-    eval,
-    nfNbe,
-    whnfNbe,
-    two,
-    appTwo,
-    neutralNbeOk,
-  )
-where
+  ( LambdaPi
+  , pattern Var
+  , pattern App
+  , pattern Lam
+  , pattern Pi
+  , Value
+  , eval
+  , nfNbe
+  , whnfNbe
+  , whnf
+  , nf
+  , nfd
+  , two
+  , appTwo
+  , neutralNbeOk
+  ) where
 
-import FreeFoil.NbE
-    ( S(VoidS),
-      Distinct,
-      Scope,
-      NameBinder,
-      AST(Var),
-      ScopedAST(ScopedAST),
-      DistinctEvidence(Distinct),
-      Eval(..),
-      eval,
-      nfNbe,
-      whnfNbe,
-      assertDistinct,
-      sink,
-      nameOf,
-      addSubst,
-      emptyScope,
-      extendScope,
-      identitySubst,
-      withFresh,
-      substitute
-    )
+import Control.Monad.Foil
+import Control.Monad.Free.Foil
+import FreeFoil.NbE (Eval (..), eval, nfNbe, whnfNbe)
 import qualified FreeFoil.NbE as NbE
 
 import LambdaPi.Generated
-    ( FFTerm,
-      TermSig(AppSig, LamSig),
-      FFPattern(FFPatternVar),
-      pattern FFApp,
-      pattern FFLam,
-      pattern FFPi
-    )
+  ( FFPattern (FFPatternVar)
+  , FFTerm
+  , TermSig (AppSig, LamSig)
+  , pattern FFApp
+  , pattern FFLam
+  , pattern FFPi
+  )
 
--- | Scope-safe lambda-pi terms in scope @n@ (an alias for the generated
--- @FFTerm@).
+-- | Scope-safe lambda-pi terms in scope @n@.
 type LambdaPi n = FFTerm n
 
--- Specialize the generic normaliser to this concrete signature at the library
--- boundary. Without these pragmas the recursive eval/quote loop passes class
--- dictionaries at run time. Note that the nfNbe pragma alone is not enough:
--- the recursive eval and evalSig calls keep their dictionaries unless each
--- loop function is specialized individually.
+-- Specialise the generic loop to this signature. Each recursive function
+-- needs its own pragma, since the nfNbe one alone leaves eval passing
+-- dictionaries. The quote pragmas do not take effect yet: the specialised
+-- nfNbe still calls the generic quote worker with the dictionaries.
 {-# SPECIALIZE NbE.nfNbe :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n #-}
 {-# SPECIALIZE NbE.eval ::
       (Distinct o, Distinct i) =>
       Scope o ->
-      NbE.Substitution (NbE.Value FFPattern TermSig) i o ->
+      Substitution (NbE.Value FFPattern TermSig) i o ->
       LambdaPi i ->
       NbE.Value FFPattern TermSig o #-}
 {-# SPECIALIZE NbE.quote ::
@@ -90,27 +63,43 @@ type LambdaPi n = FFTerm n
 {-# SPECIALIZE NbE.quoteSuspendedScoped ::
       (Distinct n, Distinct i) =>
       Scope n ->
-      NbE.Substitution (NbE.Value FFPattern TermSig) i n ->
+      Substitution (NbE.Value FFPattern TermSig) i n ->
       ScopedAST FFPattern TermSig i ->
       ScopedAST FFPattern TermSig n #-}
 
--- | Application. (@Var@ is re-exported from free-foil's generic 'AST'.)
+-- | Application.
 pattern App :: LambdaPi n -> LambdaPi n -> LambdaPi n
 pattern App fun arg = FFApp fun arg
 
--- | Lambda abstraction. Hides the generated @FFPatternVar@ wrapper so the body
--- binds a plain 'NameBinder', as before.
+-- | Lambda abstraction; the binder is a plain 'NameBinder'.
 pattern Lam :: NameBinder n l -> LambdaPi l -> LambdaPi n
 pattern Lam binder body = FFLam (FFPatternVar binder) body
 
--- | Dependent function type @(x : dom) -> body@. The domain @dom@ lives in the
--- outer scope @n@; the codomain @body@ may mention the bound variable.
+-- | Dependent function type @(x : dom) -> body@; the domain lives in the
+-- outer scope.
 pattern Pi :: LambdaPi n -> NameBinder n l -> LambdaPi l -> LambdaPi n
 pattern Pi dom binder body = FFPi dom (FFPatternVar binder) body
 
 {-# COMPLETE Var, App, Lam, Pi #-}
 
---- Impl of nf, whnf using generic sinking
+-- | Semantic values of lambda-pi.
+type Value = NbE.Value FFPattern TermSig
+
+-- | The one elimination rule, application. A suspended lambda is entered
+-- under its captured environment extended with the argument; a neutral head
+-- rebuilds the application. @Lam@ and @Pi@ fall through to the default, so a
+-- @Pi@ keeps its domain as a value and its codomain suspended.
+instance Eval FFPattern TermSig where
+  evalSig scope env = \case
+    AppSig fun arg ->
+      case eval scope env fun of
+        NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
+          case assertDistinct binder of
+            Distinct -> eval scope (addSubst env' binder (eval scope env arg)) body
+        fun' -> NbE.VNode (AppSig fun' (eval scope env arg))
+    node -> NbE.evalNode (eval scope) env node
+
+-- | Weak-head normal form by substitution, the reference for the tests.
 whnf :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n
 whnf scope = \case
   App fun arg ->
@@ -121,6 +110,7 @@ whnf scope = \case
       fun' -> App fun' arg
   t -> t
 
+-- | Normal form by substitution.
 nf :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n
 nf scope = \case
   Lam binder body ->
@@ -141,37 +131,11 @@ nf scope = \case
       fun' -> App (nf scope fun') (nf scope arg)
   t -> t
 
+-- | 'nf' in the empty scope.
 nfd :: LambdaPi VoidS -> LambdaPi VoidS
 nfd = nf emptyScope
 
---- Impl of nf, whnf using NBE
-type Value = NbE.Value FFPattern TermSig
-
--- | Lambda-pi as an NbE instance. The entire object-language contribution is
--- its one elimination rule, application: introduction forms (@Lam@, @Pi@) have
--- no elimination rule and fall through to the generic default, which rebuilds
--- them as a 'NbE.VNode'. So a @Pi@ keeps its domain as an eager value and its
--- codomain suspended in the node's environment (see 'NbE.Value'). The semantic
--- 'FreeFoil.NbE.eval' \/ 'FreeFoil.NbE.quote' and the derived
--- 'FreeFoil.NbE.nfNbe' (both re-exported above) come for free.
---
--- 'evalSig' receives the raw node and the current environment. The 'AppSig'
--- case evaluates the function itself; beta-reduction re-evaluates the lambda
--- body under the captured environment extended with the (lazily evaluated)
--- argument, and a function stuck on a neutral stays a 'NbE.VNode' application.
--- This is the only place that establishes the 'NbE.Value' invariant (no
--- introduction form is ever applied to an argument).
-instance Eval FFPattern TermSig where
-  evalSig scope env = \case
-    AppSig fun arg ->
-      case eval scope env fun of
-        NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
-          case assertDistinct binder of
-            Distinct -> eval scope (addSubst env' binder (eval scope env arg)) body
-        fun' -> NbE.VNode (AppSig fun' (eval scope env arg))
-    node -> NbE.evalNode (eval scope) env node
-
---- examples
+-- | The Church numeral two.
 two :: LambdaPi VoidS
 two = withFresh emptyScope
   (\ s -> Lam s $ withFresh (extendScope s emptyScope)
@@ -179,21 +143,19 @@ two = withFresh emptyScope
                        (App (Var (sink (nameOf s)))
                             (Var (nameOf z))))))
 
+-- | Church two applied to itself, i.e. four.
 appTwo :: LambdaPi VoidS
 appTwo = App two two
 
--- | NbE must preserve neutral terms built from free variables.
---
--- In a scope with two free variables @f@ and @g@, the term @f ((λx. x) g)@
--- normalises to the neutral application @f g@: the redex in the argument is
--- reduced while the application stuck on the free @f@ is preserved.
+-- | In a scope with free @f@ and @g@, @f ((λx. x) g)@ normalises to the
+-- neutral @f g@: the argument's redex is reduced, the stuck application stays.
 neutralNbeOk :: Bool
 neutralNbeOk =
   withFresh emptyScope $ \fBinder ->
     withFresh (extendScope fBinder emptyScope) $ \gBinder ->
       let scope = extendScope gBinder (extendScope fBinder emptyScope)
-          f = sink (nameOf fBinder)  -- free variable f, sunk into the full scope
-          g = nameOf gBinder         -- free variable g
+          f = sink (nameOf fBinder)
+          g = nameOf gBinder
           idLam = withFresh scope (\x -> Lam x (Var (nameOf x)))
           term = App (Var f) (App idLam (Var g))
       in case nfNbe scope term of

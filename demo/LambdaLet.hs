@@ -1,86 +1,54 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE ScopedTypeVariables #-}
--- The 'Eval TermSig' instance lives here, with the language's dynamics (next to
--- the reference 'nf'), rather than in the generated-syntax module.
+{-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+-- The Eval instance is an orphan on purpose: it belongs with the language's
+-- dynamics, next to the reference normaliser.
 {-# OPTIONS_GHC -Wno-orphans #-}
-
--- | The lambda-let demonstration language: the untyped lambda-calculus plus
--- @let@ — the first feature of the zoo series (see @FEATURE_ZOO_DESIGN.md@,
--- "Let \/ definitions").
---
--- @let@ is the simplest binding construct after lambda, and it is an
--- /eliminator that always fires/: @let x = e in b@ evaluates @b@ under the
--- environment extended with @x ↦ eval e@ — structurally identical to a beta
--- step, except the redex is always present. Consequently @let@ never appears
--- in a normal form and needs no neutral case, no new framework machinery, and
--- no change to quoting.
---
--- The scope-safe syntax is generated from @demo/grammar/LambdaLet/Syntax.cf@
--- via BNFC and free-foil's Template Haskell (see "LambdaLet.Generated"). This
--- module adds the friendly surface API — pattern synonyms hiding the generated
--- @FFPattern@ wrapper — the one 'Eval' instance, and a reference
--- substitution-based normaliser used as the test oracle. Example terms live in
--- "LambdaLet.Examples".
+-- | The lambda-let demonstration language: the untyped lambda calculus with
+-- @let@. The syntax is generated in "LambdaLet.Generated"; this module adds
+-- pattern synonyms over it, the 'Eval' instance, and a substitution-based
+-- reference normaliser. Example terms are in "LambdaLet.Examples".
 module LambdaLet
-  ( LambdaLet,
-    pattern Var,
-    pattern App,
-    pattern Lam,
-    pattern Let,
-    Value,
-    eval,
-    nfNbe,
-    whnfNbe,
-    nf,
-    whnf,
-  )
-where
+  ( LambdaLet
+  , pattern Var
+  , pattern App
+  , pattern Lam
+  , pattern Let
+  , Value
+  , eval
+  , nfNbe
+  , whnfNbe
+  , nf
+  , whnf
+  ) where
 
-import FreeFoil.NbE
-  ( AST (Var),
-    Distinct,
-    DistinctEvidence (Distinct),
-    Eval (..),
-    NameBinder,
-    Scope,
-    ScopedAST (ScopedAST),
-    addSubst,
-    assertDistinct,
-    eval,
-    extendScope,
-    identitySubst,
-    nfNbe,
-    substitute,
-    whnfNbe,
-  )
+import Control.Monad.Foil
+import Control.Monad.Free.Foil
+import FreeFoil.NbE (Eval (..), eval, nfNbe, whnfNbe)
 import qualified FreeFoil.NbE as NbE
 
 import LambdaLet.Generated
-  ( FFPattern (FFPatternVar),
-    FFTerm,
-    TermSig (AppSig, LamSig, LetSig),
-    pattern FFApp,
-    pattern FFLam,
-    pattern FFLet,
+  ( FFPattern (FFPatternVar)
+  , FFTerm
+  , TermSig (AppSig, LamSig, LetSig)
+  , pattern FFApp
+  , pattern FFLam
+  , pattern FFLet
   )
 
--- | Scope-safe lambda-let terms in scope @n@ (an alias for the generated
--- @FFTerm@).
+-- | Scope-safe lambda-let terms in scope @n@.
 type LambdaLet n = FFTerm n
 
--- Specialize the generic normaliser to this concrete signature at the library
--- boundary; see the twin pragmas in "LambdaPi" for why each loop function
--- needs its own pragma.
+-- Specialise the generic loop to this signature, as in "LambdaPi".
 {-# SPECIALIZE NbE.nfNbe :: Distinct n => Scope n -> LambdaLet n -> LambdaLet n #-}
 {-# SPECIALIZE NbE.eval ::
       (Distinct o, Distinct i) =>
       Scope o ->
-      NbE.Substitution (NbE.Value FFPattern TermSig) i o ->
+      Substitution (NbE.Value FFPattern TermSig) i o ->
       LambdaLet i ->
       NbE.Value FFPattern TermSig o #-}
 {-# SPECIALIZE NbE.quote ::
@@ -88,21 +56,19 @@ type LambdaLet n = FFTerm n
 {-# SPECIALIZE NbE.quoteSuspendedScoped ::
       (Distinct n, Distinct i) =>
       Scope n ->
-      NbE.Substitution (NbE.Value FFPattern TermSig) i n ->
+      Substitution (NbE.Value FFPattern TermSig) i n ->
       ScopedAST FFPattern TermSig i ->
       ScopedAST FFPattern TermSig n #-}
 
--- | Application. (@Var@ is re-exported from free-foil's generic 'AST'.)
+-- | Application.
 pattern App :: LambdaLet n -> LambdaLet n -> LambdaLet n
 pattern App fun arg = FFApp fun arg
 
--- | Lambda abstraction. Hides the generated @FFPatternVar@ wrapper so the body
--- binds a plain 'NameBinder'.
+-- | Lambda abstraction; the binder is a plain 'NameBinder'.
 pattern Lam :: NameBinder n l -> LambdaLet l -> LambdaLet n
 pattern Lam binder body = FFLam (FFPatternVar binder) body
 
--- | @let x = e in body@. The bound expression @e@ lives in the outer scope
--- @n@; the body may mention the bound variable.
+-- | @let x = e in body@; the bound expression lives in the outer scope.
 pattern Let :: LambdaLet n -> NameBinder n l -> LambdaLet l -> LambdaLet n
 pattern Let e binder body = FFLet e (FFPatternVar binder) body
 
@@ -111,25 +77,13 @@ pattern Let e binder body = FFLet e (FFPatternVar binder) body
 -- | Semantic values of lambda-let.
 type Value = NbE.Value FFPattern TermSig
 
--- | Lambda-let as an NbE instance: two elimination rules.
---
--- 'AppSig' is beta, exactly as in "LambdaPi": evaluate the function, and on a
--- suspended lambda re-enter its body under the captured environment extended
--- with the argument's value; stuck on a neutral, rebuild the application.
---
--- 'LetSig' is the cut: it /always/ reduces — the body is evaluated under the
--- current environment extended with the bound expression's value, exactly as
--- beta evaluates a lambda body. There is no stuck case (nothing to inspect,
--- nothing to be neutral in), so a @let@ never survives into a value and the
--- generic quote needs no extension. Note the bound expression is evaluated
--- lazily, /at most once/: the environment entry is a thunk, shared by every
--- occurrence of @x@ — forced the first time @x@ is looked up, never if the
--- binding is unused (even a divergent bound expression is harmless then).
--- A substitution-based normaliser (see 'nf') has neither property: it copies
--- the unevaluated expression into every occurrence and reduces each copy.
---
--- 'LamSig' is the sole introduction form and falls through to the generic
--- default.
+-- | Two elimination rules. Application is β, as in "LambdaPi". @let@ always
+-- reduces: the body is evaluated under the environment extended with the
+-- bound expression, exactly as β enters a lambda body, so no @let@ survives
+-- into a value and readback needs no case for it. The bound expression is a
+-- thunk in the environment: evaluated at most once, shared by every use, and
+-- never if unused. The reference 'nf' substitutes it unevaluated into every
+-- occurrence instead.
 instance Eval FFPattern TermSig where
   evalSig scope env = \case
     AppSig fun arg ->
@@ -143,11 +97,8 @@ instance Eval FFPattern TermSig where
         Distinct -> eval scope (addSubst env binder (eval scope env e)) body
     node -> NbE.evalNode (eval scope) env node
 
--- Reference normalisers (substitution-based), used as the test oracle. -------
-
--- | Weak-head normal form by explicit substitution: @let@ substitutes its
--- bound expression into the body /unevaluated/ (call-by-name), then reduction
--- continues on the result.
+-- | Weak-head normal form by substitution; @let@ substitutes its bound
+-- expression unevaluated.
 whnf :: Distinct n => Scope n -> LambdaLet n -> LambdaLet n
 whnf scope = \case
   App fun arg ->
@@ -161,9 +112,8 @@ whnf scope = \case
     in whnf scope (substitute scope subst body)
   t -> t
 
--- | Normal form by explicit substitution. The @let@ case discards the binding
--- after substituting, so — like NbE — no @let@ survives in a normal form; the
--- two normalisers must agree up to alpha-equivalence.
+-- | Normal form by substitution. No @let@ survives here either, so the two
+-- normalisers must agree up to α.
 nf :: Distinct n => Scope n -> LambdaLet n -> LambdaLet n
 nf scope = \case
   Lam binder body ->

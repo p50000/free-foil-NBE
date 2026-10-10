@@ -1,42 +1,32 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE GADTs             #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
-
--- | Showing lambda-pi values (the 'Value'-based semantic domain).
---
--- Terms have a 'Show' instance (in "LambdaPi.Generated"). Here we add two views
--- of a semantic value:
---
---   * 'ppValue' — the value's /meaning/: quote it back to a term and print it.
---   * 'ppValueStruct' (and the 'Show' instance) — the value's /structure/:
---     neutral variables, suspended nodes, and each closure's captured
---     environment, for inspecting the NbE representation itself.
+-- | Two views of a lambda-pi value. 'ppValue' quotes it back and prints the
+-- term. 'ppValueStruct', also the 'Show' instance, prints its structure:
+-- neutral variables, nodes, and each suspended body with its environment.
 module LambdaPi.PrettyPrint
   ( ppValue
   , ppValueStruct
   ) where
 
-import FreeFoil.NbE
-  ( ScopedAST (ScopedAST), Distinct, Scope
-  , nameId, nameOf, quote, substitutionDomain
-  )
-import qualified FreeFoil.NbE as NbE
+import Control.Monad.Foil
+import Control.Monad.Foil.Internal (Substitution (UnsafeSubstitution))
+import Control.Monad.Free.Foil
+import qualified Data.IntMap as IntMap
 import Data.Void (absurd)
+import FreeFoil.NbE (quote)
+import qualified FreeFoil.NbE as NbE
 import LambdaPi (Value)
 import LambdaPi.Generated (TermSig (AppSig, LamSig, PiSig), FFPattern (FFPatternVar), fromTerm)
 import LambdaPi.Syntax.Print (printTree)
 
--- | Pretty-print a lambda-pi value by quoting it back to a term and printing.
--- Requires the scope the value lives in so that quoting can go under binders.
+-- | Quote a value back to a term and print it.
 ppValue :: Distinct n => Scope n -> Value n -> String
 ppValue scope = printTree . fromTerm . quote scope
 
--- | A structural rendering of a value: @#n@ for a neutral variable, and
--- @{node}@ for an evaluated node. Term subterms recurse; each scoped subterm
--- is shown as its raw suspended body together with its captured environment,
--- @body |env=[...]@.
+-- | Print the structure of a value: @#n@ for a neutral variable, @{node}@ for
+-- a node, and @body |env=[...]@ for a suspended body with its environment.
 ppValueStruct :: Value n -> String
 ppValueStruct = \case
   NbE.VVar x -> '#' : show (nameId x)
@@ -64,6 +54,10 @@ ppValueStruct = \case
   where
     binder :: FFPattern i l -> String
     binder (FFPatternVar nb) = 'x' : show (nameId (nameOf nb))
+
+-- | The raw identifiers an environment maps, for display.
+substitutionDomain :: Substitution e i o -> [Int]
+substitutionDomain (UnsafeSubstitution m) = IntMap.keys m
 
 instance Show (Value n) where
   show = ppValueStruct

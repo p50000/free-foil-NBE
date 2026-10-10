@@ -1,13 +1,9 @@
 {-# LANGUAGE DataKinds #-}
 
--- | QuickCheck generators for lambda-pi terms.
---
--- Terms are generated at the raw (named) level of "LambdaPi.Raw" while tracking
--- the set of in-scope variable names, which guarantees well-scopedness. A raw
--- term is then converted to scope-safe free-foil syntax with 'resolve' (the
--- generated conversion). Generating names positionally (@v0@, @v1@, ... by
--- binder depth) keeps binders on a single spine distinct while allowing
--- harmless reuse across disjoint branches.
+-- | QuickCheck generators for lambda-pi terms. Terms are generated raw while
+-- tracking the variables in scope, so they are well scoped, then converted
+-- with 'resolve'. Binder names are positional (@v0@, @v1@, ... by depth), so
+-- binders on one spine are distinct.
 module LambdaPi.Gen
   ( Closed (..)
   , OpenTerm (..)
@@ -18,7 +14,7 @@ module LambdaPi.Gen
 import qualified Data.Map.Strict as Map
 import Test.QuickCheck
 
-import FreeFoil.NbE (S (VoidS), emptyScope)
+import Control.Monad.Foil
 import LambdaPi (LambdaPi)
 import LambdaPi.Parser (resolve)
 import LambdaPi.Syntax.Abs (Term (..), Pattern (..), ScopedTerm (..), VarIdent (..))
@@ -32,8 +28,8 @@ instance Show Closed where
 instance Arbitrary Closed where
   arbitrary = Closed . resolve emptyScope Map.empty <$> sized (genTerm [])
 
--- | A random raw term over the fixed 'freeVars', for exercising open terms
--- (neutrals) once resolved in a scope holding those free variables.
+-- | A random raw term over the fixed 'freeVars', to be resolved in a scope
+-- holding them.
 newtype OpenTerm = OpenTerm Term
   deriving (Show)
 
@@ -44,9 +40,8 @@ instance Arbitrary OpenTerm where
 freeVars :: [String]
 freeVars = ["a", "b", "c"]
 
--- | Generate a raw term whose free variables are drawn from @vars@, with a size
--- budget. When @vars@ is empty (closed terms) the generator never emits a bare
--- variable, so it always produces a binder at the leaves.
+-- | Generate a raw term with free variables from @vars@ within a size budget;
+-- with no variables available, leaves are lambdas.
 genTerm :: [String] -> Int -> Gen Term
 genTerm vars n
   | n <= 1 = leaf
