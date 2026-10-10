@@ -71,7 +71,7 @@ cabal test
 cabal test --test-show-details=direct
 ```
 
-Expected: **`All 79 tests passed`**. The suite covers:
+Expected: **`All 100 tests passed`**. The suite covers:
 
 - **beta-reduction** on closed terms;
 - **normalisation under binders**;
@@ -91,7 +91,9 @@ Expected: **`All 79 tests passed`**. The suite covers:
   (free-foil's `alphaEquiv`) on random closed and open terms.
 
 The beta, under-binder, `Pi` and deep-nesting cases also check the monomorphic
-baseline `nfMono` beside `nfNbe`.
+baseline `nfMono` beside `nfNbe`. The **generated value types** of
+`LambdaPi.Codegen` and `LambdaPi.CodegenPattern` (from `FreeFoil.NbE.TH`) are
+checked in the same way, and their values are inspected directly.
 
 Useful flags:
 

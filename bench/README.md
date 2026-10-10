@@ -1,8 +1,9 @@
 # Benchmarks
 
-Microbenchmarks for lambda-pi normalisation. Each input is normalised three
+Microbenchmarks for lambda-pi normalisation. Each input is normalised four
 ways: by the generic NbE (`nfNbe`), by the hand-written monomorphic NbE
-(`nfMono`, from `LambdaPi.Monomorphic`, a baseline for the generic one) and by
+(`nfMono`, from `LambdaPi.Monomorphic`, a baseline for the generic one), by the
+NbE with a generated value type (`nfCodegen`, from `LambdaPi.Codegen`) and by
 the reference substitution normaliser (`nf`). Thus they are directly comparable
 on the same terms. Future implementation variants can be added as extra rows in
 [`Main.hs`](Main.hs) without changing the inputs.
