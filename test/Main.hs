@@ -22,6 +22,8 @@ import LambdaPi
 import LambdaPi.Parser (parseLambdaPi, parseOpen, resolve, withFreeVars)
 import LambdaPi.PrettyPrint (ppValue, ppValueStruct)
 import LambdaPi.Gen (Closed (..), OpenTerm (..), freeVars)
+import qualified LambdaPi.Codegen as Codegen
+import qualified LambdaPi.CodegenPattern as CodegenPattern
 import qualified LambdaPi.LambdaNWays as LNW
 import qualified LambdaPi.Monomorphic as Mono
 import qualified Booleans as B
@@ -42,6 +44,7 @@ main =
         , neutralTests
         , roundTripTests
         , valueTests
+        , codegenValueTests
         , lambdaNWaysTests
         , booleansTests
         , lambdaLetTests
@@ -52,14 +55,16 @@ main =
 alphaEq :: LambdaPi VoidS -> LambdaPi VoidS -> Assertion
 alphaEq a b = alphaEquiv emptyScope a b @?= True
 
--- | The reference normaliser and both NbE normalisers reduce @term@ to
--- something α-equivalent to @expected@.
+-- | The reference normaliser and the three NbE normalisers (generic,
+-- monomorphic and generated) reduce @term@ to something α-equivalent to
+-- @expected@.
 bothNormaliseTo :: TestName -> LambdaPi VoidS -> LambdaPi VoidS -> TestTree
 bothNormaliseTo name term expected =
   testGroup name
     [ testCase "reference nf" (alphaEq (nf emptyScope term) expected)
     , testCase "nfNbe"        (alphaEq (nfNbe emptyScope term) expected)
     , testCase "nfMono"       (alphaEq (Mono.nfMono emptyScope term) expected)
+    , testCase "nfCodegen"    (alphaEq (Codegen.nfCodegen emptyScope term) expected)
     ]
 
 -- Booleans
@@ -196,7 +201,9 @@ piDepthTests =
           Left err -> assertFailure ("parse failed: " ++ err)
           Right t  -> alphaEq (normalise emptyScope t) (nf emptyScope t)
     | d <- [100 :: Int]
-    , (name, normalise) <- [("nfNbe", nfNbe), ("nfMono", Mono.nfMono)]
+    , (name, normalise) <-
+        [ ("nfNbe", nfNbe), ("nfMono", Mono.nfMono)
+        , ("nfCodegen", Codegen.nfCodegen), ("nfPattern", CodegenPattern.nfPattern) ]
     ]
 
 -- | @n@ nested dependent function types with distinct, unused binders and no
@@ -267,6 +274,32 @@ valueTests =
     idVal = eval emptyScope identitySubst ("\\x. x" :: LambdaPi VoidS)
     s = ppValueStruct idVal
 
+-- Generated value type
+
+-- | Values of the generated type have one constructor per value form: a
+-- lambda is suspended with its environment, a stuck application keeps a
+-- neutral head, and a @Pi@ keeps its domain as a value.
+codegenValueTests :: TestTree
+codegenValueTests =
+  testGroup "generated value type (LambdaPi.Codegen)"
+    [ testCase "a lambda evaluates to VLam" $
+        case Codegen.eval identitySubst ("\\x. x" :: LambdaPi VoidS) of
+          Codegen.VLam {} -> pure ()
+          _ -> assertFailure "expected VLam"
+    , testCase "a Pi evaluates to VPi with a lambda as its domain" $
+        case Codegen.eval identitySubst ("(a : \\t. t) -> a" :: LambdaPi VoidS) of
+          Codegen.VPi _ (Codegen.VLam {}) _ _ -> pure ()
+          _ -> assertFailure "expected VPi with a VLam domain"
+    , testCase "an application stuck on a free variable evaluates to VApp" $
+        withFresh emptyScope $ \f ->
+          withFresh (extendScope f emptyScope) $ \x ->
+            let term = App (Var (sink (nameOf f))) (Var (nameOf x))
+             in case Codegen.eval identitySubst term of
+                  Codegen.VApp (Codegen.VVar f') (Codegen.VVar x') ->
+                    (f', x') @?= (sink (nameOf f), nameOf x)
+                  _ -> assertFailure "expected VApp of two variables"
+    ]
+
 -- lambda-n-ways bridge
 
 lambdaNWaysTests :: TestTree
@@ -278,6 +311,10 @@ lambdaNWaysTests =
     ]
       ++ [ testCase (nm ++ ": monoNf agrees with reference nf") $
              LNW.aeq (LNW.monoNf t) (LNW.refNf t) @?= True
+         | (nm, t) <- lcTerms
+         ]
+      ++ [ testCase (nm ++ ": codegenNf agrees with reference nf") $
+             LNW.aeq (LNW.codegenNf t) (LNW.refNf t) @?= True
          | (nm, t) <- lcTerms
          ]
       ++ [ testCase (nm ++ ": toLC . fromLC round-trips") $
@@ -310,6 +347,14 @@ propertyTests =
     , testGroup "nfMono (monomorphic baseline) agrees with reference nf"
         [ testProperty "closed terms" (propClosed Mono.nfMono)
         , testProperty "open terms (neutrals)" (propOpen Mono.nfMono)
+        ]
+    , testGroup "nfCodegen (generated value type) agrees with reference nf"
+        [ testProperty "closed terms" (propClosed Codegen.nfCodegen)
+        , testProperty "open terms (neutrals)" (propOpen Codegen.nfCodegen)
+        ]
+    , testGroup "nfPattern (generated, whole patterns) agrees with reference nf"
+        [ testProperty "closed terms" (propClosed CodegenPattern.nfPattern)
+        , testProperty "open terms (neutrals)" (propOpen CodegenPattern.nfPattern)
         ]
     ]
 

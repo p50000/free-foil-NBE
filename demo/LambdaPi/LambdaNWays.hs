@@ -16,6 +16,7 @@ module LambdaPi.LambdaNWays
   , toLC
   , nbeNf
   , monoNf
+  , codegenNf
   , refNf
   , aeq
   ) where
@@ -28,6 +29,7 @@ import GHC.Generics (Generic)
 import Control.Monad.Foil
 import Control.Monad.Free.Foil (alphaEquiv)
 import qualified LambdaPi as LP
+import qualified LambdaPi.Codegen as Codegen
 import qualified LambdaPi.Monomorphic as Mono
 
 -- | Integer variable identifiers.
@@ -74,6 +76,10 @@ nbeNf = toLC . LP.nfNbe emptyScope . fromLC
 -- | Normal form by the monomorphic NbE.
 monoNf :: LC IdInt -> LC IdInt
 monoNf = toLC . Mono.nfMono emptyScope . fromLC
+
+-- | Normal form by the NbE with a generated value type.
+codegenNf :: LC IdInt -> LC IdInt
+codegenNf = toLC . Codegen.nfCodegen emptyScope . fromLC
 
 -- | Normal form by the reference substitution normaliser.
 refNf :: LC IdInt -> LC IdInt
