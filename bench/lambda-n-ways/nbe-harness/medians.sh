@@ -21,8 +21,10 @@ for run in $(seq 1 "$N"); do
   for k in 0 1 2; do
     i=$(( (run + k) % 3 ))
     col="${COLS[$i]}"
+    log="$OUT/run${run}_col${i}.log"
+    # The harness fails when a column disagrees with the fork.
     "$BIN" -p "\$NF == \"$col\"" --csv "$OUT/run${run}_col${i}.csv" +RTS -T -RTS \
-      > "$OUT/run${run}_col${i}.log" 2>&1
+      > "$log" 2>&1 || { echo "run $run: $col failed, see $log" >&2; exit 1; }
     echo "run $run: $col"
   done
 done
