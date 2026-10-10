@@ -49,6 +49,8 @@ library lambda-pi-demo
         , LambdaPi.Raw
         , LambdaPi.LambdaNWays
         , LambdaPi.Monomorphic
+        , LambdaPi.Codegen
+        , LambdaPi.CodegenPattern
         , Booleans
     other-modules:    LambdaPi.Generated
     build-depends:    base ^>=4.20.2.0
