@@ -12,6 +12,8 @@ cd "$(dirname "$0")"
 N=${N:-12}
 OUT=${1:-results}
 mkdir -p "$OUT"
+# Remove the output of earlier runs, which would otherwise enter the medians.
+rm -f "$OUT"/run*_col*.csv "$OUT"/run*_col*.log
 BIN=$(cabal list-bin nbe-harness | tail -n1)
 COLS=("NBE.FreeFoil (generic)" "NBE.FreeFoil (monomorphic)" "NBE.Foil")
 
@@ -30,7 +32,7 @@ import csv, glob, os, statistics, sys
 
 out = sys.argv[1]
 data = {}
-for path in glob.glob(os.path.join(out, "*.csv")):
+for path in glob.glob(os.path.join(out, "run*_col*.csv")):
     with open(path) as fh:
         for row in csv.DictReader(fh):
             t = int(row["Mean (ps)"])
