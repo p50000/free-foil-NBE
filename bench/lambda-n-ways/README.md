@@ -71,6 +71,14 @@ The harness pulls the generic normaliser from this repo (`free-foil-nbe` +
 self-contained `Util.*` / `Foil.NBE` source plus the `lams/*.lam` corpus from the
 clone. Nothing is copied into the fork and the fork's own build is not used.
 
+The timed region of the `nf`, `random15` and `random20` groups includes
+forcing the result with `rnf`, as in every `lambda-n-ways` entry. The groups
+`force-nf`, `force-random15` and `force-random20` time that forcing alone for
+each column, on normal forms computed beforehand, with the column's own
+`NFData` instance. `medians.sh` reports them with the other groups, and also
+the median of each main group minus that of its forcing, as an estimate of
+normalisation without forcing.
+
 Options: `--csv out.csv` to write results; `LAMS_DIR=/path/to/lams/` to point at
 a corpus elsewhere (default `../lambda-n-ways-fork/lams/`).
 
