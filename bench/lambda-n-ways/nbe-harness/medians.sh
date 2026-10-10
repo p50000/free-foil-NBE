@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Measure the three columns as medians of N per-process runs.
+# Measure the columns as medians of N per-process runs.
 #
 # Each process benchmarks one column only, so the columns do not share a heap,
 # and the column order rotates from run to run. Allocation figures need the
@@ -15,11 +15,11 @@ mkdir -p "$OUT"
 # Remove the output of earlier runs, which would otherwise enter the medians.
 rm -f "$OUT"/run*_col*.csv "$OUT"/run*_col*.log
 BIN=$(cabal list-bin nbe-harness | tail -n1)
-COLS=("NBE.FreeFoil (generic)" "NBE.FreeFoil (monomorphic)" "NBE.Foil")
+COLS=("NBE.FreeFoil (generic)" "NBE.FreeFoil (monomorphic)" "NBE.FreeFoil (generated)" "NBE.Foil")
 
 for run in $(seq 1 "$N"); do
-  for k in 0 1 2; do
-    i=$(( (run + k) % 3 ))
+  for k in "${!COLS[@]}"; do
+    i=$(( (run + k) % ${#COLS[@]} ))
     col="${COLS[$i]}"
     log="$OUT/run${run}_col${i}.log"
     # The harness fails when a column disagrees with the fork.
