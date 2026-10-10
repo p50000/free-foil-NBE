@@ -18,8 +18,9 @@
 -- neutral and normal values are not told apart by type (see 'Value').
 --
 -- The recursive functions are @INLINABLE@, so a language can specialise them
--- to its signature; "LambdaPi" shows the @SPECIALIZE@ pragmas that remove
--- all dictionary passing from the loop.
+-- to its signature, as "LambdaPi" does with @SPECIALIZE@ pragmas. At the
+-- moment this specialises evaluation only, and readback still passes
+-- dictionaries.
 module FreeFoil.NbE
   ( -- * Semantic domain
     Value (..)
