@@ -4,15 +4,17 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- | Microbenchmarks for lambda-pi normalisation. Each input is normalised by
--- the generic NbE ('nfNbe'), the monomorphic NbE ('Mono.nfMono') and the
--- reference substitution normaliser ('nf'); results are forced by walking the
--- whole normal form, as in free-foil's own benchmark.
+-- the generic NbE ('nfNbe'), the monomorphic NbE ('Mono.nfMono'), the same NbE
+-- with a generated value type ('Codegen.nfCodegen') and the reference
+-- substitution normaliser ('nf'); results are forced by walking the whole
+-- normal form, as in free-foil's own benchmark.
 module Main (main) where
 
 import Test.Tasty.Bench hiding (nf)
 
 import Control.Monad.Foil
 import LambdaPi hiding (whnf)
+import qualified LambdaPi.Codegen as Codegen
 import qualified LambdaPi.Monomorphic as Mono
 import LambdaPi.Parser ()  -- IsString instance for writing terms as strings
 
@@ -92,12 +94,13 @@ nestedLet n =
           Distinct ->
             App (Lam xi (go (extendScope xi scope) (nameOf xi) (k - 1))) (Var prev)
 
--- | Normalise @t@ three ways and force each result fully.
+-- | Normalise @t@ four ways and force each result fully.
 compareNormalisers :: String -> LambdaPi VoidS -> Benchmark
 compareNormalisers name t =
   bgroup name
     [ bench "nfNbe"  $ whnf (sizeOf . nfNbe emptyScope) t
     , bench "nfMono" $ whnf (sizeOf . Mono.nfMono emptyScope) t
+    , bench "nfCodegen" $ whnf (sizeOf . Codegen.nfCodegen emptyScope) t
     , bench "nf"     $ whnf (sizeOf . nf emptyScope) t
     ]
 
