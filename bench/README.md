@@ -2,7 +2,7 @@
 
 Microbenchmarks for lambda-pi normalisation. Each input is normalised three
 ways: by the generic NbE (`nf`), by the hand-written monomorphic NbE
-(`nfMono`, from `LambdaPi.Monomorphic`, a baseline for the generic one) and by
+(`nf` from `LambdaPi.Monomorphic`, a baseline for the generic one) and by
 the reference substitution normaliser (`nfSubst`). Thus they are directly comparable
 on the same terms. Future implementation variants can be added as extra rows in
 [`Main.hs`](Main.hs) without changing the inputs.
@@ -38,7 +38,7 @@ relative reference, not an absolute target. Reproduce with
 `cabal bench nbe-bench`.
 
 - **Church `m^n`:** NbE wins by a widening margin as terms grow — at
-  `2^10 = 1024`, `nf` ≈ 55 µs vs `nfSubst` ≈ 500 µs (**~9×**); `nfMono` ≈ 42 µs.
+  `2^10 = 1024`, `nf` ≈ 55 µs vs `nfSubst` ≈ 500 µs (**~9×**); the monomorphic `nf` ≈ 42 µs.
   Closures/sharing pay off on the exponential blow-up.
 - **Church arithmetic (mult/add):** NbE ≈ 2× faster across the board.
 - **Nested `let` (faithful):** the dramatic case — at depth 1000, `nf`
@@ -53,7 +53,7 @@ relative reference, not an absolute target. Reproduce with
   `nf` scales *linearly* in nesting depth (100 / 500 / 1000 ≈ 14 / 71 /
   146 µs), and so does `nfSubst` (≈ 2.3 / 12 / 24 µs) — but here `nf` is a
   **constant factor slower, ~6×**, flat in the depth (down from ~24× before the
-  performance series; `nfMono` sits at ~2.4×). `nfSubst` is a trivial single pass
+  performance series; the monomorphic `nf` sits at ~2.4×). `nfSubst` is a trivial single pass
   since these types hold no redexes, whereas NbE still builds and tears down
   closures. Recovering this factor with a shortcut for redex-free subterms is
   tracked in issue #3.

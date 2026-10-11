@@ -14,9 +14,9 @@ module LambdaPi.LambdaNWays
   , LC (..)
   , fromLC
   , toLC
-  , nbeNf
-  , monoNf
-  , refNf
+  , nfGeneric
+  , nfMono
+  , nfSubst
   , aeq
   ) where
 
@@ -68,16 +68,16 @@ toLC = \case
   LP.Pi _ _ _     -> error "toLC: Pi is outside the untyped lambda fragment"
 
 -- | Normal form by the generic NbE.
-nbeNf :: LC IdInt -> LC IdInt
-nbeNf = toLC . LP.nf emptyScope . fromLC
+nfGeneric :: LC IdInt -> LC IdInt
+nfGeneric = toLC . LP.nf emptyScope . fromLC
 
 -- | Normal form by the monomorphic NbE.
-monoNf :: LC IdInt -> LC IdInt
-monoNf = toLC . Mono.nfMono emptyScope . fromLC
+nfMono :: LC IdInt -> LC IdInt
+nfMono = toLC . Mono.nf emptyScope . fromLC
 
 -- | Normal form by the reference substitution normaliser.
-refNf :: LC IdInt -> LC IdInt
-refNf = toLC . LP.nfSubst emptyScope . fromLC
+nfSubst :: LC IdInt -> LC IdInt
+nfSubst = toLC . LP.nfSubst emptyScope . fromLC
 
 -- | α-equivalence, through the scope-safe terms.
 aeq :: LC IdInt -> LC IdInt -> Bool

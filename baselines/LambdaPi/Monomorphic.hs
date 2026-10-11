@@ -14,7 +14,7 @@ module LambdaPi.Monomorphic
   ( Val (..)
   , eval
   , quote
-  , nfMono
+  , nf
   ) where
 
 import Control.Monad.Foil
@@ -98,5 +98,5 @@ quoteScoped scope env binder body =
      in ScopedAST (FFPatternVar binder') (quote scope' (eval env' body))
 
 -- | Normal form by the monomorphic NbE.
-nfMono :: Distinct n => Scope n -> FFTerm n -> FFTerm n
-nfMono scope = quote scope . eval identitySubst
+nf :: Distinct n => Scope n -> FFTerm n -> FFTerm n
+nf scope = quote scope . eval identitySubst

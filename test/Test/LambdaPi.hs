@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 -- | Tests of lambda-pi: the generic 'nf' and 'whnf', the monomorphic
--- baseline 'Mono.nfMono', and the reference normaliser, on examples and
+-- baseline 'Mono.nf', and the reference normaliser, on examples and
 -- random terms.
 module Test.LambdaPi (tests) where
 
@@ -47,7 +47,7 @@ bothNormaliseTo name term expected =
   testGroup name
     [ testCase "reference nf" (alphaEq (nfSubst emptyScope term) expected)
     , testCase "nf"        (alphaEq (nf emptyScope term) expected)
-    , testCase "nfMono"       (alphaEq (Mono.nfMono emptyScope term) expected)
+    , testCase "nfMono"       (alphaEq (Mono.nf emptyScope term) expected)
     ]
 
 -- Beta-reduction
@@ -118,7 +118,7 @@ piDepthTests =
           Left err -> assertFailure ("parse failed: " ++ err)
           Right t  -> alphaEq (normalise emptyScope t) (nfSubst emptyScope t)
     | d <- [100 :: Int]
-    , (name, normalise) <- [("nf", nf), ("nfMono", Mono.nfMono)]
+    , (name, normalise) <- [("nf", nf), ("nfMono", Mono.nf)]
     ]
 
 -- | @n@ nested dependent function types with distinct, unused binders and no
@@ -200,8 +200,8 @@ propertyTests =
         , testProperty "nf . whnf agrees with reference nf" propWhnf
         ]
     , testGroup "nfMono (monomorphic baseline) agrees with reference nf"
-        [ testProperty "closed terms" (propClosed Mono.nfMono)
-        , testProperty "open terms (neutrals)" (propOpen Mono.nfMono)
+        [ testProperty "closed terms" (propClosed Mono.nf)
+        , testProperty "open terms (neutrals)" (propOpen Mono.nf)
         ]
     ]
 

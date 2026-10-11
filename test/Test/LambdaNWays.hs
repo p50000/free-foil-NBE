@@ -11,11 +11,11 @@ tests :: TestTree
 tests =
   testGroup "lambda-n-ways adapter" $
     [ testCase (nm ++ ": nbeNf agrees with reference nf") $
-        LNW.aeq (LNW.nbeNf t) (LNW.refNf t) @?= True
+        LNW.aeq (LNW.nfGeneric t) (LNW.nfSubst t) @?= True
     | (nm, t) <- lcTerms
     ]
       ++ [ testCase (nm ++ ": monoNf agrees with reference nf") $
-             LNW.aeq (LNW.monoNf t) (LNW.refNf t) @?= True
+             LNW.aeq (LNW.nfMono t) (LNW.nfSubst t) @?= True
          | (nm, t) <- lcTerms
          ]
       ++ [ testCase (nm ++ ": toLC . fromLC round-trips") $

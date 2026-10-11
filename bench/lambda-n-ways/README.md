@@ -16,7 +16,7 @@ groups:
   `AST` through the tested `LambdaPi.LambdaNWays` conversion (from the
   `lambda-pi-baselines` library) — so this is the
   real code, not a copy that could drift.
-- **`NBE.FreeFoil (monomorphic)`** — `LambdaPi.Monomorphic.nfMono`, a
+- **`NBE.FreeFoil (monomorphic)`** — `LambdaPi.Monomorphic.nf`, a
   hand-written NbE with a monomorphic value type (one constructor per value
   form). It runs the same algorithm on the same scope-safe `AST`, with the
   same conversion, so it differs from the generic column only in the
