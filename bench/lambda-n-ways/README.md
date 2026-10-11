@@ -23,20 +23,15 @@ groups:
   normaliser.
 - **`NBE.Foil`** — the fork's self-contained, hand-written foil NbE
   (`lib/Foil/NBE.hs`), which pays for no generic ("free") layer. The pinned
-  commit includes a strictness repair contributed from this investigation
-  (KarinaTyulebaeva/lambda-n-ways#1: `eval` made strict in its environment;
-  before it, the baseline allocated an `addSubst` thunk on every beta
-  reduction). Note that numbers published before that fix compared against
-  the pre-fix baseline, which was about 30% slower on these corpora.
+  commit includes a strictness repair (KarinaTyulebaeva/lambda-n-ways#1:
+  `eval` made strict in its environment).
 
 **The gaps between the columns are what we measure.** Generic against
-monomorphic is the cost of genericity in the normaliser, roughly what
-generated monomorphic code could save. Monomorphic against the fork is the
-cost of the generic `AST`, which both free-foil columns read, build and force.
-(The corpus is untyped — plain lambda calculus,
-no `Pi` — so this exercises the *representation and generic machinery*, not the
-dependent-type `Pi` fix. For the `Pi` numbers see the `nbe-bench` suite in
-[`../`](../).)
+monomorphic is the cost of genericity in the value domain. Monomorphic against
+the fork is the cost of the generic `AST`, which both free-foil columns read,
+build and force. The corpus is untyped lambda calculus with no `Pi`, so it
+exercises the representation and the generic machinery, not nested `Pi`
+types; for those, see the `nbe-bench` suite in [`../`](../).
 
 ## Running
 
@@ -102,34 +97,11 @@ free-foil columns agree with the baseline (up to alpha) on every corpus term.
 
 Against the baseline, the generic normaliser costs about **1.3× the time and
 1.2× the allocation** on the factorial term, and **2.4× the time and 1.8× the
-allocation** on the random corpora. At the start of the investigation these
-were 2.4×/1.8× and 4.7×/4.3×, against the then-unrepaired baseline. Against
-the monomorphic column, it costs 1.25× the time and 1.2× the allocation on the
-factorial term, and 1.4× and 1.7× on the random corpora.
+allocation** on the random corpora. Against the monomorphic column, it costs
+1.25× the time and 1.2× the allocation on the factorial term, and 1.4× and
+1.7× on the random corpora.
 
-### Where the cost went
-
-The gap was closed by a sequence of measured changes:
-
-- **Concrete `CoSinkable` instances** (fizruk/free-foil#87). The empty-instance
-  idiom left every binder operation on a GenericK representation traversal;
-  `mkFreeFoil` now generates the delegating instance. This alone was −40% time
-  and −45% allocation on the random corpora.
-- **Raw-node `evalSig`.** The `Eval` class hands the eliminator the raw syntax
-  node and the environment, so a redex no longer pays for an interpreted node
-  it immediately discards: −28% time and −29% allocation on lennart.
-- **Full specialisation.** The `nf` pragma alone left the recursive
-  `eval`/`evalSig` calls dictionary-dispatched; explicit `SPECIALIZE` pragmas
-  for `eval`/`quote`/`quoteScopedClosure` gave another −12…−18% time.
-- **Scoped pattern traversals** (fizruk/free-foil#88). `withPattern` and the
-  refreshers hand back the extended scope, removing the second traversal per
-  binder in the readback: −11% allocation, −7% time on the random corpora.
-- **Suspended nodes.** A node with binders is suspended as a whole
-  (`VSuspended`), fusing the node box with the closure; a lambda value is two
-  heap objects instead of three. This closed most of the remaining gap on the
-  factorial term.
-
-### What remains
+### Where the remaining cost is
 
 A generic node is a constructor box around a `sig` cell, so a stuck
 application or a `Pi` value costs two heap objects where the monomorphic value
@@ -141,5 +113,6 @@ half of the time gap.
 The rest lies outside the normaliser. Both free-foil columns read and build
 the generic `AST`, in which a lambda is at least four heap objects, and the
 harness forces their results through free-foil's generic `NFData` instance.
-Generated monomorphic code could remove the first part of the gap, but not
-the second, as long as the normaliser works on free-foil's `AST`.
+A monomorphic value type removes the first part of the gap, as the
+monomorphic column shows, but not the second, as long as the normaliser works
+on free-foil's `AST`.

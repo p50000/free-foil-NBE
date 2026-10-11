@@ -49,14 +49,11 @@ relative reference, not an absolute target. Reproduce with
   ≈ 11 µs), since the closure machinery is overhead when there is nothing to
   share.
 - **Nested `Pi` types:** the dependent-type worst case, and the regression
-  guard for the exponential blow-up the eager-values representation fixed.
+  guard for linear readback.
   `nf` scales *linearly* in nesting depth (100 / 500 / 1000 ≈ 14 / 71 /
   146 µs), and so does `nfSubst` (≈ 2.3 / 12 / 24 µs) — but here `nf` is a
-  **constant factor slower, ~6×**, flat in the depth (down from ~24× before the
-  performance series; the monomorphic `nf` sits at ~2.4×). `nfSubst` is a trivial single pass
+  **constant factor slower, ~6×**, flat in the depth (the monomorphic `nf`
+  sits at ~2.4×). `nfSubst` is a trivial single pass
   since these types hold no redexes, whereas NbE still builds and tears down
   closures. Recovering this factor with a shortcut for redex-free subterms is
   tracked in issue #3.
-
-These contrasts motivate future optimisation variants (de Bruijn levels, glued
-evaluation, memoised quoting, hash-consing).
