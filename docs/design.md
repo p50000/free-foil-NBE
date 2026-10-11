@@ -287,11 +287,11 @@ the types, the cost line says so.
   syntax, or generating a monomorphic normaliser outright. The monomorphic
   baseline bounds the second: the generic domain costs 1.25× on the
   factorial term and 1.4× on the random corpora on top of it.
-- **Cost.** Four pragmas per language that nothing checks for. The readback
-  wrapper is still not fully specialised; a scratch build that fixes this
-  brings generic against monomorphic to about 1.15×.
-- **Revisit when.** The wrapper fix is ready, or languages forget the pragmas
-  often enough to want them generated.
+- **Cost.** Four pragmas per language that nothing checks for. Readback is
+  still not fully specialised: the specialised `nfNbe` calls the generic
+  worker of `quote`, which receives the class dictionaries.
+- **Revisit when.** Readback is fully specialised, or languages forget the
+  pragmas often enough to want them generated.
 
 ### Eliminators that always fire
 
