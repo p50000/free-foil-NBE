@@ -6,12 +6,8 @@
 -- random terms.
 module Test.LambdaPi (tests) where
 
-import Control.DeepSeq (rnf)
-import Control.Exception (evaluate)
 import Data.List (isInfixOf)
-import Data.Maybe (isJust)
 import qualified Data.Map.Strict as Map
-import System.Timeout (timeout)
 
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -23,6 +19,7 @@ import LambdaPi
 import LambdaPi.Parser (parseLambdaPi, parseOpen, resolve, withFreeVars)
 import LambdaPi.PrettyPrint (ppValue, ppValueStruct)
 import qualified LambdaPi.Monomorphic as Mono
+import Test.Agree (agreesWithin)
 import Test.LambdaPi.Gen (Closed (..), OpenTerm (..), freeVars)
 
 tests :: TestTree
@@ -220,43 +217,14 @@ propOpen normalise (OpenTerm raw) =
     ioProperty (agrees normalise scope (resolve scope env raw))
 
 -- | Fully normalising a weak-head normal form gives the reference normal
--- form; same time budget as 'agrees'.
+-- form.
 propWhnf :: Closed -> Property
-propWhnf (Closed t) = ioProperty (agrees' emptyScope t)
-  where
-    agrees' scope term = do
-      let a = nf scope term
-          b = nfNbe scope (whnfNbe scope term)
-      nfDone  <- finished (evaluate (rnf a))
-      nbeDone <- finished (evaluate (rnf b))
-      pure $ case (nfDone, nbeDone) of
-        (True, True)  -> counterexample "nfNbe . whnfNbe and nf disagree"
-                           (property (alphaEquiv scope a b))
-        (False, _)    -> property Discard
-        (True, False) -> counterexample
-          "nfNbe . whnfNbe did not finish within the budget though nf did"
-          (property False)
-    finished act = isJust <$> timeout 1000000 act
+propWhnf (Closed t) =
+  ioProperty $
+    agreesWithin "nfNbe . whnfNbe" (alphaEquiv emptyScope)
+      (nf emptyScope t) (nfNbe emptyScope (whnfNbe emptyScope t))
 
--- | An NbE normaliser agrees with the reference normaliser up to α. The
--- untyped language has divergent terms, so each side is forced under a time
--- budget: a case is discarded only when the reference 'nf' diverges too, and
--- if 'nf' finishes while the NbE normaliser does not, the property fails.
+-- | An NbE normaliser agrees with the reference normaliser up to α.
 agrees :: Distinct n => Normaliser -> Scope n -> LambdaPi n -> IO Property
-agrees normalise scope t = do
-  let a = nf scope t
-      b = normalise scope t
-  nfDone  <- finished (evaluate (rnf a))
-  nbeDone <- finished (evaluate (rnf b))
-  pure $ case (nfDone, nbeDone) of
-    (True, True) ->
-      counterexample "NbE and nf disagree" (property (alphaEquiv scope a b))
-    (False, _) ->
-      property Discard
-    (True, False) ->
-      counterexample
-        "NbE did not finish within the budget though reference nf did"
-        (property False)
-  where
-    finished act = isJust <$> timeout budgetMicros act
-    budgetMicros = 1000000
+agrees normalise scope t =
+  agreesWithin "NbE" (alphaEquiv scope) (nf scope t) (normalise scope t)
