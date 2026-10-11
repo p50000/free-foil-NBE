@@ -61,8 +61,8 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 | `demo/<Lang>/Raw.hs`, `Generated.hs` | free-foil's Template Haskell: the configuration and the generated scope-safe syntax. |
 | `demo/LambdaPi.hs`, `demo/LambdaLet.hs`, `demo/Booleans.hs` | The languages: pattern synonyms, the `Eval` instance, a reference normaliser. |
 | `demo/LambdaPi/Parser.hs`, `PrettyPrint.hs` | Terms as string literals; two printers for values. |
-| `demo/LambdaPi/Monomorphic.hs` | The monomorphic baseline, `nfMono`. |
-| `demo/LambdaPi/LambdaNWays.hs` | The bridge to the lambda-n-ways harness. |
+| `baselines/LambdaPi/Monomorphic.hs` | The monomorphic baseline, `nfMono`. |
+| `baselines/LambdaPi/LambdaNWays.hs` | The bridge to the lambda-n-ways harness. |
 | `test/`, `bench/` | The test suite; the microbenchmarks and the lambda-n-ways harness. |
 
 ## A first look

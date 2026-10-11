@@ -1,6 +1,7 @@
 -- Own project file so cabal does not inherit the fork's cabal.project.
 -- `../../..` is the free-foil-NBE repo root, which provides the real
--- `free-foil-nbe` and `lambda-pi-demo` packages (the generic normaliser).
+-- `free-foil-nbe` package with its `lambda-pi-demo` and `lambda-pi-baselines`
+-- libraries.
 packages: . ../../..
 
 with-compiler: ghc-9.10.3
