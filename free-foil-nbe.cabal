@@ -35,20 +35,16 @@ library lambda-pi-syntax
     default-language: Haskell2010
 
 -- The lambda-pi demo language: syntax, NbE wiring, parsing, pretty-printing.
--- Public so external harnesses (e.g. bench/lambda-n-ways/) can reuse the
--- normaliser through LambdaPi.LambdaNWays.
 library lambda-pi-demo
     import:           warnings
     visibility:       public
     hs-source-dirs:   demo
     exposed-modules:  LambdaPi
+        , LambdaPi.Generated
         , LambdaPi.Parser
         , LambdaPi.PrettyPrint
         , LambdaPi.Raw
-        , LambdaPi.LambdaNWays
-        , LambdaPi.Monomorphic
         , Booleans
-    other-modules:    LambdaPi.Generated
     build-depends:    base ^>=4.20.2.0
         , bifunctors
         , containers ^>=0.7
@@ -59,6 +55,22 @@ library lambda-pi-demo
         , kind-generics-th
         , lambda-pi-syntax
         , template-haskell
+    default-language: Haskell2010
+
+-- Baselines for measuring the generic normaliser on lambda-pi: a monomorphic
+-- NbE over the same syntax, and the bridge to the lambda-n-ways harness.
+-- Public so that the harness under bench/lambda-n-ways/ can use it.
+library lambda-pi-baselines
+    import:           warnings
+    visibility:       public
+    hs-source-dirs:   baselines
+    exposed-modules:  LambdaPi.LambdaNWays
+        , LambdaPi.Monomorphic
+    build-depends:    base ^>=4.20.2.0
+        , containers ^>=0.7
+        , deepseq
+        , free-foil ^>=0.5.0
+        , lambda-pi-demo
     default-language: Haskell2010
 
 -- BNFC-generated parser/printer for lambda-let, from
@@ -115,6 +127,7 @@ test-suite free-foil-nbe-test
         , free-foil ^>=0.5.0
         , free-foil-nbe
         , lambda-let-demo
+        , lambda-pi-baselines
         , lambda-pi-demo
         , lambda-pi-syntax
         , tasty
@@ -134,6 +147,7 @@ benchmark nbe-bench
     build-depends:    base ^>=4.20.2.0
         , free-foil ^>=0.5.0
         , free-foil-nbe
+        , lambda-pi-baselines
         , lambda-pi-demo
         , tasty-bench
     default-language: Haskell2010

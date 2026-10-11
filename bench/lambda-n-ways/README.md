@@ -13,7 +13,8 @@ groups:
   `lambda-pi-demo` library: the actual `Value` / `VSuspended` / `quote`
   machinery of [`FreeFoil.NbE`](../../src/FreeFoil/NbE.hs) running over the
   generic free-monad `AST`. The harness' `LC IdInt` is bridged to the scope-safe
-  `AST` through the tested `LambdaPi.LambdaNWays` conversion — so this is the
+  `AST` through the tested `LambdaPi.LambdaNWays` conversion (from the
+  `lambda-pi-baselines` library) — so this is the
   real code, not a copy that could drift.
 - **`NBE.FreeFoil (monomorphic)`** — `LambdaPi.Monomorphic.nfMono`, a
   hand-written NbE with a monomorphic value type (one constructor per value
@@ -66,8 +67,9 @@ cabal run nbe-harness
 cabal build nbe-harness && ./medians.sh
 ```
 
-The harness pulls the generic normaliser from this repo (`free-foil-nbe` +
-`free-foil-nbe:lambda-pi-demo`, via its `cabal.project`) and the fork's
+The harness pulls the generic normaliser from this repo (`free-foil-nbe`,
+`free-foil-nbe:lambda-pi-demo` and `free-foil-nbe:lambda-pi-baselines`, via its
+`cabal.project`) and the fork's
 self-contained `Util.*` / `Foil.NBE` source plus the `lams/*.lam` corpus from the
 clone. Nothing is copied into the fork and the fork's own build is not used.
 
