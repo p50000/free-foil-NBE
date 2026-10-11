@@ -96,9 +96,9 @@ nestedLet n =
 compareNormalisers :: String -> LambdaPi VoidS -> Benchmark
 compareNormalisers name t =
   bgroup name
-    [ bench "nfNbe"  $ whnf (sizeOf . nf emptyScope) t
-    , bench "nfMono" $ whnf (sizeOf . Mono.nf emptyScope) t
-    , bench "nf"     $ whnf (sizeOf . nfSubst emptyScope) t
+    [ bench "generic" $ whnf (sizeOf . nf emptyScope) t
+    , bench "mono"    $ whnf (sizeOf . Mono.nf emptyScope) t
+    , bench "subst"   $ whnf (sizeOf . nfSubst emptyScope) t
     ]
 
 main :: IO ()

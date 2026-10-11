@@ -10,11 +10,11 @@ import qualified LambdaPi.LambdaNWays as LNW
 tests :: TestTree
 tests =
   testGroup "lambda-n-ways adapter" $
-    [ testCase (nm ++ ": nbeNf agrees with reference nf") $
+    [ testCase (nm ++ ": nfGeneric agrees with nfSubst") $
         LNW.aeq (LNW.nfGeneric t) (LNW.nfSubst t) @?= True
     | (nm, t) <- lcTerms
     ]
-      ++ [ testCase (nm ++ ": monoNf agrees with reference nf") $
+      ++ [ testCase (nm ++ ": nfMono agrees with nfSubst") $
              LNW.aeq (LNW.nfMono t) (LNW.nfSubst t) @?= True
          | (nm, t) <- lcTerms
          ]

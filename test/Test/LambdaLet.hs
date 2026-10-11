@@ -21,7 +21,7 @@ llAlphaEq a b = alphaEquiv emptyScope a b @?= True
 tests :: TestTree
 tests =
   testGroup "lambda-let"
-    [ testGroup "nf agrees with reference nf on every example"
+    [ testGroup "nf agrees with nfSubst on every example"
         [ testCase nm $
             alphaEquiv emptyScope (LL.nf emptyScope t) (LL.nfSubst emptyScope t) @?= True
         | (nm, t) <- LLE.examples

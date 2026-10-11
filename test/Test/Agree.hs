@@ -18,13 +18,13 @@ agreesWithin label same reference result = do
   resultDone    <- finished (evaluate (rnf result))
   pure $ case (referenceDone, resultDone) of
     (True, True) ->
-      counterexample (label ++ " and the reference nf disagree")
+      counterexample (label ++ " and nfSubst disagree")
         (property (same reference result))
     (False, _) ->
       property Discard
     (True, False) ->
       counterexample
-        (label ++ " did not finish within the budget though the reference nf did")
+        (label ++ " did not finish within the budget though nfSubst did")
         (property False)
   where
     finished act = isJust <$> timeout budgetMicros act

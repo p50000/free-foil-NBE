@@ -45,9 +45,9 @@ alphaEq a b = alphaEquiv emptyScope a b @?= True
 bothNormaliseTo :: TestName -> LambdaPi VoidS -> LambdaPi VoidS -> TestTree
 bothNormaliseTo name term expected =
   testGroup name
-    [ testCase "reference nf" (alphaEq (nfSubst emptyScope term) expected)
-    , testCase "nf"        (alphaEq (nf emptyScope term) expected)
-    , testCase "nfMono"       (alphaEq (Mono.nf emptyScope term) expected)
+    [ testCase "nfSubst"      (alphaEq (nfSubst emptyScope term) expected)
+    , testCase "nf"           (alphaEq (nf emptyScope term) expected)
+    , testCase "Mono.nf"      (alphaEq (Mono.nf emptyScope term) expected)
     ]
 
 -- Beta-reduction
@@ -113,12 +113,12 @@ whnfTests =
 piDepthTests :: TestTree
 piDepthTests =
   testGroup "deep Pi nesting stays linear (regression)"
-    [ testCase (name ++ " agrees with reference nf at depth " ++ show d) $
+    [ testCase (name ++ " agrees with nfSubst at depth " ++ show d) $
         case parseLambdaPi (deepPi d) of
           Left err -> assertFailure ("parse failed: " ++ err)
           Right t  -> alphaEq (normalise emptyScope t) (nfSubst emptyScope t)
     | d <- [100 :: Int]
-    , (name, normalise) <- [("nf", nf), ("nfMono", Mono.nf)]
+    , (name, normalise) <- [("nf", nf), ("Mono.nf", Mono.nf)]
     ]
 
 -- | @n@ nested dependent function types with distinct, unused binders and no
@@ -134,9 +134,9 @@ neutralTests =
   testGroup "neutrals with free variables"
     [ testCase "NbE preserves f ((\\x. x) g) as the neutral f g" $
         neutralExampleOk @?= True
-    , testCase "NbE agrees with reference nf on f ((\\x. x) g)" $
+    , testCase "NbE agrees with nfSubst on f ((\\x. x) g)" $
         openAgrees ["f", "g"] "f ((\\x. x) g)" @?= True
-    , testCase "NbE agrees with reference nf on a (\\y. b y) applied" $
+    , testCase "NbE agrees with nfSubst on a (\\y. b y) applied" $
         openAgrees ["a", "b"] "(\\x. a x) (b a)" @?= True
     ]
 
@@ -194,12 +194,12 @@ valueTests =
 propertyTests :: TestTree
 propertyTests =
   testGroup "properties"
-    [ testGroup "nf agrees with reference nf"
+    [ testGroup "nf agrees with nfSubst"
         [ testProperty "closed terms" (propClosed nf)
         , testProperty "open terms (neutrals)" (propOpen nf)
-        , testProperty "nf . whnf agrees with reference nf" propWhnf
+        , testProperty "nf . whnf agrees with nfSubst" propWhnf
         ]
-    , testGroup "nfMono (monomorphic baseline) agrees with reference nf"
+    , testGroup "Mono.nf (monomorphic baseline) agrees with nfSubst"
         [ testProperty "closed terms" (propClosed Mono.nf)
         , testProperty "open terms (neutrals)" (propOpen Mono.nf)
         ]
