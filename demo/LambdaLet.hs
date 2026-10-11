@@ -20,15 +20,15 @@ module LambdaLet
   , pattern Let
   , Value
   , eval
-  , nfNbe
-  , whnfNbe
+  , nf
+  , whnf
   , nfSubst
   , whnfSubst
   ) where
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Eval (..), eval, nfNbe, whnfNbe)
+import FreeFoil.NbE (Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
 
 import LambdaLet.Generated
@@ -44,7 +44,7 @@ import LambdaLet.Generated
 type LambdaLet n = FFTerm n
 
 -- Specialise the generic loop to this signature, as in "LambdaPi".
-{-# SPECIALIZE NbE.nfNbe :: Distinct n => Scope n -> LambdaLet n -> LambdaLet n #-}
+{-# SPECIALIZE NbE.nf :: Distinct n => Scope n -> LambdaLet n -> LambdaLet n #-}
 {-# SPECIALIZE NbE.eval ::
       (Distinct o, Distinct i) =>
       Scope o ->
@@ -53,7 +53,7 @@ type LambdaLet n = FFTerm n
       NbE.Value FFPattern TermSig o #-}
 {-# SPECIALIZE NbE.quote ::
       Distinct n => Scope n -> NbE.Value FFPattern TermSig n -> LambdaLet n #-}
-{-# SPECIALIZE NbE.quoteSuspendedScoped ::
+{-# SPECIALIZE NbE.quoteScoped ::
       (Distinct n, Distinct i) =>
       Scope n ->
       Substitution (NbE.Value FFPattern TermSig) i n ->

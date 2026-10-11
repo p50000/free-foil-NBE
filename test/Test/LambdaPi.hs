@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
--- | Tests of lambda-pi: the generic 'nfNbe' and 'whnfNbe', the monomorphic
+-- | Tests of lambda-pi: the generic 'nf' and 'whnf', the monomorphic
 -- baseline 'Mono.nfMono', and the reference normaliser, on examples and
 -- random terms.
 module Test.LambdaPi (tests) where
@@ -46,7 +46,7 @@ bothNormaliseTo :: TestName -> LambdaPi VoidS -> LambdaPi VoidS -> TestTree
 bothNormaliseTo name term expected =
   testGroup name
     [ testCase "reference nf" (alphaEq (nfSubst emptyScope term) expected)
-    , testCase "nfNbe"        (alphaEq (nfNbe emptyScope term) expected)
+    , testCase "nf"        (alphaEq (nf emptyScope term) expected)
     , testCase "nfMono"       (alphaEq (Mono.nfMono emptyScope term) expected)
     ]
 
@@ -76,7 +76,7 @@ underBinderTests =
     , bothNormaliseTo "redex reduced under two lambdas"
         "\\f. \\y. (\\x. x) (f y)" "\\g. \\w. g w"
     , testCase "appTwo constant matches its string form" $
-        alphaEq (nfNbe emptyScope appTwo) "\\s. \\z. s (s (s (s z)))"
+        alphaEq (nf emptyScope appTwo) "\\s. \\z. s (s (s (s z)))"
     ]
 
 -- Pi
@@ -96,15 +96,15 @@ piTests =
 
 whnfTests :: TestTree
 whnfTests =
-  testGroup "whnfNbe (weak-head normal form)"
+  testGroup "whnf (weak-head normal form)"
     [ testCase "reduces the head redex" $
-        alphaEq (whnfNbe emptyScope "(\\x. x) (\\y. y)") "\\z. z"
+        alphaEq (whnf emptyScope "(\\x. x) (\\y. y)") "\\z. z"
     , testCase "leaves a redex under a lambda untouched" $
-        alphaEq (whnfNbe emptyScope "\\f. (\\x. x) f") "\\f. (\\x. x) f"
-    , testCase "nfNbe, in contrast, reduces under the lambda" $
-        alphaEq (nfNbe emptyScope "\\f. (\\x. x) f") "\\g. g"
+        alphaEq (whnf emptyScope "\\f. (\\x. x) f") "\\f. (\\x. x) f"
+    , testCase "nf, in contrast, reduces under the lambda" $
+        alphaEq (nf emptyScope "\\f. (\\x. x) f") "\\g. g"
     , testCase "leaves a redex in a Pi codomain under a binder" $
-        alphaEq (whnfNbe emptyScope "\\f. (a : f) -> (\\y. y) a")
+        alphaEq (whnf emptyScope "\\f. (a : f) -> (\\y. y) a")
                 "\\f. (a : f) -> (\\y. y) a"
     ]
 
@@ -118,7 +118,7 @@ piDepthTests =
           Left err -> assertFailure ("parse failed: " ++ err)
           Right t  -> alphaEq (normalise emptyScope t) (nfSubst emptyScope t)
     | d <- [100 :: Int]
-    , (name, normalise) <- [("nfNbe", nfNbe), ("nfMono", Mono.nfMono)]
+    , (name, normalise) <- [("nf", nf), ("nfMono", Mono.nfMono)]
     ]
 
 -- | @n@ nested dependent function types with distinct, unused binders and no
@@ -147,7 +147,7 @@ openAgrees names s =
   withFreeVars emptyScope Map.empty names $ \scope env ->
     case parseOpen scope env s of
       Left _  -> False
-      Right t -> alphaEquiv scope (nfNbe scope t) (nfSubst scope t)
+      Right t -> alphaEquiv scope (nf scope t) (nfSubst scope t)
 
 -- Parser and printer
 
@@ -194,10 +194,10 @@ valueTests =
 propertyTests :: TestTree
 propertyTests =
   testGroup "properties"
-    [ testGroup "nfNbe agrees with reference nf"
-        [ testProperty "closed terms" (propClosed nfNbe)
-        , testProperty "open terms (neutrals)" (propOpen nfNbe)
-        , testProperty "nfNbe . whnfNbe agrees with reference nf" propWhnf
+    [ testGroup "nf agrees with reference nf"
+        [ testProperty "closed terms" (propClosed nf)
+        , testProperty "open terms (neutrals)" (propOpen nf)
+        , testProperty "nf . whnf agrees with reference nf" propWhnf
         ]
     , testGroup "nfMono (monomorphic baseline) agrees with reference nf"
         [ testProperty "closed terms" (propClosed Mono.nfMono)
@@ -205,7 +205,7 @@ propertyTests =
         ]
     ]
 
--- | A normaliser under test, polymorphic in the scope like 'nfNbe'.
+-- | A normaliser under test, polymorphic in the scope like 'nf'.
 type Normaliser = forall n. Distinct n => Scope n -> LambdaPi n -> LambdaPi n
 
 propClosed :: Normaliser -> Closed -> Property
@@ -221,8 +221,8 @@ propOpen normalise (OpenTerm raw) =
 propWhnf :: Closed -> Property
 propWhnf (Closed t) =
   ioProperty $
-    agreesWithin "nfNbe . whnfNbe" (alphaEquiv emptyScope)
-      (nfSubst emptyScope t) (nfNbe emptyScope (whnfNbe emptyScope t))
+    agreesWithin "nf . whnf" (alphaEquiv emptyScope)
+      (nfSubst emptyScope t) (nf emptyScope (whnf emptyScope t))
 
 -- | An NbE normaliser agrees with the reference normaliser up to α.
 agrees :: Distinct n => Normaliser -> Scope n -> LambdaPi n -> IO Property

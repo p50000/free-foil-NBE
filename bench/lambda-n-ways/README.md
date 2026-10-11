@@ -9,7 +9,7 @@ Karina Tyulebaeva's foil fork,
 Three implementations are compared on the fork's `nf` / `random15` / `random20`
 groups:
 
-- **`NBE.FreeFoil (generic)`** — `LambdaPi.nfNbe` from this repo's
+- **`NBE.FreeFoil (generic)`** — `LambdaPi.nf` from this repo's
   `lambda-pi-demo` library: the actual `Value` / `VSuspended` / `quote`
   machinery of [`FreeFoil.NbE`](../../src/FreeFoil/NbE.hs) running over the
   generic free-monad `AST`. The harness' `LC IdInt` is bridged to the scope-safe
@@ -118,7 +118,7 @@ The gap was closed by a sequence of measured changes:
 - **Raw-node `evalSig`.** The `Eval` class hands the eliminator the raw syntax
   node and the environment, so a redex no longer pays for an interpreted node
   it immediately discards: −28% time and −29% allocation on lennart.
-- **Full specialisation.** The `nfNbe` pragma alone left the recursive
+- **Full specialisation.** The `nf` pragma alone left the recursive
   `eval`/`evalSig` calls dictionary-dispatched; explicit `SPECIALIZE` pragmas
   for `eval`/`quote`/`quoteScopedClosure` gave another −12…−18% time.
 - **Scoped pattern traversals** (fizruk/free-foil#88). `withPattern` and the

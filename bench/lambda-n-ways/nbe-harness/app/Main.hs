@@ -3,7 +3,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 -- | The lambda-n-ways benchmark, @nf@, @random15@ and @random20@, over three
--- normalisers: the generic 'LP.nfNbe' through the "LambdaPi.LambdaNWays"
+-- normalisers: the generic 'LP.nf' through the "LambdaPi.LambdaNWays"
 -- bridge, the monomorphic 'Mono.nfMono' over the same syntax, and the fork's
 -- own hand-written foil NbE. Generic against monomorphic measures the cost of
 -- the generic value domain; monomorphic against the fork, the cost of the
@@ -51,7 +51,7 @@ genericImpl =
     { impl_name = "NBE.FreeFoil (generic)",
       impl_fromLC = LNW.fromLC . toLNW,
       impl_toLC = fromLNW . LNW.toLC,
-      impl_nf = LP.nfNbe emptyScope,
+      impl_nf = LP.nf emptyScope,
       impl_nfi = error "nfi unimplemented",
       impl_aeq = alphaEquiv emptyScope
     }

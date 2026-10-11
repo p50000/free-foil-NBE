@@ -10,7 +10,7 @@
 -- language. A language is a signature bifunctor @sig@ and a binder type, as
 -- in "Control.Monad.Free.Foil"; to normalise its terms it supplies one 'Eval'
 -- instance, its elimination rules. The semantic domain ('Value'), evaluation
--- ('eval'), readback ('quote') and the normalisers 'nfNbe' and 'whnfNbe' are
+-- ('eval'), readback ('quote') and the normalisers 'nf' and 'whnf' are
 -- generic.
 --
 -- The normaliser is untyped and intensional: it decides β and the language's
@@ -20,12 +20,12 @@
 -- A language's signature must be a 'Bifunctor' and a 'Bifoldable', both
 -- derivable, and representational in both parameters (see 'evalNode'). Its
 -- binder type must be 'Foil.CoSinkable', which free-foil generates, and
--- 'Foil.HasNameBinders', plus 'Foil.SinkableK' for 'whnfNbe'; free-foil has
+-- 'Foil.HasNameBinders', plus 'Foil.SinkableK' for 'whnf'; free-foil has
 -- generic defaults for these two.
 --
 -- The recursive functions are @INLINABLE@, so a language can specialise them
--- to its signature with @SPECIALIZE@ pragmas for 'nfNbe', 'eval', 'quote' and
--- 'quoteSuspendedScoped', as "LambdaPi" does. At the moment this specialises
+-- to its signature with @SPECIALIZE@ pragmas for 'nf', 'eval', 'quote' and
+-- 'quoteScoped', as "LambdaPi" does. At the moment this specialises
 -- evaluation only, and readback still passes dictionaries.
 module FreeFoil.NbE
   ( -- * Semantic domain
@@ -36,11 +36,11 @@ module FreeFoil.NbE
   , evalNode
     -- * Readback
   , quote
-  , quoteSuspendedScoped
-  , nfNbe
+  , quoteScoped
+  , nf
   , quoteWhnf
-  , freezeSuspendedScoped
-  , whnfNbe
+  , freezeScoped
+  , whnf
   ) where
 
 import qualified Control.Monad.Foil          as Foil
@@ -171,7 +171,7 @@ ensureBivacuousSecond x
 -- * Readback
 
 -- | Read a value back into a term. Term subterms recurse directly; scoped
--- subterms are read back under their binder by 'quoteSuspendedScoped'.
+-- subterms are read back under their binder by 'quoteScoped'.
 quote ::
   (Eval binder sig, Foil.Distinct n, Foil.HasNameBinders binder, Foil.CoSinkable binder) =>
   Foil.Scope n ->
@@ -181,32 +181,32 @@ quote ::
 quote scope = \case
   VVar x -> Var x
   VNode node -> Node $! bimap absurd (quote scope) node
-  VSuspended env node -> Node $! bimap (quoteSuspendedScoped scope env) (quote scope) node
+  VSuspended env node -> Node $! bimap (quoteScoped scope env) (quote scope) node
 
 -- | Read back one scoped subterm of a suspended node: refresh the binder,
 -- extend the captured environment with it as a fresh neutral, evaluate the
 -- body once under that environment, and quote the result. Exported so that
 -- a language can specialise it.
-quoteSuspendedScoped ::
+quoteScoped ::
   (Eval binder sig, Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder, Foil.HasNameBinders binder) =>
   Foil.Scope n ->
   Foil.Substitution (Value binder sig) i n ->
   ScopedAST binder sig i ->
   ScopedAST binder sig n
-{-# INLINABLE quoteSuspendedScoped #-}
-quoteSuspendedScoped scope env (ScopedAST binder body) =
+{-# INLINABLE quoteScoped #-}
+quoteScoped scope env (ScopedAST binder body) =
   Foil.withRefreshedPattern scope binder $ \extendEnv binder' scope' ->
     case Foil.assertDistinct binder of
       Foil.Distinct -> ScopedAST binder' (quote scope' (eval scope' (extendEnv env) body))
 
 -- | Normal form: evaluate, then read back fully.
-nfNbe ::
+nf ::
   (Eval binder sig, Foil.Distinct n, Foil.HasNameBinders binder, Foil.CoSinkable binder) =>
   Foil.Scope n ->
   AST binder sig n ->
   AST binder sig n
-{-# INLINABLE nfNbe #-}
-nfNbe scope = quote scope . eval scope Foil.identitySubst
+{-# INLINABLE nf #-}
+nf scope = quote scope . eval scope Foil.identitySubst
 
 -- | Read back the head of a value only: quote its term subterms, which are
 -- values already, and freeze its scoped subterms instead of normalising under
@@ -219,19 +219,19 @@ quoteWhnf ::
 quoteWhnf scope = \case
   VVar x -> Var x
   VNode node -> Node $ bimap absurd (quote scope) node
-  VSuspended env node -> Node $ bimap (freezeSuspendedScoped scope env) (quote scope) node
+  VSuspended env node -> Node $ bimap (freezeScoped scope env) (quote scope) node
 
 -- | Freeze one scoped subterm of a suspended node without evaluating under
 -- its binder: refresh the binder and substitute the captured environment,
 -- quoted to terms, into the still-syntactic body. 'substitute' only renames,
 -- so a redex under the binder survives.
-freezeSuspendedScoped ::
+freezeScoped ::
   (Eval binder sig, Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder, Foil.HasNameBinders binder, Foil.SinkableK binder) =>
   Foil.Scope n ->
   Foil.Substitution (Value binder sig) i n ->
   ScopedAST binder sig i ->
   ScopedAST binder sig n
-freezeSuspendedScoped scope env (ScopedAST binder body) =
+freezeScoped scope env (ScopedAST binder body) =
   Foil.withRefreshedPattern scope binder $ \extendSubst binder' scope' ->
     ScopedAST binder' (substitute scope' (extendSubst (quoteSubst scope env)) body)
 
@@ -246,12 +246,12 @@ quoteSubst scope (Foil.UnsafeSubstitution m) =
   Foil.UnsafeSubstitution (IntMap.map (quote scope) m)
 
 -- | Weak-head normal form: evaluate, then read back the head only. Shares
--- 'eval' with 'nfNbe'; 'quoteWhnf' does not go under binders, so a redex
+-- 'eval' with 'nf'; 'quoteWhnf' does not go under binders, so a redex
 -- under a lambda survives. Term positions are values already, so the two
 -- readbacks differ only at scoped positions.
-whnfNbe ::
+whnf ::
   (Eval binder sig, Foil.Distinct n, Foil.HasNameBinders binder, Foil.CoSinkable binder, Foil.SinkableK binder) =>
   Foil.Scope n ->
   AST binder sig n ->
   AST binder sig n
-whnfNbe scope = quoteWhnf scope . eval scope Foil.identitySubst
+whnf scope = quoteWhnf scope . eval scope Foil.identitySubst

@@ -3,7 +3,7 @@
 ## Unreleased
 
 - The generic core: the semantic domain `Value`, the `Eval` class, generic
-  evaluation and readback, `nfNbe` and `whnfNbe`.
+  evaluation and readback, `nf` and `whnf`.
 - Three demonstration languages, each with an `Eval` instance: lambda-pi,
   Booleans and lambda-let. lambda-pi and lambda-let also have a BNFC grammar,
   generated scope-safe syntax, a reference normaliser and a parser.

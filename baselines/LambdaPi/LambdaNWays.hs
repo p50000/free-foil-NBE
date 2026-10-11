@@ -69,7 +69,7 @@ toLC = \case
 
 -- | Normal form by the generic NbE.
 nbeNf :: LC IdInt -> LC IdInt
-nbeNf = toLC . LP.nfNbe emptyScope . fromLC
+nbeNf = toLC . LP.nf emptyScope . fromLC
 
 -- | Normal form by the monomorphic NbE.
 monoNf :: LC IdInt -> LC IdInt

@@ -1,7 +1,7 @@
 # Benchmarks
 
 Microbenchmarks for lambda-pi normalisation. Each input is normalised three
-ways: by the generic NbE (`nfNbe`), by the hand-written monomorphic NbE
+ways: by the generic NbE (`nf`), by the hand-written monomorphic NbE
 (`nfMono`, from `LambdaPi.Monomorphic`, a baseline for the generic one) and by
 the reference substitution normaliser (`nfSubst`). Thus they are directly comparable
 on the same terms. Future implementation variants can be added as extra rows in
@@ -28,7 +28,7 @@ Uses [`tasty-bench`](https://hackage.haskell.org/package/tasty-bench); results
 are forced with `sizeOf` (walking the whole normal form) rather than an
 `NFData` instance, matching free-foil's own normalisation benchmark. Every
 component is built at `-O2` (`optimization: 2` in `cabal.project`), so the
-library where `nfNbe`/`nfSubst` live is optimised, not just the benchmark driver.
+library where `nf`/`nfSubst` live is optimised, not just the benchmark driver.
 
 ## A sample run
 
@@ -38,10 +38,10 @@ relative reference, not an absolute target. Reproduce with
 `cabal bench nbe-bench`.
 
 - **Church `m^n`:** NbE wins by a widening margin as terms grow — at
-  `2^10 = 1024`, `nfNbe` ≈ 55 µs vs `nfSubst` ≈ 500 µs (**~9×**); `nfMono` ≈ 42 µs.
+  `2^10 = 1024`, `nf` ≈ 55 µs vs `nfSubst` ≈ 500 µs (**~9×**); `nfMono` ≈ 42 µs.
   Closures/sharing pay off on the exponential blow-up.
 - **Church arithmetic (mult/add):** NbE ≈ 2× faster across the board.
-- **Nested `let` (faithful):** the dramatic case — at depth 1000, `nfNbe`
+- **Nested `let` (faithful):** the dramatic case — at depth 1000, `nf`
   ≈ 38 µs vs `nfSubst` ≈ 230 ms (**~6000×**). The reference re-copies the term on
   every binding (substitution blows up); NbE's environment/closures avoid it.
 - **Nested identity redexes:** the one case NbE *loses* — ~1.4× slower than
@@ -50,8 +50,8 @@ relative reference, not an absolute target. Reproduce with
   share.
 - **Nested `Pi` types:** the dependent-type worst case, and the regression
   guard for the exponential blow-up the eager-values representation fixed.
-  `nfNbe` scales *linearly* in nesting depth (100 / 500 / 1000 ≈ 14 / 71 /
-  146 µs), and so does `nfSubst` (≈ 2.3 / 12 / 24 µs) — but here `nfNbe` is a
+  `nf` scales *linearly* in nesting depth (100 / 500 / 1000 ≈ 14 / 71 /
+  146 µs), and so does `nfSubst` (≈ 2.3 / 12 / 24 µs) — but here `nf` is a
   **constant factor slower, ~6×**, flat in the depth (down from ~24× before the
   performance series; `nfMono` sits at ~2.4×). `nfSubst` is a trivial single pass
   since these types hold no redexes, whereas NbE still builds and tears down

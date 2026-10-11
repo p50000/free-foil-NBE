@@ -20,8 +20,8 @@ module LambdaPi
   , pattern Pi
   , Value
   , eval
-  , nfNbe
-  , whnfNbe
+  , nf
+  , whnf
   , whnfSubst
   , nfSubst
   , two
@@ -31,7 +31,7 @@ module LambdaPi
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Eval (..), eval, nfNbe, whnfNbe)
+import FreeFoil.NbE (Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
 
 import LambdaPi.Generated
@@ -47,10 +47,10 @@ import LambdaPi.Generated
 type LambdaPi n = FFTerm n
 
 -- Specialise the generic loop to this signature. Each recursive function
--- needs its own pragma, since the nfNbe one alone leaves eval passing
+-- needs its own pragma, since the nf one alone leaves eval passing
 -- dictionaries. The quote pragmas do not take effect yet: the specialised
--- nfNbe still calls the generic quote worker with the dictionaries.
-{-# SPECIALIZE NbE.nfNbe :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n #-}
+-- nf still calls the generic quote worker with the dictionaries.
+{-# SPECIALIZE NbE.nf :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n #-}
 {-# SPECIALIZE NbE.eval ::
       (Distinct o, Distinct i) =>
       Scope o ->
@@ -59,7 +59,7 @@ type LambdaPi n = FFTerm n
       NbE.Value FFPattern TermSig o #-}
 {-# SPECIALIZE NbE.quote ::
       Distinct n => Scope n -> NbE.Value FFPattern TermSig n -> LambdaPi n #-}
-{-# SPECIALIZE NbE.quoteSuspendedScoped ::
+{-# SPECIALIZE NbE.quoteScoped ::
       (Distinct n, Distinct i) =>
       Scope n ->
       Substitution (NbE.Value FFPattern TermSig) i n ->
@@ -153,6 +153,6 @@ neutralExampleOk =
           g = nameOf gBinder
           idLam = withFresh scope (\x -> Lam x (Var (nameOf x)))
           term = App (Var f) (App idLam (Var g))
-      in case nfNbe scope term of
+      in case nf scope term of
            App (Var f') (Var g') -> f' == f && g' == g
            _                     -> False
