@@ -17,7 +17,7 @@ lambda-pi (functions and the dependent function type), Booleans (`if`, no
 binders) and lambda-let (`let`). A hand-written monomorphic NbE serves as a
 baseline; the generic normaliser runs within 1.25× of it on the
 lambda-n-ways factorial term and 1.4× on its random corpora. What is
-implemented, the decisions behind the design, and what is planned are in
+implemented, the decisions behind the design, and what is not supported are in
 [docs/design.md](docs/design.md).
 
 ## Build, test, benchmark
@@ -49,7 +49,7 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 | `demo/LambdaPi/Monomorphic.hs` | The monomorphic baseline, `nfMono`. |
 | `demo/LambdaPi/LambdaNWays.hs` | The bridge to the lambda-n-ways harness. |
 | `test/`, `bench/` | The test suite; the microbenchmarks and the lambda-n-ways harness. |
-| `docs/design.md` | What it is, the interface, assumptions, decisions, plans. |
+| `docs/design.md` | What it is, the interface, assumptions, decisions, limitations. |
 
 ## A first look
 

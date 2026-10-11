@@ -1,7 +1,7 @@
 # Design
 
 This note says what the library does, what the entities are, what it
-assumes, which decisions it rests on, and what is planned next. How
+assumes, which decisions it rests on, and what it does not support. How
 normalisation by evaluation works is not explained here; the references at
 the end cover it.
 
@@ -155,8 +155,8 @@ the types, the cost line says so.
   `letUnused` test, not by the type. The split would add an injection back
   for readback, dispatch over a signature sum on the value side, and an
   unmeasured effect on speed.
-- **Revisit when.** Extensional booleans or sums enter the zoo, or the
-  planned experiment shows the split costs nothing on intensional languages.
+- **Revisit when.** A language needs value formers that its syntax lacks,
+  such as extensional booleans or sums.
 
 ### Eager values, whole-node suspension
 
@@ -220,9 +220,7 @@ the types, the cost line says so.
   sums.
 - **Cost.** No η. The typed readback needs types as values in the domain and
   a typing discipline for each language that wants it.
-- **Revisit when.** The next planned step adds the typed readback as an
-  opt-in, with η for functions in lambda-pi; the untyped one stays the
-  default.
+- **Revisit when.** A language needs η, for functions, records or unit.
 
 ### Values are data, not host-language closures
 
@@ -308,8 +306,7 @@ the types, the cost line says so.
   under "One signature for terms and values".
 - **Revisit when.** Other eliminators of this shape are added, such as a type
   ascription `(e : A)` that evaluation erases or an explicit substitution
-  node. The two-signature experiment will measure whether keeping them out
-  of values costs or saves time.
+  node.
 
 ### Weak-head normal forms under eager values
 
@@ -327,32 +324,18 @@ the types, the cost line says so.
   evaluating arguments, which needs lazy term positions, the glued or spine
   representation.
 
-## What is planned
+## What is not supported
 
-In the order we intend to build it. Each step is one pull request with the
-implementation, an example and its documentation.
+- **η and typed readback.** Readback consults no types, so normal forms are
+  not η-normal; see "Untyped, intensional readback".
+- **Value formers the syntax lacks**, as extensional booleans and sums need;
+  see "One signature for terms and values".
+- **Conversion checking as an operation of its own.** Two terms are compared
+  by normalising both and checking the normal forms with `alphaEquiv`.
+- **Top-level definitions.** lambda-let has local `let` only.
+- **Metavariables and unification.**
 
-1. **Typed readback and η for functions.** An opt-in readback that takes a
-   semantic type; the untyped one stays the default. First payoff: η for
-   functions in lambda-pi, where `Pi` is already a value.
-2. **Products and Σ**, with η for pairs on the same readback.
-3. **Two signatures.** A value signature distinct from the term signature,
-   `EvalTo sigT sigV`, with the term signature injected by default. Before
-   it, an experiment on lambda-let: does a value signature without `let` cost
-   or save time against the single signature?
-4. **Extensional booleans**, the first language whose value domain has
-   formers its syntax lacks, and the road to extensional sums.
-5. **Universes**: types as values in general.
-6. **Conversion checking** as an operation of its own. Compare weak-head
-   values spine-wise, and unfold definitions only when the spines disagree,
-   which is glued evaluation. Today two terms are normalised and compared
-   with `alphaEquiv`.
-7. **Metavariables and pattern unification**, on top of conversion checking.
-
-Off the critical path, as further demonstration languages when useful:
-naturals with a recursor, and products and sums by their β rules alone.
-
-Two open performance items from review, neither scheduled.
+Two open performance items:
 [#3](https://github.com/p50000/free-foil-NBE/issues/3): a shortcut for
 subterms that contain no redex, where the generic normaliser is about 6×
 slower than a single structural pass.
