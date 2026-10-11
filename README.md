@@ -20,6 +20,22 @@ lambda-n-ways factorial term and 1.4× on its random corpora. What is
 implemented, the decisions behind the design, and what is not supported are in
 [docs/design.md](docs/design.md).
 
+## Limitations
+
+- Readback consults no types: normal forms are β-normal, with the language's
+  own reductions, and not η-normal.
+- Values are built over the same signature as terms, so a language cannot
+  have value formers that its syntax lacks, as extensional booleans and sums
+  need.
+- Two terms are compared by normalising both and checking the normal forms
+  with `alphaEquiv`; there is no conversion checking on values.
+- There are no top-level definitions; lambda-let has local `let` only.
+- The core works with any free-foil pattern, but the demo languages bind one
+  variable at a time, and no test covers patterns with several variables.
+- The languages are untyped, so normalisation need not terminate.
+- Readback does not α-normalise: variables are named by their foil
+  identifiers, so α-equivalent normal forms may print differently.
+
 ## Build, test, benchmark
 
 GHC 9.10.3 and cabal; the compiler is pinned in `cabal.project`. The
