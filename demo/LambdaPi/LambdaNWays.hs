@@ -4,8 +4,9 @@
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
--- | Bridge to Weirich's @lambda-n-ways@ benchmark harness, which works over
--- an untyped named lambda calculus @LC IdInt@. 'LC' and 'IdInt' mirror the
+-- | Bridge to Weirich's @lambda-n-ways@ benchmark harness, in Karina
+-- Tyulebaeva's fork with foil entries. The harness works over an untyped
+-- named lambda calculus @LC IdInt@. 'LC' and 'IdInt' mirror the
 -- harness's types so that the bridge is testable here; the harness under
 -- @bench/lambda-n-ways@ maps them onto the real ones.
 module LambdaPi.LambdaNWays

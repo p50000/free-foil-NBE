@@ -13,9 +13,10 @@
 module Main (main) where
 
 import Control.DeepSeq (force, rnf)
-import Control.Monad (forM_)
+import Control.Monad (forM, when)
 import Data.Maybe (fromMaybe)
 import System.Environment (lookupEnv)
+import System.Exit (exitFailure)
 import Test.Tasty.Bench
 
 import qualified Util.IdInt as U
@@ -99,11 +100,13 @@ main = do
   random15 <- getTerms (dir ++ "random15.lam")
   random20 <- getTerms (dir ++ "random20.lam")
   let corpus = lennart : random15 ++ random20
-  forM_ [genericImpl, monoImpl] $ \impl -> do
+  bads <- forM [genericImpl, monoImpl] $ \impl -> do
     let bad = length (filter (not . agrees impl) corpus)
     putStrLn $ "correctness: " ++ impl_name impl ++ " vs fork baseline on "
       ++ show (length corpus) ++ " terms: "
       ++ (if bad == 0 then "ALL AGREE" else show bad ++ " MISMATCH(ES)")
+    pure bad
+  when (any (> 0) bads) exitFailure
   defaultMain
     [ bgroup "nf"       [ benchOne  i lennart  | i <- impls ]
     , bgroup "random15" [ benchMany i random15 | i <- impls ]
