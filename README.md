@@ -4,8 +4,8 @@ Normalisation by evaluation (NbE), generic in the signature of the object
 language, on top of [free-foil](https://github.com/fizruk/free-foil). A
 language is a signature bifunctor and a binder type; it supplies its
 elimination rules as one instance of a class with one method, and inherits
-the semantic domain, evaluation, readback and the normalisers `nfNbe` and
-`whnfNbe`. The normaliser is untyped and intensional: it decides β and the
+the semantic domain, evaluation, readback and the normalisers `nf` and
+`whnf`. The normaliser is untyped and intensional: it decides β and the
 language's own reductions, not η.
 
 This realises the generic closure that the Free Foil paper (Kudasov,
@@ -56,12 +56,12 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 
 | Path | What it is |
 |------|-----------|
-| `src/FreeFoil/NbE.hs` | The core: `Value`, the `Eval` class, generic `eval` and `quote`, `nfNbe` and `whnfNbe`. |
+| `src/FreeFoil/NbE.hs` | The core: `Value`, the `Eval` class, generic `eval` and `quote`, `nf` and `whnf`. |
 | `demo/grammar/<Lang>/Syntax.cf`, `gen/<Lang>/` | The LBNF grammar of each demo language and the committed BNFC output. |
 | `demo/<Lang>/Raw.hs`, `Generated.hs` | free-foil's Template Haskell: the configuration and the generated scope-safe syntax. |
 | `demo/LambdaPi.hs`, `demo/LambdaLet.hs`, `demo/Booleans.hs` | The languages: pattern synonyms, the `Eval` instance, a reference normaliser. |
 | `demo/LambdaPi/Parser.hs`, `PrettyPrint.hs` | Terms as string literals; two printers for values. |
-| `baselines/LambdaPi/Monomorphic.hs` | The monomorphic baseline, `nfMono`. |
+| `baselines/LambdaPi/Monomorphic.hs` | The monomorphic baseline, `LambdaPi.Monomorphic.nf`. |
 | `baselines/LambdaPi/LambdaNWays.hs` | The bridge to the lambda-n-ways harness. |
 | `test/`, `bench/` | The test suite; the microbenchmarks and the lambda-n-ways harness. |
 
@@ -75,11 +75,11 @@ ghci> :set -XOverloadedStrings -XDataKinds
 ghci> import LambdaPi
 ghci> import LambdaPi.Parser ()
 ghci> import Control.Monad.Foil (emptyScope)
-ghci> nfNbe emptyScope ("(\\x. x) (\\y. y)" :: LambdaPi VoidS)
+ghci> nf emptyScope ("(\\x. x) (\\y. y)" :: LambdaPi VoidS)
 \ x0 . x0
-ghci> whnfNbe emptyScope ("\\f. (\\x. x) f" :: LambdaPi VoidS)   -- stops at the binder
+ghci> whnf emptyScope ("\\f. (\\x. x) f" :: LambdaPi VoidS)   -- stops at the binder
 \ x0 . (\ x1 . x1) x0
-ghci> nfNbe emptyScope ("(a : \\t. t) -> (\\y. y) a" :: LambdaPi VoidS)
+ghci> nf emptyScope ("(a : \\t. t) -> (\\y. y) a" :: LambdaPi VoidS)
 (x0 : \ x0 . x0) -> x0
 ```
 

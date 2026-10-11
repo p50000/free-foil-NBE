@@ -21,7 +21,8 @@ import Control.Monad.Foil
 import Control.Monad.Free.Foil
 import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor)
 
-import FreeFoil.NbE (Eval (evalSig), Value (VNode), eval, evalNode, nfNbe)
+import FreeFoil.NbE (Eval (evalSig), Value (VNode), eval, evalNode)
+import qualified FreeFoil.NbE as NbE
 
 -- | Two introduction forms and one eliminator; no scoped positions.
 data BoolSig scope term
@@ -58,6 +59,6 @@ instance Eval NameBinder BoolSig where
       cond'          -> VNode (IfSig cond' (eval scope env t) (eval scope env f))
     node -> evalNode (eval scope) env node
 
--- | Normal form, inherited from the generic 'nfNbe'.
+-- | Normal form, inherited from the generic 'NbE.nf'.
 nf :: Distinct n => Scope n -> BoolTm n -> BoolTm n
-nf = nfNbe
+nf = NbE.nf

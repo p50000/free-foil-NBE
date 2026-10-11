@@ -29,8 +29,8 @@ letChurch = "let two = \\s. \\z. s (s z) in two two"
 letShadow :: LambdaLet VoidS
 letShadow = "let x = \\a. a in let x = \\b. b b in x"
 
--- | A @let@ under a lambda: @nfNbe@ reduces it to @\\f. f f@, while
--- @whnfNbe@ stops at the binder and leaves it in place.
+-- | A @let@ under a lambda: @nf@ reduces it to @\\f. f f@, while
+-- @whnf@ stops at the binder and leaves it in place.
 letUnderLam :: LambdaLet VoidS
 letUnderLam = "\\f. let y = f in y y"
 

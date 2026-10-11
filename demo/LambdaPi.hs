@@ -20,19 +20,18 @@ module LambdaPi
   , pattern Pi
   , Value
   , eval
-  , nfNbe
-  , whnfNbe
-  , whnf
   , nf
-  , nfd
+  , whnf
+  , whnfSubst
+  , nfSubst
   , two
   , appTwo
-  , neutralNbeOk
+  , neutralExampleOk
   ) where
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Eval (..), eval, nfNbe, whnfNbe)
+import FreeFoil.NbE (Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
 
 import LambdaPi.Generated
@@ -48,10 +47,10 @@ import LambdaPi.Generated
 type LambdaPi n = FFTerm n
 
 -- Specialise the generic loop to this signature. Each recursive function
--- needs its own pragma, since the nfNbe one alone leaves eval passing
+-- needs its own pragma, since the nf one alone leaves eval passing
 -- dictionaries. The quote pragmas do not take effect yet: the specialised
--- nfNbe still calls the generic quote worker with the dictionaries.
-{-# SPECIALIZE NbE.nfNbe :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n #-}
+-- nf still calls the generic quote worker with the dictionaries.
+{-# SPECIALIZE NbE.nf :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n #-}
 {-# SPECIALIZE NbE.eval ::
       (Distinct o, Distinct i) =>
       Scope o ->
@@ -60,7 +59,7 @@ type LambdaPi n = FFTerm n
       NbE.Value FFPattern TermSig o #-}
 {-# SPECIALIZE NbE.quote ::
       Distinct n => Scope n -> NbE.Value FFPattern TermSig n -> LambdaPi n #-}
-{-# SPECIALIZE NbE.quoteSuspendedScoped ::
+{-# SPECIALIZE NbE.quoteScoped ::
       (Distinct n, Distinct i) =>
       Scope n ->
       Substitution (NbE.Value FFPattern TermSig) i n ->
@@ -100,40 +99,36 @@ instance Eval FFPattern TermSig where
     node -> NbE.evalNode (eval scope) env node
 
 -- | Weak-head normal form by substitution, the reference for the tests.
-whnf :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n
-whnf scope = \case
+whnfSubst :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n
+whnfSubst scope = \case
   App fun arg ->
-    case whnf scope fun of
+    case whnfSubst scope fun of
       Lam binder body ->
         let subst = addSubst identitySubst binder arg
-        in whnf scope (substitute scope subst body)
+        in whnfSubst scope (substitute scope subst body)
       fun' -> App fun' arg
   t -> t
 
 -- | Normal form by substitution.
-nf :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n
-nf scope = \case
+nfSubst :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n
+nfSubst scope = \case
   Lam binder body ->
     case assertDistinct binder of
       Distinct ->
         let scope' = extendScope binder scope
-        in Lam binder (nf scope' body)
+        in Lam binder (nfSubst scope' body)
   Pi dom binder body ->
     case assertDistinct binder of
       Distinct ->
         let scope' = extendScope binder scope
-        in Pi (nf scope dom) binder (nf scope' body)
+        in Pi (nfSubst scope dom) binder (nfSubst scope' body)
   App fun arg ->
-    case whnf scope fun of
+    case whnfSubst scope fun of
       Lam binder body ->
         let subst = addSubst identitySubst binder arg
-        in nf scope (substitute scope subst body)
-      fun' -> App (nf scope fun') (nf scope arg)
+        in nfSubst scope (substitute scope subst body)
+      fun' -> App (nfSubst scope fun') (nfSubst scope arg)
   t -> t
-
--- | 'nf' in the empty scope.
-nfd :: LambdaPi VoidS -> LambdaPi VoidS
-nfd = nf emptyScope
 
 -- | The Church numeral two.
 two :: LambdaPi VoidS
@@ -149,8 +144,8 @@ appTwo = App two two
 
 -- | In a scope with free @f@ and @g@, @f ((λx. x) g)@ normalises to the
 -- neutral @f g@: the argument's redex is reduced, the stuck application stays.
-neutralNbeOk :: Bool
-neutralNbeOk =
+neutralExampleOk :: Bool
+neutralExampleOk =
   withFresh emptyScope $ \fBinder ->
     withFresh (extendScope fBinder emptyScope) $ \gBinder ->
       let scope = extendScope gBinder (extendScope fBinder emptyScope)
@@ -158,6 +153,6 @@ neutralNbeOk =
           g = nameOf gBinder
           idLam = withFresh scope (\x -> Lam x (Var (nameOf x)))
           term = App (Var f) (App idLam (Var g))
-      in case nfNbe scope term of
+      in case nf scope term of
            App (Var f') (Var g') -> f' == f && g' == g
            _                     -> False

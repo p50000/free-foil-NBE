@@ -4,8 +4,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- | Microbenchmarks for lambda-pi normalisation. Each input is normalised by
--- the generic NbE ('nfNbe'), the monomorphic NbE ('Mono.nfMono') and the
--- reference substitution normaliser ('nf'); results are forced by walking the
+-- the generic NbE ('nf'), the monomorphic NbE ('Mono.nf') and the
+-- reference substitution normaliser ('nfSubst'); results are forced by walking the
 -- whole normal form, as in free-foil's own benchmark.
 module Main (main) where
 
@@ -96,9 +96,9 @@ nestedLet n =
 compareNormalisers :: String -> LambdaPi VoidS -> Benchmark
 compareNormalisers name t =
   bgroup name
-    [ bench "nfNbe"  $ whnf (sizeOf . nfNbe emptyScope) t
-    , bench "nfMono" $ whnf (sizeOf . Mono.nfMono emptyScope) t
-    , bench "nf"     $ whnf (sizeOf . nf emptyScope) t
+    [ bench "generic" $ whnf (sizeOf . nf emptyScope) t
+    , bench "mono"    $ whnf (sizeOf . Mono.nf emptyScope) t
+    , bench "subst"   $ whnf (sizeOf . nfSubst emptyScope) t
     ]
 
 main :: IO ()
