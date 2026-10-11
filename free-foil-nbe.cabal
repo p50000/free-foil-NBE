@@ -96,8 +96,8 @@ library lambda-let-demo
         , template-haskell
     default-language: Haskell2010
 
--- Exercises the generic NbE on the lambda-pi language.
-test-suite lambda-pi
+-- Exercises the generic NbE on every demo language.
+test-suite free-foil-nbe-test
     import:           warnings
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
