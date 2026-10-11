@@ -53,10 +53,6 @@ language's own reductions, not η, and it consults no types.
   The numbers, and the series of changes behind them, are in the two
   benchmark READMEs.
 
-The paper in preparation covers exactly this: the core, the three languages,
-and the performance analysis. Everything under "What is planned" is future
-work there.
-
 ## Interface
 
 ### The core
