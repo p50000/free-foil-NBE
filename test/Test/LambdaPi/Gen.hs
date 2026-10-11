@@ -4,7 +4,7 @@
 -- tracking the variables in scope, so they are well scoped, then converted
 -- with 'resolve'. Binder names are positional (@v0@, @v1@, ... by depth), so
 -- binders on one spine are distinct.
-module LambdaPi.Gen
+module Test.LambdaPi.Gen
   ( Closed (..)
   , OpenTerm (..)
   , freeVars
