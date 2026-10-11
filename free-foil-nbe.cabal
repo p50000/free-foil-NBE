@@ -102,7 +102,11 @@ test-suite lambda-pi
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
     main-is:          Main.hs
-    other-modules:    LambdaPi.Gen
+    other-modules:    Test.Booleans
+                    , Test.LambdaLet
+                    , Test.LambdaNWays
+                    , Test.LambdaPi
+                    , Test.LambdaPi.Gen
     build-depends:    base ^>=4.20.2.0
         , bifunctors
         , containers ^>=0.7
