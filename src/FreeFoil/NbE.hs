@@ -17,10 +17,16 @@
 -- own reductions, not η, and it keeps one signature for terms and values, so
 -- neutral and normal values are not told apart by type (see 'Value').
 --
+-- A language's signature must be a 'Bifunctor' and a 'Bifoldable', both
+-- derivable, and representational in both parameters (see 'evalNode'). Its
+-- binder type must be 'Foil.CoSinkable', which free-foil generates, and
+-- 'Foil.HasNameBinders', plus 'Foil.SinkableK' for 'whnfNbe'; free-foil has
+-- generic defaults for these two.
+--
 -- The recursive functions are @INLINABLE@, so a language can specialise them
--- to its signature, as "LambdaPi" does with @SPECIALIZE@ pragmas. At the
--- moment this specialises evaluation only, and readback still passes
--- dictionaries.
+-- to its signature with @SPECIALIZE@ pragmas for 'nfNbe', 'eval', 'quote' and
+-- 'quoteSuspendedScoped', as "LambdaPi" does. At the moment this specialises
+-- evaluation only, and readback still passes dictionaries.
 module FreeFoil.NbE
   ( -- * Semantic domain
     Value (..)
@@ -108,7 +114,7 @@ class (Bifunctor sig, Bifoldable sig) => Eval binder sig where
   evalSig scope env = evalNode (eval scope) env
 
 -- | Evaluate a term under an environment: look variables up, hand nodes to
--- 'evalSig'.
+-- 'evalSig'. A variable that the environment does not map is a neutral.
 eval ::
   (Eval binder sig, Foil.Distinct o, Foil.Distinct i) =>
   Foil.Scope o ->
@@ -123,7 +129,9 @@ eval scope !env = \case
 -- | Evaluate a node that has no elimination rule: suspend it whole under the
 -- environment if it has scoped subterms, otherwise evaluate its term
 -- subterms. The evaluator comes as @env -> term -> value@ so that one
--- environment both suspends the node and drives its subterms.
+-- environment both suspends the node and drives its subterms. A node with no
+-- subterms of one kind is reused by coercion, which requires the signature
+-- to be representational in both parameters; every ordinary data type is.
 evalNode ::
   (Bifunctor sig, Bifoldable sig, Foil.Distinct i) =>
   (Foil.Substitution (Value binder sig) i o -> AST binder sig i -> Value binder sig o) ->
@@ -177,7 +185,8 @@ quote scope = \case
 
 -- | Read back one scoped subterm of a suspended node: refresh the binder,
 -- extend the captured environment with it as a fresh neutral, evaluate the
--- body once under that environment, and quote the result.
+-- body once under that environment, and quote the result. Exported so that
+-- a language can specialise it.
 quoteSuspendedScoped ::
   (Eval binder sig, Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder, Foil.HasNameBinders binder) =>
   Foil.Scope n ->
