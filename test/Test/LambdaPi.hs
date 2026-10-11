@@ -45,7 +45,7 @@ alphaEq a b = alphaEquiv emptyScope a b @?= True
 bothNormaliseTo :: TestName -> LambdaPi VoidS -> LambdaPi VoidS -> TestTree
 bothNormaliseTo name term expected =
   testGroup name
-    [ testCase "reference nf" (alphaEq (nf emptyScope term) expected)
+    [ testCase "reference nf" (alphaEq (nfSubst emptyScope term) expected)
     , testCase "nfNbe"        (alphaEq (nfNbe emptyScope term) expected)
     , testCase "nfMono"       (alphaEq (Mono.nfMono emptyScope term) expected)
     ]
@@ -116,7 +116,7 @@ piDepthTests =
     [ testCase (name ++ " agrees with reference nf at depth " ++ show d) $
         case parseLambdaPi (deepPi d) of
           Left err -> assertFailure ("parse failed: " ++ err)
-          Right t  -> alphaEq (normalise emptyScope t) (nf emptyScope t)
+          Right t  -> alphaEq (normalise emptyScope t) (nfSubst emptyScope t)
     | d <- [100 :: Int]
     , (name, normalise) <- [("nfNbe", nfNbe), ("nfMono", Mono.nfMono)]
     ]
@@ -133,7 +133,7 @@ neutralTests :: TestTree
 neutralTests =
   testGroup "neutrals with free variables"
     [ testCase "NbE preserves f ((\\x. x) g) as the neutral f g" $
-        neutralNbeOk @?= True
+        neutralExampleOk @?= True
     , testCase "NbE agrees with reference nf on f ((\\x. x) g)" $
         openAgrees ["f", "g"] "f ((\\x. x) g)" @?= True
     , testCase "NbE agrees with reference nf on a (\\y. b y) applied" $
@@ -147,7 +147,7 @@ openAgrees names s =
   withFreeVars emptyScope Map.empty names $ \scope env ->
     case parseOpen scope env s of
       Left _  -> False
-      Right t -> alphaEquiv scope (nfNbe scope t) (nf scope t)
+      Right t -> alphaEquiv scope (nfNbe scope t) (nfSubst scope t)
 
 -- Parser and printer
 
@@ -222,9 +222,9 @@ propWhnf :: Closed -> Property
 propWhnf (Closed t) =
   ioProperty $
     agreesWithin "nfNbe . whnfNbe" (alphaEquiv emptyScope)
-      (nf emptyScope t) (nfNbe emptyScope (whnfNbe emptyScope t))
+      (nfSubst emptyScope t) (nfNbe emptyScope (whnfNbe emptyScope t))
 
 -- | An NbE normaliser agrees with the reference normaliser up to α.
 agrees :: Distinct n => Normaliser -> Scope n -> LambdaPi n -> IO Property
 agrees normalise scope t =
-  agreesWithin "NbE" (alphaEquiv scope) (nf scope t) (normalise scope t)
+  agreesWithin "NbE" (alphaEquiv scope) (nfSubst scope t) (normalise scope t)

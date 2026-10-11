@@ -22,8 +22,8 @@ module LambdaLet
   , eval
   , nfNbe
   , whnfNbe
-  , nf
-  , whnf
+  , nfSubst
+  , whnfSubst
   ) where
 
 import Control.Monad.Foil
@@ -82,7 +82,7 @@ type Value = NbE.Value FFPattern TermSig
 -- bound expression, exactly as β enters a lambda body, so no @let@ survives
 -- into a value and readback needs no case for it. The bound expression is a
 -- thunk in the environment: evaluated at most once, shared by every use, and
--- never if unused. The reference 'nf' substitutes it unevaluated into every
+-- never if unused. The reference 'nfSubst' substitutes it unevaluated into every
 -- occurrence instead.
 instance Eval FFPattern TermSig where
   evalSig scope env = \case
@@ -99,35 +99,35 @@ instance Eval FFPattern TermSig where
 
 -- | Weak-head normal form by substitution; @let@ substitutes its bound
 -- expression unevaluated.
-whnf :: Distinct n => Scope n -> LambdaLet n -> LambdaLet n
-whnf scope = \case
+whnfSubst :: Distinct n => Scope n -> LambdaLet n -> LambdaLet n
+whnfSubst scope = \case
   App fun arg ->
-    case whnf scope fun of
+    case whnfSubst scope fun of
       Lam binder body ->
         let subst = addSubst identitySubst binder arg
-        in whnf scope (substitute scope subst body)
+        in whnfSubst scope (substitute scope subst body)
       fun' -> App fun' arg
   Let e binder body ->
     let subst = addSubst identitySubst binder e
-    in whnf scope (substitute scope subst body)
+    in whnfSubst scope (substitute scope subst body)
   t -> t
 
 -- | Normal form by substitution. No @let@ survives here either, so the two
 -- normalisers must agree up to α.
-nf :: Distinct n => Scope n -> LambdaLet n -> LambdaLet n
-nf scope = \case
+nfSubst :: Distinct n => Scope n -> LambdaLet n -> LambdaLet n
+nfSubst scope = \case
   Lam binder body ->
     case assertDistinct binder of
       Distinct ->
         let scope' = extendScope binder scope
-        in Lam binder (nf scope' body)
+        in Lam binder (nfSubst scope' body)
   App fun arg ->
-    case whnf scope fun of
+    case whnfSubst scope fun of
       Lam binder body ->
         let subst = addSubst identitySubst binder arg
-        in nf scope (substitute scope subst body)
-      fun' -> App (nf scope fun') (nf scope arg)
+        in nfSubst scope (substitute scope subst body)
+      fun' -> App (nfSubst scope fun') (nfSubst scope arg)
   Let e binder body ->
     let subst = addSubst identitySubst binder e
-    in nf scope (substitute scope subst body)
+    in nfSubst scope (substitute scope subst body)
   t -> t

@@ -17,6 +17,6 @@ source-repository-package
 tests: True
 benchmarks: True
 
--- Optimise every component, including the library where `nfNbe`/`nf` live, so
+-- Optimise every component, including the library where `nfNbe`/`nfSubst` live, so
 -- the benchmark measures -O2 code end to end (cabal defaults to -O1).
 optimization: 2

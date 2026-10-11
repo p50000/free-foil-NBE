@@ -5,14 +5,14 @@
 
 -- | Microbenchmarks for lambda-pi normalisation. Each input is normalised by
 -- the generic NbE ('nfNbe'), the monomorphic NbE ('Mono.nfMono') and the
--- reference substitution normaliser ('nf'); results are forced by walking the
+-- reference substitution normaliser ('nfSubst'); results are forced by walking the
 -- whole normal form, as in free-foil's own benchmark.
 module Main (main) where
 
 import Test.Tasty.Bench hiding (nf)
 
 import Control.Monad.Foil
-import LambdaPi hiding (whnf)
+import LambdaPi
 import qualified LambdaPi.Monomorphic as Mono
 import LambdaPi.Parser ()  -- IsString instance for writing terms as strings
 
@@ -98,7 +98,7 @@ compareNormalisers name t =
   bgroup name
     [ bench "nfNbe"  $ whnf (sizeOf . nfNbe emptyScope) t
     , bench "nfMono" $ whnf (sizeOf . Mono.nfMono emptyScope) t
-    , bench "nf"     $ whnf (sizeOf . nf emptyScope) t
+    , bench "nf"     $ whnf (sizeOf . nfSubst emptyScope) t
     ]
 
 main :: IO ()

@@ -22,12 +22,11 @@ module LambdaPi
   , eval
   , nfNbe
   , whnfNbe
-  , whnf
-  , nf
-  , nfd
+  , whnfSubst
+  , nfSubst
   , two
   , appTwo
-  , neutralNbeOk
+  , neutralExampleOk
   ) where
 
 import Control.Monad.Foil
@@ -100,40 +99,36 @@ instance Eval FFPattern TermSig where
     node -> NbE.evalNode (eval scope) env node
 
 -- | Weak-head normal form by substitution, the reference for the tests.
-whnf :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n
-whnf scope = \case
+whnfSubst :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n
+whnfSubst scope = \case
   App fun arg ->
-    case whnf scope fun of
+    case whnfSubst scope fun of
       Lam binder body ->
         let subst = addSubst identitySubst binder arg
-        in whnf scope (substitute scope subst body)
+        in whnfSubst scope (substitute scope subst body)
       fun' -> App fun' arg
   t -> t
 
 -- | Normal form by substitution.
-nf :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n
-nf scope = \case
+nfSubst :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n
+nfSubst scope = \case
   Lam binder body ->
     case assertDistinct binder of
       Distinct ->
         let scope' = extendScope binder scope
-        in Lam binder (nf scope' body)
+        in Lam binder (nfSubst scope' body)
   Pi dom binder body ->
     case assertDistinct binder of
       Distinct ->
         let scope' = extendScope binder scope
-        in Pi (nf scope dom) binder (nf scope' body)
+        in Pi (nfSubst scope dom) binder (nfSubst scope' body)
   App fun arg ->
-    case whnf scope fun of
+    case whnfSubst scope fun of
       Lam binder body ->
         let subst = addSubst identitySubst binder arg
-        in nf scope (substitute scope subst body)
-      fun' -> App (nf scope fun') (nf scope arg)
+        in nfSubst scope (substitute scope subst body)
+      fun' -> App (nfSubst scope fun') (nfSubst scope arg)
   t -> t
-
--- | 'nf' in the empty scope.
-nfd :: LambdaPi VoidS -> LambdaPi VoidS
-nfd = nf emptyScope
 
 -- | The Church numeral two.
 two :: LambdaPi VoidS
@@ -149,8 +144,8 @@ appTwo = App two two
 
 -- | In a scope with free @f@ and @g@, @f ((λx. x) g)@ normalises to the
 -- neutral @f g@: the argument's redex is reduced, the stuck application stays.
-neutralNbeOk :: Bool
-neutralNbeOk =
+neutralExampleOk :: Bool
+neutralExampleOk =
   withFresh emptyScope $ \fBinder ->
     withFresh (extendScope fBinder emptyScope) $ \gBinder ->
       let scope = extendScope gBinder (extendScope fBinder emptyScope)

@@ -23,7 +23,7 @@ tests =
   testGroup "lambda-let"
     [ testGroup "nfNbe agrees with reference nf on every example"
         [ testCase nm $
-            alphaEquiv emptyScope (LL.nfNbe emptyScope t) (LL.nf emptyScope t) @?= True
+            alphaEquiv emptyScope (LL.nfNbe emptyScope t) (LL.nfSubst emptyScope t) @?= True
         | (nm, t) <- LLE.examples
         ]
     , testCase "a let-bound definition is applied: letId is the identity" $

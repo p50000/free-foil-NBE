@@ -77,7 +77,7 @@ monoNf = toLC . Mono.nfMono emptyScope . fromLC
 
 -- | Normal form by the reference substitution normaliser.
 refNf :: LC IdInt -> LC IdInt
-refNf = toLC . LP.nf emptyScope . fromLC
+refNf = toLC . LP.nfSubst emptyScope . fromLC
 
 -- | α-equivalence, through the scope-safe terms.
 aeq :: LC IdInt -> LC IdInt -> Bool
