@@ -165,9 +165,10 @@ the types, the cost line says so.
   then visits each subterm once and is linear in the size of the term. The
   test "deep Pi nesting stays linear" and the `Nested Pi types` benchmark
   guard this: 14, 71 and 146 µs at depths 100, 500 and 1000.
-- **Instead of.** Suspending a whole node under one environment, as the first
-  version did: it normalised a `Pi` codomain twice and was exponential in the
-  nesting depth, 2.7 s and 4.6 GB at depth 18. Or one closure per binder,
+- **Instead of.** Suspending a node with its term positions unevaluated, as
+  the first version did: `eval` and readback each normalised a `Pi`
+  codomain, so the cost doubled at every level of nesting, 2.7 s and 4.6 GB
+  at depth 18. Or one closure per binder,
   `VLam env body`, as in most hand-written NbE implementations; the
   monomorphic baseline uses it.
 - **Cost.** None for correctness. A generic node is a constructor box around
