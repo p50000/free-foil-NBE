@@ -13,18 +13,18 @@ import Test.Tasty.QuickCheck
 -- case is discarded only when the reference diverges too; if the reference
 -- finishes and the result does not, the property fails.
 agreesWithin :: NFData a => String -> (a -> a -> Bool) -> a -> a -> IO Property
-agreesWithin label same reference result = do
+agreesWithin name same reference result = do
   referenceDone <- finished (evaluate (rnf reference))
   resultDone    <- finished (evaluate (rnf result))
   pure $ case (referenceDone, resultDone) of
     (True, True) ->
-      counterexample (label ++ " and nfSubst disagree")
+      counterexample (name ++ " and nfSubst disagree")
         (property (same reference result))
     (False, _) ->
       property Discard
     (True, False) ->
       counterexample
-        (label ++ " did not finish within the budget though nfSubst did")
+        (name ++ " did not finish within the budget though nfSubst did")
         (property False)
   where
     finished act = isJust <$> timeout budgetMicros act
