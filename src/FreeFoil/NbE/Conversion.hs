@@ -6,6 +6,9 @@
 -- | Conversion checking: decide whether two values have the same normal form
 -- up to renaming of bound variables, without reading them back.
 --
+-- This follows the conversion algorithm of Coquand, "An algorithm for
+-- type-checking dependent types" (1996, §2.3.2 and Appendix A).
+--
 -- The check walks both values together and matches nodes with 'zipMatchWith2'
 -- from free-foil, as free-foil's 'Control.Monad.Free.Foil.alphaEquiv' does
 -- for terms. Under a binder it evaluates both bodies with the same fresh
