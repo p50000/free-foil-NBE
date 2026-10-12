@@ -53,12 +53,6 @@ type LambdaLet n = FFTerm n
       NbE.Value FFPattern TermSig o #-}
 {-# SPECIALIZE NbE.quote ::
       Distinct n => Scope n -> NbE.Value FFPattern TermSig n -> LambdaLet n #-}
-{-# SPECIALIZE NbE.quoteScoped ::
-      (Distinct n, Distinct i) =>
-      Scope n ->
-      Substitution (NbE.Value FFPattern TermSig) i n ->
-      ScopedAST FFPattern TermSig i ->
-      ScopedAST FFPattern TermSig n #-}
 
 -- | Application.
 pattern App :: LambdaLet n -> LambdaLet n -> LambdaLet n

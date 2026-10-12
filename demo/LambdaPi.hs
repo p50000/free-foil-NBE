@@ -47,9 +47,8 @@ import LambdaPi.Generated
 type LambdaPi n = FFTerm n
 
 -- Specialise the generic loop to this signature. Each recursive function
--- needs its own pragma, since the nf one alone leaves eval passing
--- dictionaries. The quoteScoped pragma does not take effect yet: quote still
--- calls the generic quoteScoped worker with the dictionaries.
+-- needs its own pragma, since the nf one alone leaves eval and quote passing
+-- dictionaries.
 {-# SPECIALIZE NbE.nf :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n #-}
 {-# SPECIALIZE NbE.eval ::
       (Distinct o, Distinct i) =>
@@ -59,12 +58,6 @@ type LambdaPi n = FFTerm n
       NbE.Value FFPattern TermSig o #-}
 {-# SPECIALIZE NbE.quote ::
       Distinct n => Scope n -> NbE.Value FFPattern TermSig n -> LambdaPi n #-}
-{-# SPECIALIZE NbE.quoteScoped ::
-      (Distinct n, Distinct i) =>
-      Scope n ->
-      Substitution (NbE.Value FFPattern TermSig) i n ->
-      ScopedAST FFPattern TermSig i ->
-      ScopedAST FFPattern TermSig n #-}
 
 -- | Application.
 pattern App :: LambdaPi n -> LambdaPi n -> LambdaPi n

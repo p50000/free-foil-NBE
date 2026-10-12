@@ -23,9 +23,8 @@
 -- 'Foil.SinkableK' for 'whnf', which has a generic default.
 --
 -- The recursive functions are @INLINABLE@, so a language can specialise them
--- to its signature with @SPECIALIZE@ pragmas for 'nf', 'eval', 'quote' and
--- 'quoteScoped', as "LambdaPi" does. At the moment readback under binders
--- still passes dictionaries.
+-- to its signature with @SPECIALIZE@ pragmas for 'nf', 'eval' and 'quote', as
+-- "LambdaPi" does.
 module FreeFoil.NbE
   ( -- * Semantic domain
     Value (..)
@@ -188,15 +187,15 @@ quote scope = \case
 
 -- | Read back one scoped subterm of a suspended node: refresh the binder,
 -- extend the captured environment with it as a fresh neutral, evaluate the
--- body once under that environment, and quote the result. Exported so that
--- a language can specialise it.
+-- body once under that environment, and quote the result. It inlines into
+-- 'quote', so it is specialised with it.
 quoteScoped ::
   (Eval binder sig, Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder) =>
   Foil.Scope n ->
   Foil.Substitution (Value binder sig) i n ->
   ScopedAST binder sig i ->
   ScopedAST binder sig n
-{-# INLINABLE quoteScoped #-}
+{-# INLINE quoteScoped #-}
 quoteScoped scope env (ScopedAST binder body) =
   Foil.withRefreshedPattern scope binder $ \extendEnv binder' scope' ->
     case Foil.assertDistinct binder of
