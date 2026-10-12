@@ -48,8 +48,8 @@ type LambdaPi n = FFTerm n
 
 -- Specialise the generic loop to this signature. Each recursive function
 -- needs its own pragma, since the nf one alone leaves eval passing
--- dictionaries. The quote pragmas do not take effect yet: the specialised
--- nf still calls the generic quote worker with the dictionaries.
+-- dictionaries. The quoteScoped pragma does not take effect yet: quote still
+-- calls the generic quoteScoped worker with the dictionaries.
 {-# SPECIALIZE NbE.nf :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n #-}
 {-# SPECIALIZE NbE.eval ::
       (Distinct o, Distinct i) =>
