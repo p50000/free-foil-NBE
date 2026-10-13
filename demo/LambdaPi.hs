@@ -12,6 +12,7 @@
 -- the dependent function type @Pi@ as a term former. The syntax is generated
 -- in "LambdaPi.Generated"; this module adds pattern synonyms over it, the
 -- one 'Eval' instance (β), and a substitution-based reference normaliser.
+-- Example terms are in "LambdaPi.Examples".
 module LambdaPi
   ( LambdaPi
   , pattern Var
@@ -24,9 +25,6 @@ module LambdaPi
   , whnf
   , whnfSubst
   , nfSubst
-  , two
-  , appTwo
-  , neutralExampleOk
   ) where
 
 import Control.Monad.Foil
@@ -122,30 +120,3 @@ nfSubst scope = \case
         in nfSubst scope (substitute scope subst body)
       fun' -> App (nfSubst scope fun') (nfSubst scope arg)
   t -> t
-
--- | The Church numeral two.
-two :: LambdaPi VoidS
-two = withFresh emptyScope
-  (\ s -> Lam s $ withFresh (extendScope s emptyScope)
-    (\ z -> Lam z (App (Var (sink (nameOf s)))
-                       (App (Var (sink (nameOf s)))
-                            (Var (nameOf z))))))
-
--- | Church two applied to itself, i.e. four.
-appTwo :: LambdaPi VoidS
-appTwo = App two two
-
--- | In a scope with free @f@ and @g@, @f ((λx. x) g)@ normalises to the
--- neutral @f g@: the argument's redex is reduced, the stuck application stays.
-neutralExampleOk :: Bool
-neutralExampleOk =
-  withFresh emptyScope $ \fBinder ->
-    withFresh (extendScope fBinder emptyScope) $ \gBinder ->
-      let scope = extendScope gBinder (extendScope fBinder emptyScope)
-          f = sink (nameOf fBinder)
-          g = nameOf gBinder
-          idLam = withFresh scope (\x -> Lam x (Var (nameOf x)))
-          term = App (Var f) (App idLam (Var g))
-      in case nf scope term of
-           App (Var f') (Var g') -> f' == f && g' == g
-           _                     -> False

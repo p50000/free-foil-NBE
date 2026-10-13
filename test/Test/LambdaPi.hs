@@ -3,7 +3,7 @@
 {-# LANGUAGE RankNTypes #-}
 -- | Tests of lambda-pi: the generic 'nf' and 'whnf', the monomorphic
 -- baseline 'Mono.nf', the reference normaliser, and conversion checking, on
--- examples and random terms.
+-- the examples and on random terms.
 module Test.LambdaPi (tests) where
 
 import Control.DeepSeq (deepseq)
@@ -18,7 +18,8 @@ import Control.Monad.Foil
 import Control.Monad.Free.Foil
 import FreeFoil.NbE.Conversion (convertible)
 import LambdaPi
-import LambdaPi.Parser (parseLambdaPi, parseOpen, resolve, withFreeVars)
+import LambdaPi.Examples
+import LambdaPi.Parser (parseLambdaPi, resolve, withFreeVars)
 import LambdaPi.PrettyPrint (ppValue, ppValueStruct)
 import qualified LambdaPi.Monomorphic as Mono
 import Test.Agree (agreesWithin)
@@ -27,88 +28,57 @@ import Test.LambdaPi.Gen (Closed (..), OpenTerm (..), freeVars)
 tests :: TestTree
 tests =
   testGroup "lambda-pi"
-    [ betaTests
-    , underBinderTests
-    , piTests
-    , piDepthTests
+    [ exampleTests
+    , openExampleTests
     , whnfTests
-    , neutralTests
+    , piDepthTests
     , roundTripTests
     , valueTests
     , propertyTests
     , conversionTests
     ]
 
--- | Two closed terms are equal up to renaming (alpha-equivalence).
-alphaEq :: LambdaPi VoidS -> LambdaPi VoidS -> Assertion
-alphaEq a b = alphaEquiv emptyScope a b @?= True
+-- | Two terms are equal up to renaming (alpha-equivalence).
+alphaEq :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n -> Assertion
+alphaEq scope a b = alphaEquiv scope a b @?= True
 
--- | The reference normaliser and both NbE normalisers reduce @term@ to
--- something α-equivalent to @expected@.
-bothNormaliseTo :: TestName -> LambdaPi VoidS -> LambdaPi VoidS -> TestTree
-bothNormaliseTo name term expected =
-  testGroup name
-    [ testCase "nfSubst"      (alphaEq (nfSubst emptyScope term) expected)
-    , testCase "nf"           (alphaEq (nf emptyScope term) expected)
-    , testCase "Mono.nf"      (alphaEq (Mono.nf emptyScope term) expected)
+-- | The reference normaliser and both NbE normalisers take @term@ to
+-- something α-equivalent to @normal@.
+normalisesTo :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n -> [TestTree]
+normalisesTo scope term normal =
+  [ testCase "nfSubst" (alphaEq scope (nfSubst scope term) normal)
+  , testCase "nf"      (alphaEq scope (nf scope term) normal)
+  , testCase "Mono.nf" (alphaEq scope (Mono.nf scope term) normal)
+  ]
+
+-- Examples
+
+exampleTests :: TestTree
+exampleTests =
+  testGroup "every example reaches its normal form"
+    [ testGroup name (normalisesTo emptyScope term normal)
+    | (name, term, normal) <- examples
     ]
 
--- Beta-reduction
-
-betaTests :: TestTree
-betaTests =
-  testGroup "beta-reduction (closed)"
-    [ bothNormaliseTo "identity applied to identity"
-        "(\\x. x) (\\y. y)" "\\z. z"
-    , bothNormaliseTo "K combinator drops its second argument"
-        "(\\x. \\y. x) (\\a. a) (\\b. \\c. b)" "\\z. z"
-    , bothNormaliseTo "Church 2 * 2 = 4"
-        appTwoStr "\\s. \\z. s (s (s (s z)))"
-    ]
-  where
-    -- Written as a string to double as a parser check; equals 'appTwo'.
-    appTwoStr = "(\\s. \\z. s (s z)) (\\s. \\z. s (s z))"
-
--- Normalisation under binders
-
-underBinderTests :: TestTree
-underBinderTests =
-  testGroup "normalisation under binders"
-    [ bothNormaliseTo "redex reduced under a lambda"
-        "\\f. (\\x. x) f" "\\g. g"
-    , bothNormaliseTo "redex reduced under two lambdas"
-        "\\f. \\y. (\\x. x) (f y)" "\\g. \\w. g w"
-    , testCase "appTwo constant matches its string form" $
-        alphaEq (nf emptyScope appTwo) "\\s. \\z. s (s (s (s z)))"
-    ]
-
--- Pi
-
-piTests :: TestTree
-piTests =
-  testGroup "Pi (dependent function types)"
-    [ bothNormaliseTo "redex in the codomain is reduced"
-        "(a : \\t. t) -> (\\y. y) a" "(a : \\t. t) -> a"
-    , bothNormaliseTo "neutral codomain under a lambda is preserved"
-        "\\f. (a : f) -> f a" "\\f. (a : f) -> f a"
-    , bothNormaliseTo "non-dependent arrow (unused binder)"
-        "(q : \\z. z) -> \\w. w" "(q : \\z. z) -> \\w. w"
+openExampleTests :: TestTree
+openExampleTests =
+  testGroup "every open example reaches its normal form"
+    [ withOpenExample ex $ \scope term normal ->
+        testGroup name (normalisesTo scope term normal)
+    | (name, ex) <- openExamples
     ]
 
 -- Weak-head normal form
 
 whnfTests :: TestTree
 whnfTests =
-  testGroup "whnf (weak-head normal form)"
+  testGroup "whnf"
     [ testCase "reduces the head redex" $
-        alphaEq (whnf emptyScope "(\\x. x) (\\y. y)") "\\z. z"
+        alphaEq emptyScope (whnf emptyScope idId) "\\z. z"
     , testCase "leaves a redex under a lambda untouched" $
-        alphaEq (whnf emptyScope "\\f. (\\x. x) f") "\\f. (\\x. x) f"
-    , testCase "nf, in contrast, reduces under the lambda" $
-        alphaEq (nf emptyScope "\\f. (\\x. x) f") "\\g. g"
+        alphaEq emptyScope (whnf emptyScope underLam) underLam
     , testCase "leaves a redex in a Pi codomain under a binder" $
-        alphaEq (whnf emptyScope "\\f. (a : f) -> (\\y. y) a")
-                "\\f. (a : f) -> (\\y. y) a"
+        alphaEq emptyScope (whnf emptyScope piUnderLam) piUnderLam
     ]
 
 -- Deep Pi nesting stays linear: a regression test for the exponential blow-up
@@ -119,7 +89,7 @@ piDepthTests =
     [ testCase (name ++ " agrees with nfSubst at depth " ++ show d) $
         case parseLambdaPi (deepPi d) of
           Left err -> assertFailure ("parse failed: " ++ err)
-          Right t  -> alphaEq (normalise emptyScope t) (nfSubst emptyScope t)
+          Right t  -> alphaEq emptyScope (normalise emptyScope t) (nfSubst emptyScope t)
     | d <- [100 :: Int]
     , (name, normalise) <- [("nf", nf), ("Mono.nf", Mono.nf)]
     ]
@@ -130,49 +100,16 @@ deepPi :: Int -> String
 deepPi n =
   concatMap (\i -> "(v" ++ show i ++ " : \\t. t) -> ") [0 .. n - 1] ++ "\\w. w"
 
--- Neutrals
-
-neutralTests :: TestTree
-neutralTests =
-  testGroup "neutrals with free variables"
-    [ testCase "NbE preserves f ((\\x. x) g) as the neutral f g" $
-        neutralExampleOk @?= True
-    , testCase "NbE agrees with nfSubst on f ((\\x. x) g)" $
-        openAgrees ["f", "g"] "f ((\\x. x) g)" @?= True
-    , testCase "NbE agrees with nfSubst on a (\\y. b y) applied" $
-        openAgrees ["a", "b"] "(\\x. a x) (b a)" @?= True
-    ]
-
--- | Parse @s@ in a scope holding the named free variables; NbE and the
--- reference normaliser agree on it up to α.
-openAgrees :: [String] -> String -> Bool
-openAgrees names s =
-  withFreeVars emptyScope Map.empty names $ \scope env ->
-    case parseOpen scope env s of
-      Left _  -> False
-      Right t -> alphaEquiv scope (nf scope t) (nfSubst scope t)
-
 -- Parser and printer
 
 roundTripTests :: TestTree
 roundTripTests =
-  testGroup "parse . show round-trips"
-    [ testCase (show t) (roundTrips t @?= True) | t <- roundTripExamples ]
+  testGroup "parse . show round-trips on every example"
+    [ testCase name (roundTrips term @?= True) | (name, term, _) <- examples ]
   where
     roundTrips t = case parseLambdaPi (show t) of
       Right t' -> alphaEquiv emptyScope t t'
       Left _   -> False
-
-roundTripExamples :: [LambdaPi VoidS]
-roundTripExamples =
-  [ "\\x. x"
-  , "(\\x. x) (\\y. y)"
-  , "\\f. \\x. f (f x)"
-  , "\\f. \\g. \\x. f (g x) ((\\y. y) x)"
-  , "(a : \\t. t) -> (\\y. y) a"
-  , "\\f. (a : f) -> f a"
-  , "(q : \\z. z) -> \\w. w"
-  ]
 
 -- Value inspection
 
