@@ -2,10 +2,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 -- | Tests of lambda-pi: the generic 'nf' and 'whnf', the monomorphic
--- baseline 'Mono.nf', and the reference normaliser, on examples and
--- random terms.
+-- baseline 'Mono.nf', the reference normaliser, and conversion checking, on
+-- examples and random terms.
 module Test.LambdaPi (tests) where
 
+import Control.DeepSeq (deepseq)
 import Data.List (isInfixOf)
 import qualified Data.Map.Strict as Map
 
@@ -15,6 +16,7 @@ import Test.Tasty.QuickCheck
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
+import FreeFoil.NbE.Conversion (convertible)
 import LambdaPi
 import LambdaPi.Parser (parseLambdaPi, parseOpen, resolve, withFreeVars)
 import LambdaPi.PrettyPrint (ppValue, ppValueStruct)
@@ -34,6 +36,7 @@ tests =
     , roundTripTests
     , valueTests
     , propertyTests
+    , conversionTests
     ]
 
 -- | Two closed terms are equal up to renaming (alpha-equivalence).
@@ -228,3 +231,59 @@ propWhnf (Closed t) =
 agrees :: Distinct n => Normaliser -> Scope n -> LambdaPi n -> IO Property
 agrees normalise scope t =
   agreesWithin "NbE" (alphaEquiv scope) (nfSubst scope t) (normalise scope t)
+
+-- Conversion checking
+
+conversionTests :: TestTree
+conversionTests =
+  testGroup "conversion"
+    [ testGroup "examples"
+        [ convertibleAs True "a term and its normal form"
+            "(\\s. \\z. s (s z)) (\\s. \\z. s (s z))" "\\s. \\z. s (s (s (s z)))"
+        , convertibleAs True "bound variables are renamed"
+            "\\x. \\y. x" "\\a. \\b. a"
+        , convertibleAs True "redexes on both sides, under binders"
+            "\\f. (\\x. x) f" "\\g. (\\y. \\z. z) g g"
+        , convertibleAs True "Pi types compare domains and codomains"
+            "(x : \\a. a) -> (\\y. y) x" "(z : (\\b. b) (\\c. c)) -> z"
+        , convertibleAs False "different bound variables"
+            "\\x. \\y. x" "\\x. \\y. y"
+        , convertibleAs False "a lambda and a Pi type"
+            "\\x. x" "(x : \\a. a) -> x"
+        , convertibleAs False "a term without a normal form is told apart"
+            "\\x. x" ("\\x. \\y. " ++ omega)
+        , convertibleAs False "the first mismatch decides"
+            ("\\x. \\y. x (" ++ omega ++ ")") ("\\x. \\y. y (" ++ omega ++ ")")
+        ]
+    , testGroup "properties"
+        [ testProperty "a term is convertible with its normal form" propConvNf
+        , testProperty "agrees with α-equivalence of normal forms" propConvPairs
+        ]
+    ]
+  where
+    omega = "(\\w. w w) (\\w. w w)"
+
+convertibleAs :: Bool -> TestName -> String -> String -> TestTree
+convertibleAs expected name t u =
+  testCase name (convertible emptyScope (parseClosed t) (parseClosed u) @?= expected)
+  where
+    parseClosed = either error id . parseLambdaPi
+
+-- | A term is convertible with its reference normal form, whenever that
+-- exists within the budget.
+propConvNf :: Closed -> Property
+propConvNf (Closed t) =
+  ioProperty $
+    agreesWithin "convertible" (==)
+      (normal `deepseq` True) (convertible emptyScope t normal)
+  where
+    normal = nfSubst emptyScope t
+
+-- | Conversion agrees with comparing reference normal forms up to α. Most
+-- random pairs differ, so this mainly checks the negative answers.
+propConvPairs :: Closed -> Closed -> Property
+propConvPairs (Closed t) (Closed u) =
+  ioProperty $
+    agreesWithin "convertible" (==)
+      (alphaEquiv emptyScope (nfSubst emptyScope t) (nfSubst emptyScope u))
+      (convertible emptyScope t u)

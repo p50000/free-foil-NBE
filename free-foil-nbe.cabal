@@ -16,6 +16,7 @@ library
     import:           warnings
     hs-source-dirs:   src
     exposed-modules:  FreeFoil.NbE
+        , FreeFoil.NbE.Conversion
     build-depends:    base ^>=4.20.2.0
         , free-foil ^>=0.5.0
         , containers ^>=0.7
