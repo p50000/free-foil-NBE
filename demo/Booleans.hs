@@ -1,13 +1,17 @@
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE DeriveFunctor         #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeFamilies          #-}
 -- | Booleans with @if@: a second object language, without binders, showing
 -- that the core is generic in the signature. The language is this signature
 -- plus one 'Eval' instance; evaluation and normalisation are inherited.
+-- Example terms are in "Booleans.Examples".
 module Booleans
   ( BoolSig (..)
   , BoolTm
@@ -19,7 +23,9 @@ module Booleans
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor)
+import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor, deriveBitraversable)
+import Data.ZipMatchK (ZipMatchK)
+import Generics.Kind.TH (deriveGenericK)
 
 import FreeFoil.NbE (Eval (evalSig), Value (VNode), eval, evalNode)
 import qualified FreeFoil.NbE as NbE
@@ -33,6 +39,11 @@ data BoolSig scope term
 
 deriveBifunctor ''BoolSig
 deriveBifoldable ''BoolSig
+deriveBitraversable ''BoolSig
+deriveGenericK ''BoolSig
+
+-- | Node comparison for 'alphaEquiv'; the generic instance suffices here.
+instance ZipMatchK BoolSig
 
 -- | Boolean terms. The binder type is never used.
 type BoolTm = AST NameBinder BoolSig

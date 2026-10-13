@@ -47,6 +47,7 @@ library lambda-pi-demo
         , LambdaPi.PrettyPrint
         , LambdaPi.Raw
         , Booleans
+        , Booleans.Examples
     build-depends:    base ^>=4.20.2.0
         , bifunctors
         , containers ^>=0.7
