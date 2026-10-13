@@ -120,6 +120,7 @@ test-suite free-foil-nbe-test
     main-is:          Main.hs
     other-modules:    Test.Agree
                     , Test.Booleans
+                    , Test.Definitions
                     , Test.LambdaLet
                     , Test.LambdaNWays
                     , Test.LambdaPi
