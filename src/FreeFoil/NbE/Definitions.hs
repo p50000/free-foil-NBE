@@ -60,7 +60,7 @@ evalUnfolded scope defs = eval scope (definitionsEnv scope defs)
 -- | The normal form of a term with every definition unfolded: the normal form
 -- of the term with each defined name replaced by its body.
 nfUnfolded ::
-  (Eval binder sig, Foil.Distinct n, Foil.Distinct l, Foil.HasNameBinders binder, Foil.CoSinkable binder) =>
+  (Eval binder sig, Foil.Distinct n, Foil.Distinct l, Foil.CoSinkable binder) =>
   Foil.Scope n ->
   Definitions binder sig n l ->
   AST binder sig l ->
