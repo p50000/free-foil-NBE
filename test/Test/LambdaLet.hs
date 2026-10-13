@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
--- | Tests of lambda-let: the examples against the reference normaliser,
--- sharing, shadowing, call-by-need and the weak-head normal form.
+-- | Tests of lambda-let: the examples against their normal forms, the
+-- weak-head normal form, and a let bound to a neutral.
 module Test.LambdaLet (tests) where
 
 import qualified Data.Map.Strict as Map
@@ -21,25 +21,19 @@ llAlphaEq a b = alphaEquiv emptyScope a b @?= True
 tests :: TestTree
 tests =
   testGroup "lambda-let"
-    [ testGroup "nf agrees with nfSubst on every example"
-        [ testCase nm $
-            alphaEquiv emptyScope (LL.nf emptyScope t) (LL.nfSubst emptyScope t) @?= True
-        | (nm, t) <- LLE.examples
+    [ testGroup "every example reaches its normal form"
+        [ testGroup name
+            [ testCase "nfSubst" (llAlphaEq (LL.nfSubst emptyScope term) normal)
+            , testCase "nf"      (llAlphaEq (LL.nf emptyScope term) normal)
+            ]
+        | (name, term, normal) <- LLE.examples
         ]
-    , testCase "a let-bound definition is applied: letId is the identity" $
-        llAlphaEq (LL.nf emptyScope LLE.letId) "\\y. y"
-    , testCase "definition used twice: letChurch is Church four" $
-        llAlphaEq (LL.nf emptyScope LLE.letChurch) "\\s. \\z. s (s (s (s z)))"
-    , testCase "an inner let shadows the outer binding" $
-        llAlphaEq (LL.nf emptyScope LLE.letShadow) "\\b. b b"
-    , testCase "whnf reduces a top-level let (let is a head redex)" $
-        llAlphaEq (LL.whnf emptyScope "let i = \\x. x in i") "\\x. x"
-    , testCase "whnf leaves a let under a lambda untouched" $
-        llAlphaEq (LL.whnf emptyScope LLE.letUnderLam) LLE.letUnderLam
-    , testCase "nf, in contrast, reduces the let under the lambda" $
-        llAlphaEq (LL.nf emptyScope LLE.letUnderLam) "\\f. f f"
-    , testCase "an unused divergent binding is never evaluated (call-by-need)" $
-        llAlphaEq (LL.nf emptyScope LLE.letUnused) "\\y. y"
+    , testGroup "whnf"
+        [ testCase "reduces a top-level let (let is a head redex)" $
+            llAlphaEq (LL.whnf emptyScope "let i = \\x. x in i") "\\x. x"
+        , testCase "leaves a let under a lambda untouched" $
+            llAlphaEq (LL.whnf emptyScope LLE.letUnderLam) LLE.letUnderLam
+        ]
     , testCase "a let bound to a neutral still reduces (open term)" $
         LLP.withFreeVars emptyScope Map.empty ["f"] $ \scope env ->
           case (,) <$> LLP.parseOpen scope env "let y = f in y y"

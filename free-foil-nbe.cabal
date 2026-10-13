@@ -41,11 +41,13 @@ library lambda-pi-demo
     visibility:       public
     hs-source-dirs:   demo
     exposed-modules:  LambdaPi
+        , LambdaPi.Examples
         , LambdaPi.Generated
         , LambdaPi.Parser
         , LambdaPi.PrettyPrint
         , LambdaPi.Raw
         , Booleans
+        , Booleans.Examples
     build-depends:    base ^>=4.20.2.0
         , bifunctors
         , containers ^>=0.7
