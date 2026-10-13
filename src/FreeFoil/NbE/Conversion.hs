@@ -20,6 +20,7 @@
 module FreeFoil.NbE.Conversion
   ( conv
   , convertible
+  , convertibleUnder
   ) where
 
 import qualified Control.Monad.Foil      as Foil
@@ -58,7 +59,7 @@ conv scope = \cases
 -- | Compare two scoped subterms under their environments. Their binders must
 -- have the same shape. The left binder is refreshed for the common scope, the
 -- names it binds extend both environments (the right one by position in the
--- pattern), and the bodies are evaluated and compared.
+-- pattern), and the bodies are compared with 'convertibleUnder'.
 convScoped ::
   (Eval binder sig, Bitraversable sig, ZipMatchK sig, Foil.Distinct n, Foil.Distinct i1, Foil.Distinct i2, Foil.UnifiablePattern binder) =>
   Foil.Scope n ->
@@ -76,7 +77,7 @@ convScoped scope envL envR (ScopedAST binderL bodyL) (ScopedAST binderR bodyR)
           (Foil.Distinct, Foil.Distinct) ->
             let fresh = map VVar (Foil.namesOfPattern binderL')
                 envR' = Foil.addSubstPattern (Foil.sink envR) binderR fresh
-            in conv scope' (eval scope' (extendL envL) bodyL) (eval scope' envR' bodyR)
+            in convertibleUnder scope' (extendL envL) envR' bodyL bodyR
 
 -- | Two patterns have the same shape. 'Foil.unifyPatterns' decides this for
 -- two patterns of one scope. Here the patterns come from different scopes,
@@ -94,6 +95,20 @@ sameShape binderL binderR =
     Foil.NotUnifiable -> False
     _                 -> True
 
+-- | Two terms are convertible under their environments: evaluate each under
+-- its own environment, then compare with 'conv'.
+convertibleUnder ::
+  (Eval binder sig, Bitraversable sig, ZipMatchK sig, Foil.Distinct n, Foil.Distinct i1, Foil.Distinct i2, Foil.UnifiablePattern binder) =>
+  Foil.Scope n ->
+  Foil.Substitution (Value binder sig) i1 n ->
+  Foil.Substitution (Value binder sig) i2 n ->
+  AST binder sig i1 ->
+  AST binder sig i2 ->
+  Bool
+{-# INLINABLE convertibleUnder #-}
+convertibleUnder scope envL envR t u =
+  conv scope (eval scope envL t) (eval scope envR u)
+
 -- | Two terms are convertible: evaluate both, then compare with 'conv'.
 convertible ::
   (Eval binder sig, Bitraversable sig, ZipMatchK sig, Foil.Distinct n, Foil.UnifiablePattern binder) =>
@@ -102,5 +117,4 @@ convertible ::
   AST binder sig n ->
   Bool
 {-# INLINABLE convertible #-}
-convertible scope t u =
-  conv scope (eval scope Foil.identitySubst t) (eval scope Foil.identitySubst u)
+convertible scope = convertibleUnder scope Foil.identitySubst Foil.identitySubst
