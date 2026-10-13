@@ -2,12 +2,27 @@ cabal-version:      3.0
 name:               free-foil-nbe
 version:            0.1.0.0
 synopsis:           Generic normalisation by evaluation via free-foil
+description:
+    Normalisation by evaluation that is generic in the signature of the object
+    language, on top of free-foil. A language is a signature bifunctor and a
+    binder type; it supplies its elimination rules as one @Eval@ instance and
+    inherits the semantic domain, evaluation, readback and the normalisers
+    @nf@ and @whnf@. Three demonstration languages, a monomorphic baseline and
+    benchmarks are included.
+homepage:           https://github.com/p50000/free-foil-NBE
+bug-reports:        https://github.com/p50000/free-foil-NBE/issues
 license:            BSD-3-Clause
 license-file:       LICENSE
+author:             Renata Shakirova, Nikolai Kudasov
 maintainer:         rentacat45@gmail.com
 category:           Language
 build-type:         Simple
+tested-with:        GHC == 9.10.3
 extra-doc-files:    CHANGELOG.md
+
+source-repository head
+    type:     git
+    location: https://github.com/p50000/free-foil-NBE.git
 
 common warnings
     ghc-options: -Wall
