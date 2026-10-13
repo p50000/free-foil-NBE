@@ -104,8 +104,8 @@ library lambda-let-syntax
         , array
     default-language: Haskell2010
 
--- The lambda-let demo language (zoo series, step 1: let / definitions):
--- grammar-generated syntax, one Eval instance, parsing, and example terms.
+-- The lambda-let demo language: grammar-generated syntax, one Eval instance,
+-- parsing, and example terms.
 library lambda-let-demo
     import:           warnings
     visibility:       public
