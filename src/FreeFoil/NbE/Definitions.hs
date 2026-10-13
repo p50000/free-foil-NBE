@@ -7,7 +7,10 @@
 -- Definitions need nothing new from the core. The values of the bodies form
 -- the initial environment of 'eval', which maps each defined name to the
 -- value of its body (δ-reduction). The environment is lazy, so a body is
--- evaluated at most once, and only when its name is used.
+-- evaluated at most once, and only when its name is used. This is how
+-- Coquand evaluates @let@ ("An algorithm for type-checking dependent types",
+-- 1996, §3), and how Renata Shakirova's "LambdaLet" demo evaluates its local
+-- @let@.
 module FreeFoil.NbE.Definitions
   ( Definitions (..)
   , definitionsEnv
