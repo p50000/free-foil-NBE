@@ -19,14 +19,12 @@
 --
 -- A language's signature must be a 'Bifunctor' and a 'Bifoldable', both
 -- derivable, and representational in both parameters (see 'evalNode'). Its
--- binder type must be 'Foil.CoSinkable', which free-foil generates, and
--- 'Foil.HasNameBinders', plus 'Foil.SinkableK' for 'whnf'; free-foil has
--- generic defaults for these two.
+-- binder type must be 'Foil.CoSinkable', which free-foil generates, plus
+-- 'Foil.SinkableK' for 'whnf', which has a generic default.
 --
 -- The recursive functions are @INLINABLE@, so a language can specialise them
--- to its signature with @SPECIALIZE@ pragmas for 'nf', 'eval', 'quote' and
--- 'quoteScoped', as "LambdaPi" does. At the moment this specialises
--- evaluation only, and readback still passes dictionaries.
+-- to its signature with @SPECIALIZE@ pragmas for 'nf', 'eval' and 'quote', as
+-- "LambdaPi" does.
 module FreeFoil.NbE
   ( -- * Semantic domain
     Value (..)
@@ -172,8 +170,12 @@ ensureBivacuousSecond x
 
 -- | Read a value back into a term. Term subterms recurse directly; scoped
 -- subterms are read back under their binder by 'quoteScoped'.
+--
+-- Every constraint here is used. An unused dictionary would make GHC split
+-- 'quote' into a wrapper and a worker, and a @SPECIALIZE@ pragma would then
+-- specialise only the wrapper.
 quote ::
-  (Eval binder sig, Foil.Distinct n, Foil.HasNameBinders binder, Foil.CoSinkable binder) =>
+  (Eval binder sig, Foil.Distinct n, Foil.CoSinkable binder) =>
   Foil.Scope n ->
   Value binder sig n ->
   AST binder sig n
@@ -185,15 +187,15 @@ quote scope = \case
 
 -- | Read back one scoped subterm of a suspended node: refresh the binder,
 -- extend the captured environment with it as a fresh neutral, evaluate the
--- body once under that environment, and quote the result. Exported so that
--- a language can specialise it.
+-- body once under that environment, and quote the result. It inlines into
+-- 'quote', so it is specialised with it.
 quoteScoped ::
-  (Eval binder sig, Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder, Foil.HasNameBinders binder) =>
+  (Eval binder sig, Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder) =>
   Foil.Scope n ->
   Foil.Substitution (Value binder sig) i n ->
   ScopedAST binder sig i ->
   ScopedAST binder sig n
-{-# INLINABLE quoteScoped #-}
+{-# INLINE quoteScoped #-}
 quoteScoped scope env (ScopedAST binder body) =
   Foil.withRefreshedPattern scope binder $ \extendEnv binder' scope' ->
     case Foil.assertDistinct binder of
@@ -201,7 +203,7 @@ quoteScoped scope env (ScopedAST binder body) =
 
 -- | Normal form: evaluate, then read back fully.
 nf ::
-  (Eval binder sig, Foil.Distinct n, Foil.HasNameBinders binder, Foil.CoSinkable binder) =>
+  (Eval binder sig, Foil.Distinct n, Foil.CoSinkable binder) =>
   Foil.Scope n ->
   AST binder sig n ->
   AST binder sig n
@@ -212,7 +214,7 @@ nf scope = quote scope . eval scope Foil.identitySubst
 -- values already, and freeze its scoped subterms instead of normalising under
 -- their binders.
 quoteWhnf ::
-  (Eval binder sig, Foil.Distinct n, Foil.HasNameBinders binder, Foil.CoSinkable binder, Foil.SinkableK binder) =>
+  (Eval binder sig, Foil.Distinct n, Foil.CoSinkable binder, Foil.SinkableK binder) =>
   Foil.Scope n ->
   Value binder sig n ->
   AST binder sig n
@@ -226,7 +228,7 @@ quoteWhnf scope = \case
 -- quoted to terms, into the still-syntactic body. 'substitute' only renames,
 -- so a redex under the binder survives.
 freezeScoped ::
-  (Eval binder sig, Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder, Foil.HasNameBinders binder, Foil.SinkableK binder) =>
+  (Eval binder sig, Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder, Foil.SinkableK binder) =>
   Foil.Scope n ->
   Foil.Substitution (Value binder sig) i n ->
   ScopedAST binder sig i ->
@@ -238,7 +240,7 @@ freezeScoped scope env (ScopedAST binder body) =
 -- | Quote every value in an environment, turning it into a syntactic
 -- substitution.
 quoteSubst ::
-  (Eval binder sig, Foil.Distinct n, Foil.HasNameBinders binder, Foil.CoSinkable binder) =>
+  (Eval binder sig, Foil.Distinct n, Foil.CoSinkable binder) =>
   Foil.Scope n ->
   Foil.Substitution (Value binder sig) i n ->
   Foil.Substitution (AST binder sig) i n
@@ -250,7 +252,7 @@ quoteSubst scope (Foil.UnsafeSubstitution m) =
 -- under a lambda survives. Term positions are values already, so the two
 -- readbacks differ only at scoped positions.
 whnf ::
-  (Eval binder sig, Foil.Distinct n, Foil.HasNameBinders binder, Foil.CoSinkable binder, Foil.SinkableK binder) =>
+  (Eval binder sig, Foil.Distinct n, Foil.CoSinkable binder, Foil.SinkableK binder) =>
   Foil.Scope n ->
   AST binder sig n ->
   AST binder sig n
