@@ -1,8 +1,8 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 
--- | Example lambda-let terms, written as string literals (parsed by
--- "LambdaLet.Parser"). Each states what it shows and its normal form.
+-- | Example lambda-let terms, each with its normal form, written as string
+-- literals parsed by "LambdaLet.Parser".
 module LambdaLet.Examples
   ( letId
   , letChurch
@@ -44,13 +44,13 @@ letSharing = "let d = (\\a. a) (\\b. b) in d d"
 letUnused :: LambdaLet VoidS
 letUnused = "let w = (\\x. x x) (\\x. x x) in \\y. y"
 
--- | All examples with their names, for harnesses and tests.
-examples :: [(String, LambdaLet VoidS)]
+-- | The examples with their names and normal forms.
+examples :: [(String, LambdaLet VoidS, LambdaLet VoidS)]
 examples =
-  [ ("letId", letId)
-  , ("letChurch", letChurch)
-  , ("letShadow", letShadow)
-  , ("letUnderLam", letUnderLam)
-  , ("letSharing", letSharing)
-  , ("letUnused", letUnused)
+  [ ("letId",       letId,       "\\y. y")
+  , ("letChurch",   letChurch,   "\\s. \\z. s (s (s (s z)))")
+  , ("letShadow",   letShadow,   "\\b. b b")
+  , ("letUnderLam", letUnderLam, "\\f. f f")
+  , ("letSharing",  letSharing,  "\\z. z")
+  , ("letUnused",   letUnused,   "\\y. y")
   ]
