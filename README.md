@@ -42,7 +42,7 @@ BNFC-generated parsers are committed, so nothing else is needed.
 
 ```sh
 cabal build all
-cabal test            # 89 tests; --test-show-details=direct lists them
+cabal test            # 104 tests; --test-show-details=direct lists them
 cabal bench nbe-bench
 ```
 
@@ -61,6 +61,7 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 | `demo/grammar/<Lang>/Syntax.cf`, `gen/<Lang>/` | The LBNF grammar of each demo language and the committed BNFC output. |
 | `demo/<Lang>/Raw.hs`, `Generated.hs` | free-foil's Template Haskell: the configuration and the generated scope-safe syntax. |
 | `demo/LambdaPi.hs`, `demo/LambdaLet.hs`, `demo/Booleans.hs` | The languages: pattern synonyms, the `Eval` instance, a reference normaliser. |
+| `demo/<Lang>/Examples.hs` | Example terms of each language, each with its normal form. |
 | `demo/LambdaPi/Parser.hs`, `PrettyPrint.hs` | Terms as string literals; two printers for values. |
 | `baselines/LambdaPi/Monomorphic.hs` | The monomorphic baseline, `LambdaPi.Monomorphic.nf`. |
 | `baselines/LambdaPi/LambdaNWays.hs` | The bridge to the lambda-n-ways harness. |
@@ -86,8 +87,9 @@ ghci> nf emptyScope ("(a : \\t. t) -> (\\y. y) a" :: LambdaPi VoidS)
 
 `LambdaPi.PrettyPrint` shows a value either by quoting it back (`ppValue`)
 or structurally, with its suspended bodies and their environments
-(`ppValueStruct`, also `show`). Lambda-let works the same way from
-`cabal repl lambda-let-demo`, with ready-made terms in `LambdaLet.Examples`.
+(`ppValueStruct`, also `show`). Each language has ready-made terms with
+their normal forms in its `Examples` module; lambda-let works the same way
+from `cabal repl lambda-let-demo`.
 
 ## References
 
