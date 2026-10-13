@@ -23,15 +23,15 @@ module FreeFoil.NbE.Conversion
   , convertibleUnder
   ) where
 
-import qualified Control.Monad.Foil      as Foil
-import           Control.Monad.Free.Foil (AST, ScopedAST (..))
-import           Data.Bitraversable      (Bitraversable)
-import           Data.Maybe              (isJust)
-import           Data.Void               (absurd)
-import           Data.ZipMatchK          (ZipMatchK, zipMatchWith2)
-import           Unsafe.Coerce           (unsafeCoerce)
+import qualified Control.Monad.Foil          as Foil
+import qualified Control.Monad.Foil.Internal as Foil (unsafeUnifiablePatterns)
+import           Control.Monad.Free.Foil     (AST, ScopedAST (..))
+import           Data.Bitraversable          (Bitraversable)
+import           Data.Maybe                  (isJust)
+import           Data.Void                   (absurd)
+import           Data.ZipMatchK              (ZipMatchK, zipMatchWith2)
 
-import           FreeFoil.NbE            (Eval, Value (..), eval)
+import           FreeFoil.NbE                (Eval, Value (..), eval)
 
 -- | Two values are convertible: their normal forms are equal up to renaming
 -- of bound variables. Nodes match when they have the same constructor, and
@@ -57,9 +57,11 @@ conv scope = \cases
     check same x y = if same x y then Just () else Nothing
 
 -- | Compare two scoped subterms under their environments. Their binders must
--- have the same shape. The left binder is refreshed for the common scope, the
--- names it binds extend both environments (the right one by position in the
--- pattern), and the bodies are compared with 'convertibleUnder'.
+-- have the same shape; they come from different scopes, so free-foil's
+-- 'Foil.unsafeUnifiablePatterns' compares them. The left binder is refreshed
+-- for the common scope, the names it binds extend both environments (the
+-- right one by position in the pattern), and the bodies are compared with
+-- 'convertibleUnder'.
 convScoped ::
   (Eval binder sig, Bitraversable sig, ZipMatchK sig, Foil.Distinct n, Foil.Distinct i1, Foil.Distinct i2, Foil.UnifiablePattern binder) =>
   Foil.Scope n ->
@@ -70,7 +72,7 @@ convScoped ::
   Bool
 {-# INLINABLE convScoped #-}
 convScoped scope envL envR (ScopedAST binderL bodyL) (ScopedAST binderR bodyR)
-  | not (sameShape binderL binderR) = False
+  | not (Foil.unsafeUnifiablePatterns binderL binderR) = False
   | otherwise =
       Foil.withRefreshedPattern scope binderL $ \extendL binderL' scope' ->
         case (Foil.assertDistinct binderL, Foil.assertDistinct binderR) of
@@ -78,22 +80,6 @@ convScoped scope envL envR (ScopedAST binderL bodyL) (ScopedAST binderR bodyR)
             let fresh = map VVar (Foil.namesOfPattern binderL')
                 envR' = Foil.addSubstPattern (Foil.sink envR) binderR fresh
             in convertibleUnder scope' (extendL envL) envR' bodyL bodyR
-
--- | Two patterns have the same shape. 'Foil.unifyPatterns' decides this for
--- two patterns of one scope. Here the patterns come from different scopes,
--- but the names they bind do not matter, only whether they unify, so the
--- right pattern is coerced to the scope of the left one, as free-foil's
--- @unsafeEqPattern@ does.
-sameShape ::
-  (Foil.UnifiablePattern binder, Foil.Distinct i1) =>
-  binder i1 l1 ->
-  binder i2 l2 ->
-  Bool
-{-# INLINE sameShape #-}
-sameShape binderL binderR =
-  case Foil.unifyPatterns binderL (unsafeCoerce binderR) of
-    Foil.NotUnifiable -> False
-    _                 -> True
 
 -- | Two terms are convertible under their environments: evaluate each under
 -- its own environment, then compare with 'conv'.
