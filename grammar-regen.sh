@@ -5,6 +5,10 @@
 # Requires bnfc, alex, and happy on PATH:
 #   cabal install BNFC alex happy
 #
+# The committed gen/ was produced with bnfc 2.9.6.3, alex 3.5.4.2 and
+# happy 2.2. With these versions the script reproduces it byte for byte, so
+# a diff under gen/ after a run means that the grammar or the tools changed.
+#
 # The tools are run from gen/ with relative input paths so the {-# LINE #-}
 # pragmas they embed are stable (reproducible output, no absolute paths).
 set -euo pipefail
