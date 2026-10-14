@@ -172,6 +172,7 @@ test-suite free-foil-nbe-test
                     , Test.LambdaNWays
                     , Test.LambdaPi
                     , Test.LambdaPi.Gen
+                    , Test.Pairs
     build-depends:    base ^>=4.20.2.0
         , bifunctors
         , containers ^>=0.7
@@ -182,6 +183,8 @@ test-suite free-foil-nbe-test
         , lambda-pi-baselines
         , lambda-pi-demo
         , lambda-pi-syntax
+        , pairs-demo
+        , pairs-syntax
         , tasty
         , tasty-hunit
         , tasty-quickcheck
