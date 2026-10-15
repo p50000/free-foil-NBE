@@ -32,6 +32,7 @@ library
     hs-source-dirs:   src
     exposed-modules:  FreeFoil.NbE
         , FreeFoil.NbE.Conversion
+        , FreeFoil.NbE.Definitions
     build-depends:    base ^>=4.20.2.0
         , free-foil ^>=0.5.0
         , containers ^>=0.7
@@ -134,6 +135,7 @@ test-suite free-foil-nbe-test
     main-is:          Main.hs
     other-modules:    Test.Agree
                     , Test.Booleans
+                    , Test.Definitions
                     , Test.LambdaLet
                     , Test.LambdaNWays
                     , Test.LambdaPi

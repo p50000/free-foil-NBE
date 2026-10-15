@@ -28,7 +28,8 @@ is documented in the haddocks of `FreeFoil.NbE`.
   need.
 - Conversion checking (`FreeFoil.NbE.Conversion`) compares values without
   reading them back, but like readback it does not decide η.
-- There are no top-level definitions; lambda-let has local `let` only.
+- Top-level definitions (`FreeFoil.NbE.Definitions`) are non-recursive and
+  always unfolded: no readback keeps the defined names.
 - The core works with any free-foil pattern, but the demo languages bind one
   variable at a time, and no test covers patterns with several variables.
 - The languages are untyped, so normalisation need not terminate.
@@ -42,7 +43,7 @@ BNFC-generated parsers are committed, so nothing else is needed.
 
 ```sh
 cabal build all
-cabal test            # 104 tests; --test-show-details=direct lists them
+cabal test            # 110 tests; --test-show-details=direct lists them
 cabal bench nbe-bench
 ```
 
@@ -58,6 +59,7 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 |------|-----------|
 | `src/FreeFoil/NbE.hs` | The core: `Value`, the `Eval` class, generic `eval` and `quote`, `nf` and `whnf`. |
 | `src/FreeFoil/NbE/Conversion.hs` | Conversion checking on values: `conv` and `convertible`. |
+| `src/FreeFoil/NbE/Definitions.hs` | Top-level definitions: a telescope and the environment it gives to `eval`. |
 | `demo/grammar/<Lang>/Syntax.cf`, `gen/<Lang>/` | The LBNF grammar of each demo language and the committed BNFC output. |
 | `demo/<Lang>/Raw.hs`, `Generated.hs` | free-foil's Template Haskell: the configuration and the generated scope-safe syntax. |
 | `demo/LambdaPi.hs`, `demo/LambdaLet.hs`, `demo/Booleans.hs` | The languages: pattern synonyms, the `Eval` instance, a reference normaliser. |
