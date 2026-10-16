@@ -12,9 +12,10 @@ This realises the generic closure that the Free Foil paper (Kudasov,
 Shakirova, Shalagin, Tyulebaeva, [ICCQ 2024](https://arxiv.org/abs/2405.16384))
 left as future work.
 
-**Status.** The core is in place and is demonstrated on three languages:
+**Status.** The core is in place and is demonstrated on four languages:
 lambda-pi (functions and the dependent function type), Booleans (`if`, no
-binders) and lambda-let (`let`). A hand-written monomorphic NbE serves as a
+binders), lambda-let (`let`) and pairs (projections, and `split` with a
+pattern that binds two names). A hand-written monomorphic NbE serves as a
 baseline; the generic normaliser runs within 1.25× of it on the
 lambda-n-ways factorial term and 1.4× on its random corpora. The interface
 is documented in the haddocks of `FreeFoil.NbE`.
@@ -30,8 +31,9 @@ is documented in the haddocks of `FreeFoil.NbE`.
   reading them back, but like readback it does not decide η.
 - Top-level definitions (`FreeFoil.NbE.Definitions`) are non-recursive and
   always unfolded: no readback keeps the defined names.
-- The core works with any free-foil pattern, but the demo languages bind one
-  variable at a time, and no test covers patterns with several variables.
+- The core works with any free-foil pattern. The demo languages bind one
+  variable at a time, except `split` in pairs, which binds two; no demo has
+  nested or variable-length patterns.
 - The languages are untyped, so normalisation need not terminate.
 - Readback does not α-normalise: variables are named by their foil
   identifiers, so α-equivalent normal forms may print differently.
@@ -43,7 +45,7 @@ BNFC-generated parsers are committed, so nothing else is needed.
 
 ```sh
 cabal build all
-cabal test            # 110 tests; --test-show-details=direct lists them
+cabal test            # 141 tests; --test-show-details=direct lists them
 cabal bench nbe-bench
 ```
 
@@ -62,7 +64,7 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 | `src/FreeFoil/NbE/Definitions.hs` | Top-level definitions: a telescope and the environment it gives to `eval`. |
 | `demo/grammar/<Lang>/Syntax.cf`, `gen/<Lang>/` | The LBNF grammar of each demo language and the committed BNFC output. |
 | `demo/<Lang>/Raw.hs`, `Generated.hs` | free-foil's Template Haskell: the configuration and the generated scope-safe syntax. |
-| `demo/LambdaPi.hs`, `demo/LambdaLet.hs`, `demo/Booleans.hs` | The languages: pattern synonyms, the `Eval` instance, a reference normaliser. |
+| `demo/LambdaPi.hs`, `demo/LambdaLet.hs`, `demo/Booleans.hs`, `demo/Pairs.hs` | The languages: pattern synonyms, the `Eval` instance, a reference normaliser. |
 | `demo/<Lang>/Examples.hs` | Example terms of each language, each with its normal form. |
 | `demo/LambdaPi/Parser.hs`, `PrettyPrint.hs` | Terms as string literals; two printers for values. |
 | `baselines/LambdaPi/Monomorphic.hs` | The monomorphic baseline, `LambdaPi.Monomorphic.nf`. |

@@ -1,0 +1,21 @@
+-- LBNF grammar for the pairs demonstration language: a pair former, the two
+-- projections, and split, whose pattern binds both components at once.
+-- Generated modules live under Pairs.Syntax.* (see ../../../grammar-regen.sh).
+
+comment "--" ;
+comment "{-" "-}" ;
+
+token VarIdent letter (letter | digit | '_' | '\'')* ;
+
+Var.   Term1 ::= VarIdent ;
+Pair.  Term1 ::= "(" Term "," Term ")" ;
+Fst.   Term  ::= "fst" Term1 ;
+Snd.   Term  ::= "snd" Term1 ;
+Split. Term  ::= "split" Term "as" Pattern "in" ScopedTerm ;
+coercions Term 1 ;
+
+AScopedTerm. ScopedTerm ::= Term ;
+
+PatternPair. Pattern ::= "(" VarIdent "," VarIdent ")" ;
+
+entrypoints Term ;
