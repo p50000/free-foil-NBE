@@ -58,7 +58,7 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 | Path | What it is |
 |------|-----------|
 | `src/FreeFoil/NbE.hs` | The core: `Value`, the `Eval` class, generic `eval` and `quote`, `nf` and `whnf`. |
-| `src/FreeFoil/NbE/Conversion.hs` | Conversion checking on values: `conv` and `convertible`. |
+| `src/FreeFoil/NbE/Conversion.hs` | Conversion checking on values: `conv`, `convertible` and `convertibleUnder`. |
 | `src/FreeFoil/NbE/Definitions.hs` | Top-level definitions: a telescope and the environment it gives to `eval`. |
 | `demo/grammar/<Lang>/Syntax.cf`, `gen/<Lang>/` | The LBNF grammar of each demo language and the committed BNFC output. |
 | `demo/<Lang>/Raw.hs`, `Generated.hs` | free-foil's Template Haskell: the configuration and the generated scope-safe syntax. |

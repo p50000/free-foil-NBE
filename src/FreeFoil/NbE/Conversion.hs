@@ -1,8 +1,6 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE RankNTypes          #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 -- | Conversion checking: decide whether two values have the same normal form
 -- up to renaming of bound variables, without reading them back.
 --
@@ -22,16 +20,18 @@
 module FreeFoil.NbE.Conversion
   ( conv
   , convertible
+  , convertibleUnder
   ) where
 
-import qualified Control.Monad.Foil      as Foil
-import           Control.Monad.Free.Foil (AST, ScopedAST (..))
-import           Data.Bitraversable      (Bitraversable)
-import           Data.Maybe              (isJust)
-import           Data.Void               (absurd)
-import           Data.ZipMatchK          (ZipMatchK, zipMatchWith2)
+import qualified Control.Monad.Foil          as Foil
+import qualified Control.Monad.Foil.Internal as Foil (unsafeUnifiablePatterns)
+import           Control.Monad.Free.Foil     (AST, ScopedAST (..))
+import           Data.Bitraversable          (Bitraversable)
+import           Data.Maybe                  (isJust)
+import           Data.Void                   (absurd)
+import           Data.ZipMatchK              (ZipMatchK, zipMatchWith2)
 
-import           FreeFoil.NbE            (Eval, Value (..), eval)
+import           FreeFoil.NbE                (Eval, Value (..), eval)
 
 -- | Two values are convertible: their normal forms are equal up to renaming
 -- of bound variables. Nodes match when they have the same constructor, and
@@ -57,11 +57,12 @@ conv scope = \cases
     check same x y = if same x y then Just () else Nothing
 
 -- | Compare two scoped subterms under their environments. Their binders must
--- have the same shape. The left binder is refreshed for the common scope, the
--- names it binds extend both environments (the right one by position in the
--- pattern), and the bodies are evaluated and compared.
+-- have the same shape; they come from different scopes, so free-foil's
+-- 'Foil.unsafeUnifiablePatterns' compares them. The left binder is refreshed
+-- for the common scope, the names it binds extend both environments (the
+-- right one by position in the pattern), and the bodies are compared with
+-- 'convertibleUnder'.
 convScoped ::
-  forall binder sig n i1 i2.
   (Eval binder sig, Bitraversable sig, ZipMatchK sig, Foil.Distinct n, Foil.Distinct i1, Foil.Distinct i2, Foil.UnifiablePattern binder) =>
   Foil.Scope n ->
   Foil.Substitution (Value binder sig) i1 n ->
@@ -70,25 +71,29 @@ convScoped ::
   ScopedAST binder sig i2 ->
   Bool
 {-# INLINABLE convScoped #-}
-convScoped scope envL envR (ScopedAST binderL bodyL) (ScopedAST binderR bodyR) =
-  Foil.withRefreshedPattern scope binderL $ \extendL binderL' scope' ->
-    sameShape binderL' $
-      case (Foil.assertDistinct binderL, Foil.assertDistinct binderR) of
-        (Foil.Distinct, Foil.Distinct) ->
-          let fresh = map VVar (Foil.namesOfPattern binderL')
-              envL' = extendL envL
-              envR' = Foil.addSubstPattern (Foil.sink envR) binderR fresh
-          in conv scope' (eval scope' envL' bodyL) (eval scope' envR' bodyR)
-  where
-    -- Refresh the right binder for the same scope too, so that the two
-    -- patterns can be unified there; only the verdict is used.
-    sameShape :: binder n l -> Bool -> Bool
-    sameShape binderL' k =
-      Foil.withRefreshedPattern scope binderR $
-        \(_ :: Foil.Substitution (Value binder sig) i2 n -> Foil.Substitution (Value binder sig) l2 o) binderR' _ ->
-        case Foil.unifyPatterns binderL' binderR' of
-          Foil.NotUnifiable -> False
-          _                 -> k
+convScoped scope envL envR (ScopedAST binderL bodyL) (ScopedAST binderR bodyR)
+  | not (Foil.unsafeUnifiablePatterns binderL binderR) = False
+  | otherwise =
+      Foil.withRefreshedPattern scope binderL $ \extendL binderL' scope' ->
+        case (Foil.assertDistinct binderL, Foil.assertDistinct binderR) of
+          (Foil.Distinct, Foil.Distinct) ->
+            let fresh = map VVar (Foil.namesOfPattern binderL')
+                envR' = Foil.addSubstPattern (Foil.sink envR) binderR fresh
+            in convertibleUnder scope' (extendL envL) envR' bodyL bodyR
+
+-- | Two terms are convertible under their environments: evaluate each under
+-- its own environment, then compare with 'conv'.
+convertibleUnder ::
+  (Eval binder sig, Bitraversable sig, ZipMatchK sig, Foil.Distinct n, Foil.Distinct i1, Foil.Distinct i2, Foil.UnifiablePattern binder) =>
+  Foil.Scope n ->
+  Foil.Substitution (Value binder sig) i1 n ->
+  Foil.Substitution (Value binder sig) i2 n ->
+  AST binder sig i1 ->
+  AST binder sig i2 ->
+  Bool
+{-# INLINABLE convertibleUnder #-}
+convertibleUnder scope envL envR t u =
+  conv scope (eval scope envL t) (eval scope envR u)
 
 -- | Two terms are convertible: evaluate both, then compare with 'conv'.
 convertible ::
@@ -98,5 +103,4 @@ convertible ::
   AST binder sig n ->
   Bool
 {-# INLINABLE convertible #-}
-convertible scope t u =
-  conv scope (eval scope Foil.identitySubst t) (eval scope Foil.identitySubst u)
+convertible scope = convertibleUnder scope Foil.identitySubst Foil.identitySubst
