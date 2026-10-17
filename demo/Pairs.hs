@@ -144,7 +144,7 @@ nfSubst scope = \case
       p' ->
         case assertDistinct (FFPatternPair x y) of
           Distinct ->
-            let scope' = extendScope y (extendScope x scope)
+            let scope' = extendScopePattern (FFPatternPair x y) scope
             in Split (nfSubst scope p') x y (nfSubst scope' body)
   t -> t
 
