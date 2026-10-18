@@ -8,6 +8,7 @@ import qualified Test.Definitions
 import qualified Test.LambdaLet
 import qualified Test.LambdaNWays
 import qualified Test.LambdaPi
+import qualified Test.Naturals
 import qualified Test.Pairs
 
 main :: IO ()
@@ -20,5 +21,6 @@ main =
         , Test.Booleans.tests
         , Test.LambdaLet.tests
         , Test.LambdaNWays.tests
+        , Test.Naturals.tests
         , Test.Pairs.tests
         ]
