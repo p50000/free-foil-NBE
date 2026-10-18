@@ -7,7 +7,7 @@ description:
     language, on top of free-foil. A language is a signature bifunctor and a
     binder type; it supplies its elimination rules as one @Eval@ instance and
     inherits the semantic domain, evaluation, readback and the normalisers
-    @nf@ and @whnf@. Four demonstration languages, a monomorphic baseline and
+    @nf@ and @whnf@. Five demonstration languages, a monomorphic baseline and
     benchmarks are included.
 homepage:           https://github.com/p50000/free-foil-NBE
 bug-reports:        https://github.com/p50000/free-foil-NBE/issues
