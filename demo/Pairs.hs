@@ -15,10 +15,9 @@
 -- instance, and a substitution-based reference normaliser. Example terms are
 -- in "Pairs.Examples".
 --
--- Two things are new against the other languages. The projections are
--- eliminators without binders, which fire on a 'NbE.VNode'. And the binder
--- of @split@ holds two names, so readback and conversion go through
--- free-foil's general pattern path rather than the single-name one.
+-- New against the other languages is a pattern that binds two names:
+-- readback refreshes both at once, and conversion checking pairs them by
+-- position.
 module Pairs
   ( Pairs
   , pattern Var
