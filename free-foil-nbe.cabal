@@ -108,6 +108,38 @@ library pairs-demo
         , template-haskell
     default-language: Haskell2010
 
+library naturals-syntax
+    hs-source-dirs:   gen
+    exposed-modules:  Naturals.Syntax.Abs
+        , Naturals.Syntax.Lex
+        , Naturals.Syntax.Par
+        , Naturals.Syntax.Print
+    build-depends:    base ^>=4.20.2.0
+        , array
+    default-language: Haskell2010
+
+-- The naturals demo language: grammar-generated syntax whose one pattern
+-- binds two names, one Eval instance, parsing, and example terms.
+library naturals-demo
+    import:           warnings
+    visibility:       public
+    hs-source-dirs:   demo
+    exposed-modules:  Naturals
+        , Naturals.Examples
+        , Naturals.Parser
+        , Naturals.Raw
+    other-modules:    Naturals.Generated
+    build-depends:    base ^>=4.20.2.0
+        , bifunctors
+        , containers ^>=0.7
+        , free-foil ^>=0.5.0
+        , free-foil-nbe
+        , kind-generics >=0.5.0 && <0.6
+        , kind-generics-th
+        , naturals-syntax
+        , template-haskell
+    default-language: Haskell2010
+
 -- Baselines for measuring the generic normaliser on lambda-pi: a monomorphic
 -- NbE over the same syntax, and the bridge to the lambda-n-ways harness.
 -- Public so that the harness under bench/lambda-n-ways/ can use it.
