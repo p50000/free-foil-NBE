@@ -1,0 +1,21 @@
+-- LBNF grammar for the naturals demonstration language: zero, successor and
+-- primitive recursion, whose suc branch binds the predecessor and the
+-- recursive result with one pattern.
+-- Generated modules live under Naturals.Syntax.* (see ../../../grammar-regen.sh).
+
+comment "--" ;
+comment "{-" "-}" ;
+
+token VarIdent letter (letter | digit | '_' | '\'')* ;
+
+Var.    Term1 ::= VarIdent ;
+Zero.   Term1 ::= "zero" ;
+Suc.    Term  ::= "suc" Term1 ;
+NatRec. Term  ::= "natrec" Term "{" "zero" "->" Term ";" "suc" Pattern "->" ScopedTerm "}" ;
+coercions Term 1 ;
+
+AScopedTerm. ScopedTerm ::= Term ;
+
+PatternRec. Pattern ::= VarIdent "," VarIdent ;
+
+entrypoints Term ;
