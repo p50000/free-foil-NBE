@@ -17,9 +17,9 @@
 -- terms are in "Naturals.Examples".
 --
 -- New against the other languages: an eliminator with a scoped branch that
--- recurses on the value of its scrutinee, and binds the recursive result as
--- a lazy value rather than re-evaluating it (Abel, "Normalization by
--- Evaluation: Dependent Types and Impredicativity", 2013, §3.3).
+-- recurses on the value of its scrutinee, and binds the recursive result in
+-- the environment as a thunk, forced only if the branch uses it and shared
+-- by every use.
 module Naturals
   ( Naturals
   , pattern Var
@@ -89,11 +89,16 @@ type Value = NbE.Value FFPattern TermSig
 -- | One elimination rule. @natrec@ evaluates its scrutinee and recurses on
 -- the value: at @zero@ it evaluates the zero branch, at @suc p@ it enters
 -- the @suc@ branch under the environment extended with @p@ and with the
--- recursive result, a lazy value that is computed at most once and only if
--- the branch uses it. On anything else the recursion is suspended with the
--- scrutinee and the zero branch evaluated, so readback normalises under the
--- two names of the @suc@ branch. The zero branch is evaluated at most once
--- across the whole recursion. @zero@ and @suc@ fall through to the default.
+-- recursive result. Recursion on values with a stuck case for a neutral
+-- scrutinee follows Abel ("Normalization by Evaluation: Dependent Types and
+-- Impredicativity", 2013, Figure 3.2). The evaluation order does not: Abel's
+-- rule is call-by-value and computes the recursive call first, whereas here
+-- @recurse p@ is a thunk in the environment, computed only if the branch
+-- uses @r@ and shared by every lookup. On anything else the recursion is
+-- suspended with the scrutinee and the zero branch evaluated, so readback
+-- normalises under the two names of the @suc@ branch. The zero branch is
+-- evaluated at most once across the whole recursion. @zero@ and @suc@ fall
+-- through to the default.
 instance Eval FFPattern TermSig where
   evalSig scope env = \case
     NatRecSig n z (ScopedAST (FFPatternRec k r) s) ->
