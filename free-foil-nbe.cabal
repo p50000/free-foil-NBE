@@ -194,6 +194,7 @@ library fragments-demo
         , free-foil-nbe
         , kind-generics >=0.5.0 && <0.6
         , kind-generics-th
+        , monolith-baseline
     default-language: Haskell2010
 
 -- Baselines for measuring the generic normaliser on lambda-pi: a monomorphic

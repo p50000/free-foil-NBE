@@ -5,16 +5,17 @@
 {-# LANGUAGE LambdaCase       #-}
 {-# LANGUAGE PatternSynonyms  #-}
 {-# LANGUAGE TypeOperators    #-}
--- The specialisation rules and the printer are orphans on purpose: the Eval
--- instance of a sum lives in the library, and this is the module of the
--- language.
+-- The specialisation rules, the printer and the string literals are orphans
+-- on purpose: the Eval instance of a sum lives in the library, and this is
+-- the module of the language.
 {-# OPTIONS_GHC -Wno-orphans #-}
 -- | A language composed from the fragments of functions, pairs and natural
 -- numbers: its signature is the 'Sum' of theirs and its binders are 'Pat'.
 -- The language writes no rule of its own. The 'Eval' instance is the one of
 -- "FreeFoil.NbE.Sum", so 'nf', 'whnf' and conversion checking come from the
 -- library; this module adds pattern synonyms over the sum, the specialisation
--- pragmas every language owes, and a printer.
+-- pragmas every language owes, and the conversions to and from "Monolith",
+-- the same language in one signature, which lends it a parser and a printer.
 module Fragments.Combined
   ( Sig
   , Combined
@@ -31,6 +32,8 @@ module Fragments.Combined
   , pattern Suc
   , pattern NatRec
   , numeral
+  , toMonolith
+  , fromMonolith
   , Value
   , eval
   , nf
@@ -41,6 +44,7 @@ import           Control.DeepSeq         (NFData (rnf))
 import           Control.Monad.Foil
 import           Control.Monad.Free.Foil
 import           Data.Bifunctor.Sum      (Sum (..))
+import           Data.String             (IsString (..))
 import           Data.ZipMatchK.Bifunctor ()
 
 import           Fragments.Lambda        (LamF (..))
@@ -49,6 +53,8 @@ import           Fragments.Pairs         (PairF (..))
 import           Fragments.Pattern       (Pat (..))
 import           FreeFoil.NbE            (eval, nf, whnf)
 import qualified FreeFoil.NbE            as NbE
+import qualified Monolith
+import           Monolith.Parser         (parseMonolith)
 
 -- | The signature: functions, then pairs, then naturals.
 type Sig = Sum LamF (Sum PairF NatF)
@@ -106,32 +112,51 @@ instance (NFData (f scope term), NFData (g scope term)) => NFData (Sum f g scope
 numeral :: Int -> Combined n
 numeral k = iterate Suc Zero !! k
 
--- | Terms print in the concrete syntax of the demo grammars, with variables
--- named by their foil identifiers.
+-- * The monolithic language as concrete syntax
+
+-- | The same term in the monolithic language, which lends the composed one
+-- its parser and printer.
+toMonolith :: Combined n -> Monolith.Monolith n
+toMonolith = \case
+  Var x -> Monolith.Var x
+  Lam pat body -> Monolith.Lam (toPat pat) (toMonolith body)
+  App fun arg -> Monolith.App (toMonolith fun) (toMonolith arg)
+  Pi dom pat cod -> Monolith.Pi (toMonolith dom) (toPat pat) (toMonolith cod)
+  Pair a b -> Monolith.Pair (toMonolith a) (toMonolith b)
+  Fst p -> Monolith.Fst (toMonolith p)
+  Snd p -> Monolith.Snd (toMonolith p)
+  Split p pat body -> Monolith.Split (toMonolith p) (toPat pat) (toMonolith body)
+  Zero -> Monolith.Zero
+  Suc t -> Monolith.Suc (toMonolith t)
+  NatRec n z pat s -> Monolith.NatRec (toMonolith n) (toMonolith z) (toPat pat) (toMonolith s)
+  where
+    toPat :: Pat n l -> Monolith.FFPattern n l
+    toPat (PatVar x)    = Monolith.FFPatternVar x
+    toPat (PatPair x y) = Monolith.FFPatternPair x y
+
+-- | The same term in the composed language.
+fromMonolith :: Monolith.Monolith n -> Combined n
+fromMonolith = \case
+  Monolith.Var x -> Var x
+  Monolith.Lam pat body -> Lam (fromPat pat) (fromMonolith body)
+  Monolith.App fun arg -> App (fromMonolith fun) (fromMonolith arg)
+  Monolith.Pi dom pat cod -> Pi (fromMonolith dom) (fromPat pat) (fromMonolith cod)
+  Monolith.Pair a b -> Pair (fromMonolith a) (fromMonolith b)
+  Monolith.Fst p -> Fst (fromMonolith p)
+  Monolith.Snd p -> Snd (fromMonolith p)
+  Monolith.Split p pat body -> Split (fromMonolith p) (fromPat pat) (fromMonolith body)
+  Monolith.Zero -> Zero
+  Monolith.Suc t -> Suc (fromMonolith t)
+  Monolith.NatRec n z pat s -> NatRec (fromMonolith n) (fromMonolith z) (fromPat pat) (fromMonolith s)
+  where
+    fromPat :: Monolith.FFPattern n l -> Pat n l
+    fromPat (Monolith.FFPatternVar x)    = PatVar x
+    fromPat (Monolith.FFPatternPair x y) = PatPair x y
+
+-- | Terms print through the monolithic language and BNFC's printer.
 instance Show (AST Pat Sig n) where
-  showsPrec d = \case
-    Var x -> shows x
-    Lam binder body -> showParen (d > 0) $
-      showString "\\" . showsPat binder . showString ". " . showsPrec 0 body
-    App fun arg -> showParen (d > 10) $
-      showsPrec 10 fun . showString " " . showsPrec 11 arg
-    Pi dom binder cod -> showParen (d > 0) $
-      showString "(" . showsPat binder . showString " : " . showsPrec 0 dom
-        . showString ") -> " . showsPrec 0 cod
-    Pair a b -> showString "(" . showsPrec 0 a . showString ", " . showsPrec 0 b . showString ")"
-    Fst p -> showParen (d > 10) $ showString "fst " . showsPrec 11 p
-    Snd p -> showParen (d > 10) $ showString "snd " . showsPrec 11 p
-    Split p binder body -> showParen (d > 0) $
-      showString "split " . showsPrec 0 p . showString " as " . showsPat binder
-        . showString " in " . showsPrec 0 body
-    Zero -> showString "zero"
-    Suc t -> showParen (d > 10) $ showString "suc " . showsPrec 11 t
-    NatRec n z binder s -> showParen (d > 10) $
-      showString "natrec " . showsPrec 11 n . showString " { zero -> " . showsPrec 0 z
-        . showString " ; suc " . showsPat binder . showString " -> " . showsPrec 0 s
-        . showString " }"
-    where
-      showsPat :: Pat n l -> ShowS
-      showsPat = \case
-        PatVar x -> shows (nameOf x)
-        PatPair x y -> showString "(" . shows (nameOf x) . showString ", " . shows (nameOf y) . showString ")"
+  show = show . toMonolith
+
+-- | A closed term parsed by the monolithic language's parser.
+instance IsString (Combined VoidS) where
+  fromString = either (error . ("Fragments.Combined: " ++)) fromMonolith . parseMonolith
