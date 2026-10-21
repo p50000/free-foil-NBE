@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- | Microbenchmarks for lambda-pi normalisation. Each input is normalised by
@@ -23,6 +24,11 @@ import Data.String (fromString)
 import qualified Fragments.Combined as Composed
 import qualified Monolith
 import Monolith.Parser ()  -- IsString instance for the monolithic language
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+import FreeFoil.NbE.Definitions (Definitions (..), nfFolded, nfUnfolded, nfWith)
+import FreeFoil.NbE.Glue (Unfolding (..))
+import qualified Monolith.Parser as MonolithParser
 
 -- | The size of a term of any language, used to force the whole normal form.
 -- A signature's 'bifoldMap' must inline for this to cost no more than the
@@ -140,6 +146,37 @@ compareComposed name tm =
     , bench "composed" $ whnf (sizeOf . Composed.nf emptyScope) (Composed.fromMonolith tm)
     ]
 
+-- | @plus@ and @mult@ by primitive recursion, as top-level definitions of
+-- the composed language, with the scope and the names they bind.
+withArithmetic ::
+  (forall l. Distinct l => Definitions Composed.Pat Composed.Sig VoidS l -> Scope l -> Map String (Name l) -> r) ->
+  r
+withArithmetic k =
+  withFresh emptyScope $ \plus ->
+    let scope1 = extendScope plus emptyScope
+        env1 = Map.singleton "plus" (nameOf plus)
+        plusBody = parseIn emptyScope Map.empty "\\m. \\n. natrec m { zero -> n ; suc (k, r) -> suc r }"
+    in withFresh scope1 $ \mult ->
+         let scope2 = extendScope mult scope1
+             env2 = Map.insert "mult" (nameOf mult) (Map.map sink env1)
+             multBody = parseIn scope1 env1 "\\m. \\n. natrec m { zero -> zero ; suc (k, r) -> plus n r }"
+         in k (Define (Define NoDefinitions plus plusBody) mult multBody) scope2 env2
+  where
+    parseIn scope names = Composed.fromMonolith . either error id . MonolithParser.parseOpen scope names
+
+-- | @mult m n@ under the definitions, normalised with the plain unfolded
+-- environment and with glue, read back unfolded and folded.
+compareDefinitions :: String -> Int -> Int -> Benchmark
+compareDefinitions name m n =
+  withArithmetic $ \defs scope names ->
+    let t = Composed.fromMonolith . either error id $
+          MonolithParser.parseOpen scope names ("mult (" ++ natural m ++ ") (" ++ natural n ++ ")")
+    in bgroup name
+         [ bench "plain, unfolded" $ whnf (sizeOf . nfUnfolded emptyScope defs) t
+         , bench "glued, unfolded" $ whnf (sizeOf . nfWith Unfolded emptyScope defs) t
+         , bench "glued, folded"   $ whnf (sizeOf . nfFolded emptyScope defs) t
+         ]
+
 -- | Normalise @t@ three ways and force each result fully.
 compareNormalisers :: String -> LambdaPi VoidS -> Benchmark
 compareNormalisers name t =
@@ -184,5 +221,9 @@ main =
         , compareComposition "Church 2^10 = 1024"      (power 10 2)
         , compareComposed    "natrec mult 16 16 = 256" (natMul 16 16)
         , compareComposed    "natrec mult 32 32 = 1024" (natMul 32 32)
+        ]
+    , bgroup "Definitions: plain vs glued"
+        [ compareDefinitions "mult 16 16 = 256"  16 16
+        , compareDefinitions "mult 32 32 = 1024" 32 32
         ]
     ]

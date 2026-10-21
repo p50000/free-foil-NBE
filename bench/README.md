@@ -43,6 +43,12 @@ language as a sum of fragments): Church arithmetic, which uses functions only,
 and multiplication by primitive recursion. The rows measure what composition
 costs against a language written by hand.
 
+The group **Definitions: plain vs glued** normalises `mult m n` under
+top-level definitions of `plus` and `mult` in the composed language three
+ways: with the plain unfolded environment (`nfUnfolded`), and with the glued
+environment read back unfolded (`nfWith Unfolded`) and folded (`nfFolded`),
+which keeps the defined names and unfolds nothing.
+
 ## A sample run
 
 Numbers below are from one run (Apple M3 Pro, macOS 15.7, GHC 9.10.3, `-O2`)
