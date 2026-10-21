@@ -40,7 +40,7 @@ data Value' (g :: Glue) binder sig (n :: Foil.S) :: Type where
     sig (ScopedAST binder sig i) (Value binder sig n) ->
     Value' g binder sig n
   -- | A glued value: a neutral headed by a defined name, and its lazy
-  -- unfolding.
+  -- unfolding (see "FreeFoil.NbE.Glue").
   VGlued_ :: Value binder sig n -> Value binder sig n -> Value' g binder sig n
 
 -- | A semantic value in scope @n@. Term subterms are values already; only

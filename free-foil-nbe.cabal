@@ -33,6 +33,7 @@ library
     exposed-modules:  FreeFoil.NbE
         , FreeFoil.NbE.Conversion
         , FreeFoil.NbE.Definitions
+        , FreeFoil.NbE.Glue
         , FreeFoil.NbE.Sum
     other-modules:    FreeFoil.NbE.Internal.Value
     build-depends:    base ^>=4.20.2.0
