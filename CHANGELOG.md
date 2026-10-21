@@ -14,6 +14,14 @@
   a language with no code of its own. A language composed from fragments of
   functions, pairs and naturals demonstrates it, against the same language
   written in one signature, which is its baseline and its parser.
+- Every language derives its `ZipMatchK` instance with free-foil's Template
+  Haskell (`deriveZipMatchK`). The kind-generics default converted every node
+  to its representation on comparison, which cost conversion checking and
+  α-equivalence up to a third on a ten-constructor signature. free-foil is
+  pinned at its `main` after #114, whose written-out `ZipMatchK` instances
+  for `Sum` and `Product` and traversal-free `nameBinderListOf` make the
+  composed language's α-equivalence 2.7× faster and its conversion checking
+  2.2× faster.
 - A hand-written monomorphic NbE for lambda-pi as a performance baseline.
 - A test suite and two benchmark suites, including a harness against the
   lambda-n-ways corpus.
