@@ -31,8 +31,8 @@ instance HasNameBinders Pat
 instance UnifiablePattern Pat
 
 instance NFData (Pat n l) where
-  rnf (PatVar x)    = rnf (nameId (nameOf x))
-  rnf (PatPair x y) = rnf (nameId (nameOf x)) `seq` rnf (nameId (nameOf y))
+  rnf (PatVar x)    = rnf x
+  rnf (PatPair x y) = rnf x `seq` rnf y
 
 -- | The generic defaults, listing the binders through the kind-generic
 -- representation as free-foil recommends.
