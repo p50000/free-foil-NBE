@@ -33,9 +33,22 @@ library
     exposed-modules:  FreeFoil.NbE
         , FreeFoil.NbE.Conversion
         , FreeFoil.NbE.Definitions
+        , FreeFoil.NbE.Sum
     build-depends:    base ^>=4.20.2.0
+        , bifunctors
         , free-foil ^>=0.5.0
         , containers ^>=0.7
+    default-language: Haskell2010
+
+-- Parsing shared by the demo languages: a BNFC parser, then scope resolution.
+library demo-parsing
+    import:           warnings
+    visibility:       public
+    hs-source-dirs:   parsing
+    exposed-modules:  Demo.Parsing
+    build-depends:    base ^>=4.20.2.0
+        , containers ^>=0.7
+        , free-foil ^>=0.5.0
     default-language: Haskell2010
 
 -- BNFC-generated parser/printer for lambda-pi, from demo/grammar/LambdaPi/Syntax.cf.
@@ -67,6 +80,7 @@ library lambda-pi-demo
     build-depends:    base ^>=4.20.2.0
         , bifunctors
         , containers ^>=0.7
+        , demo-parsing
         , deepseq
         , free-foil ^>=0.5.0
         , free-foil-nbe
@@ -100,6 +114,7 @@ library pairs-demo
     build-depends:    base ^>=4.20.2.0
         , bifunctors
         , containers ^>=0.7
+        , demo-parsing
         , free-foil ^>=0.5.0
         , free-foil-nbe
         , kind-generics >=0.5.0 && <0.6
@@ -132,12 +147,69 @@ library naturals-demo
     build-depends:    base ^>=4.20.2.0
         , bifunctors
         , containers ^>=0.7
+        , demo-parsing
         , free-foil ^>=0.5.0
         , free-foil-nbe
         , kind-generics >=0.5.0 && <0.6
         , kind-generics-th
         , naturals-syntax
         , template-haskell
+    default-language: Haskell2010
+
+library monolith-syntax
+    hs-source-dirs:   gen
+    exposed-modules:  Monolith.Syntax.Abs
+        , Monolith.Syntax.Lex
+        , Monolith.Syntax.Par
+        , Monolith.Syntax.Print
+    build-depends:    base ^>=4.20.2.0
+        , array
+    default-language: Haskell2010
+
+-- The monolithic language: functions, pairs and naturals in one signature,
+-- written the usual way, as the baseline of the composed language, which
+-- also parses and prints through it.
+library monolith-baseline
+    import:           warnings
+    visibility:       public
+    hs-source-dirs:   baselines
+    exposed-modules:  Monolith
+        , Monolith.Parser
+        , Monolith.Raw
+    other-modules:    Monolith.Generated
+    build-depends:    base ^>=4.20.2.0
+        , bifunctors
+        , containers ^>=0.7
+        , demo-parsing
+        , deepseq
+        , free-foil ^>=0.5.0
+        , free-foil-nbe
+        , kind-generics >=0.5.0 && <0.6
+        , kind-generics-th
+        , monolith-syntax
+        , template-haskell
+    default-language: Haskell2010
+
+-- Languages composed from fragments: each fragment gives its rules once, a
+-- language is a Sum of fragments with one pattern type, and the Eval instance
+-- of the sum is the library's.
+library fragments-demo
+    import:           warnings
+    visibility:       public
+    hs-source-dirs:   demo
+    exposed-modules:  Fragments.Combined
+        , Fragments.Lambda
+        , Fragments.Naturals
+        , Fragments.Pairs
+        , Fragments.Pattern
+    build-depends:    base ^>=4.20.2.0
+        , bifunctors
+        , deepseq
+        , free-foil ^>=0.5.0
+        , free-foil-nbe
+        , kind-generics >=0.5.0 && <0.6
+        , kind-generics-th
+        , monolith-baseline
     default-language: Haskell2010
 
 -- Baselines for measuring the generic normaliser on lambda-pi: a monomorphic
@@ -183,6 +255,7 @@ library lambda-let-demo
     build-depends:    base ^>=4.20.2.0
         , bifunctors
         , containers ^>=0.7
+        , demo-parsing
         , free-foil ^>=0.5.0
         , free-foil-nbe
         , kind-generics >=0.5.0 && <0.6
@@ -200,22 +273,27 @@ test-suite free-foil-nbe-test
     other-modules:    Test.Agree
                     , Test.Booleans
                     , Test.Definitions
+                    , Test.Fragments
                     , Test.LambdaLet
                     , Test.LambdaNWays
                     , Test.LambdaPi
                     , Test.LambdaPi.Gen
+                    , Test.Monolith
                     , Test.Naturals
                     , Test.Pairs
     build-depends:    base ^>=4.20.2.0
         , bifunctors
         , containers ^>=0.7
         , deepseq
+        , fragments-demo
         , free-foil ^>=0.5.0
         , free-foil-nbe
         , lambda-let-demo
         , lambda-pi-baselines
         , lambda-pi-demo
         , lambda-pi-syntax
+        , monolith-baseline
+        , monolith-syntax
         , naturals-demo
         , naturals-syntax
         , pairs-demo
@@ -235,9 +313,12 @@ benchmark nbe-bench
     -- Optimisation comes from `optimization: 2` in cabal.project, which applies
     -- to the library (where nf/nfSubst live) as well as this driver.
     build-depends:    base ^>=4.20.2.0
+        , bifunctors
         , free-foil ^>=0.5.0
         , free-foil-nbe
+        , fragments-demo
         , lambda-pi-baselines
         , lambda-pi-demo
+        , monolith-baseline
         , tasty-bench
     default-language: Haskell2010

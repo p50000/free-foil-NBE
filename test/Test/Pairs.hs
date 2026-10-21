@@ -6,7 +6,7 @@
 -- one and conversion checking with α-equivalence of normal forms. The
 -- language has no functions, so every term normalises and no time budget
 -- is needed.
-module Test.Pairs (tests) where
+module Test.Pairs (tests, OpenTerm (..), freeVars) where
 
 import qualified Data.Map.Strict as Map
 

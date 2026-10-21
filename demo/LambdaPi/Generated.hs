@@ -17,12 +17,9 @@
 -- and @fromTerm@.
 module LambdaPi.Generated where
 
-import Control.DeepSeq (NFData (rnf))
 import qualified Control.Monad.Foil as Foil
 import Control.Monad.Free.Foil (AST)
 import Control.Monad.Free.Foil.TH.MkFreeFoil
-import Data.Bifunctor.TH
-import Data.ZipMatchK
 import Generics.Kind.TH (deriveGenericK)
 
 import LambdaPi.Raw
@@ -35,23 +32,9 @@ instance Foil.SinkableK FFPattern
 instance Foil.HasNameBinders FFPattern
 instance Foil.UnifiablePattern FFPattern
 
-deriveBifunctor ''TermSig
-deriveBifoldable ''TermSig
-deriveBitraversable ''TermSig
-
-deriveGenericK ''TermSig
-instance ZipMatchK VarIdent where zipMatchWithK = zipMatchViaEq
-instance ZipMatchK TermSig
-
 mkFreeFoilConversions config
 
 -- | Terms print through the raw conversion and BNFC's printer. Variables are
 -- named by foil identifier, so the output re-parses but is not α-canonical.
 instance Show (AST FFPattern TermSig n) where
   show = printTree . fromTerm
-
--- 'NFData' for the generated types, for benchmarks that force terms.
-instance NFData (FFPattern x y) where
-  rnf (FFPatternVar nb) = rnf (Foil.nameId (Foil.nameOf nb))
-
-instance (NFData scope, NFData term) => NFData (TermSig scope term)

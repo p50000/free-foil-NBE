@@ -20,8 +20,6 @@ module LambdaLet.Generated where
 import qualified Control.Monad.Foil as Foil
 import Control.Monad.Free.Foil (AST)
 import Control.Monad.Free.Foil.TH.MkFreeFoil
-import Data.Bifunctor.TH
-import Data.ZipMatchK
 import Generics.Kind.TH (deriveGenericK)
 
 import LambdaLet.Raw
@@ -33,14 +31,6 @@ deriveGenericK ''FFPattern
 instance Foil.SinkableK FFPattern
 instance Foil.HasNameBinders FFPattern
 instance Foil.UnifiablePattern FFPattern
-
-deriveBifunctor ''TermSig
-deriveBifoldable ''TermSig
-deriveBitraversable ''TermSig
-
-deriveGenericK ''TermSig
-instance ZipMatchK VarIdent where zipMatchWithK = zipMatchViaEq
-instance ZipMatchK TermSig
 
 mkFreeFoilConversions config
 

@@ -16,8 +16,11 @@ left as future work.
 lambda-pi (functions and the dependent function type), Booleans (`if`, no
 binders), lambda-let (`let`), pairs (projections, and `split` with a
 pattern that binds two names) and naturals (primitive recursion, whose
-`suc` branch binds two names). A hand-written monomorphic NbE serves as a
-baseline; the generic normaliser runs within 1.25× of it on the
+`suc` branch binds two names), and on a language composed from fragments
+of functions, pairs and naturals, whose rules the library combines
+(`FreeFoil.NbE.Sum`); the same language written in one signature serves as
+its baseline and lends it a parser. A hand-written monomorphic NbE is the
+baseline of the generic normaliser, which runs within 1.25× of it on the
 lambda-n-ways factorial term and 1.4× on its random corpora. The interface
 is documented in the haddocks of `FreeFoil.NbE`.
 
@@ -34,8 +37,9 @@ is documented in the haddocks of `FreeFoil.NbE`.
   always unfolded: no readback keeps the defined names.
 - The core works with any free-foil pattern. The demo languages bind one
   variable at a time, except `split` in pairs and the `suc` branch of
-  `natrec` in naturals, which bind two; no demo has nested or
-  variable-length patterns.
+  `natrec` in naturals, which bind two; the composed language has both
+  shapes in one pattern type. No demo has nested or variable-length
+  patterns.
 - The languages are untyped, so normalisation need not terminate.
 - Readback does not α-normalise: variables are named by their foil
   identifiers, so α-equivalent normal forms may print differently.
@@ -47,7 +51,7 @@ BNFC-generated parsers are committed, so nothing else is needed.
 
 ```sh
 cabal build all
-cabal test            # 172 tests; --test-show-details=direct lists them
+cabal test            # 204 tests; --test-show-details=direct lists them
 cabal bench nbe-bench
 ```
 
@@ -64,13 +68,17 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 | `src/FreeFoil/NbE.hs` | The core: `Value`, the `Eval` class, generic `eval` and `quote`, `nf` and `whnf`. |
 | `src/FreeFoil/NbE/Conversion.hs` | Conversion checking on values: `conv`, `convertible` and `convertibleUnder`. |
 | `src/FreeFoil/NbE/Definitions.hs` | Top-level definitions: a telescope and the environment it gives to `eval`. |
+| `src/FreeFoil/NbE/Sum.hs` | Elimination rules à la carte: `EvalF` for a fragment, the `Eval` instance of a `Sum` of fragments. |
 | `demo/grammar/<Lang>/Syntax.cf`, `gen/<Lang>/` | The LBNF grammar of each demo language and the committed BNFC output. |
 | `demo/<Lang>/Raw.hs`, `Generated.hs` | free-foil's Template Haskell: the configuration and the generated scope-safe syntax. |
 | `demo/LambdaPi.hs`, `demo/LambdaLet.hs`, `demo/Booleans.hs`, `demo/Pairs.hs`, `demo/Naturals.hs` | The languages: pattern synonyms, the `Eval` instance, a reference normaliser. |
 | `demo/<Lang>/Examples.hs` | Example terms of each language, each with its normal form. |
+| `demo/Fragments/*.hs` | The fragments of functions, pairs and naturals, their shared pattern type, and the language composed from them. |
 | `demo/LambdaPi/Parser.hs`, `PrettyPrint.hs` | Terms as string literals; two printers for values. |
 | `baselines/LambdaPi/Monomorphic.hs` | The monomorphic baseline, `LambdaPi.Monomorphic.nf`. |
 | `baselines/LambdaPi/LambdaNWays.hs` | The bridge to the lambda-n-ways harness. |
+| `baselines/Monolith.hs`, `baselines/Monolith/` | The monolithic language, functions, pairs and naturals in one signature: the baseline of the composed language, with its parser. |
+| `parsing/Demo/Parsing.hs` | Parsing shared by the languages: a BNFC parser, then scope resolution in a scope with named free variables. |
 | `test/`, `bench/` | The test suite; the microbenchmarks and the lambda-n-ways harness. |
 
 ## A first look

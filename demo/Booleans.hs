@@ -24,8 +24,7 @@ module Booleans
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
 import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor, deriveBitraversable)
-import Data.ZipMatchK (ZipMatchK)
-import Generics.Kind.TH (deriveGenericK)
+import Data.ZipMatchK.TH (deriveZipMatchK)
 
 import FreeFoil.NbE (Eval (evalSig), Value (VNode), eval, evalNode)
 import qualified FreeFoil.NbE as NbE
@@ -40,10 +39,9 @@ data BoolSig scope term
 deriveBifunctor ''BoolSig
 deriveBifoldable ''BoolSig
 deriveBitraversable ''BoolSig
-deriveGenericK ''BoolSig
 
 -- | Node comparison for 'alphaEquiv'; the generic instance suffices here.
-instance ZipMatchK BoolSig
+deriveZipMatchK ''BoolSig
 
 -- | Boolean terms. The binder type is never used.
 type BoolTm = AST NameBinder BoolSig
@@ -68,7 +66,7 @@ instance Eval NameBinder BoolSig where
       VNode TrueSig  -> eval scope env t
       VNode FalseSig -> eval scope env f
       cond'          -> VNode (IfSig cond' (eval scope env t) (eval scope env f))
-    node -> evalNode (eval scope) env node
+    node -> evalNode scope env node
 
 -- | Normal form, inherited from the generic 'NbE.nf'.
 nf :: Distinct n => Scope n -> BoolTm n -> BoolTm n

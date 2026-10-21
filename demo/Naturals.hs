@@ -110,7 +110,7 @@ instance Eval FFPattern TermSig where
                 NbE.VNode (SucSig p) -> eval scope (addSubst (addSubst env k p) r (recurse p)) s
                 m' -> NbE.VSuspended env (NatRecSig m' zeroCase (ScopedAST (FFPatternRec k r) s))
           in recurse (eval scope env n)
-    node -> NbE.evalNode (eval scope) env node
+    node -> NbE.evalNode scope env node
 
 -- | Weak-head normal form by substitution, for 'nfSubst'. The recursive
 -- result is substituted as the unevaluated recursion on the predecessor. It
