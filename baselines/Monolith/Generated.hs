@@ -23,7 +23,10 @@ import Control.DeepSeq (NFData (rnf))
 import qualified Control.Monad.Foil as Foil
 import Control.Monad.Free.Foil (AST (..))
 import Control.Monad.Free.Foil.TH.MkFreeFoil
-import Data.Bifunctor.TH
+import Data.Bifoldable (Bifoldable (..))
+import Data.Bifunctor (Bifunctor (..))
+import Data.Bifunctor.TH (makeBifoldMap, makeBifoldr, makeBimap, makeBitraverse)
+import Data.Bitraversable (Bitraversable (..))
 import Data.ZipMatchK
 import Data.ZipMatchK.TH (deriveZipMatchK)
 import Generics.Kind.TH (deriveGenericK)
@@ -40,9 +43,21 @@ instance Foil.SinkableK Pattern
 instance Foil.HasNameBinders Pattern
 instance Foil.UnifiablePattern Pattern
 
-deriveBifunctor ''TermSig
-deriveBifoldable ''TermSig
-deriveBitraversable ''TermSig
+-- The bifunctor instances carry INLINE pragmas, with the bodies that
+-- bifunctors' makeBimap and friends generate: GHC does not inline the derived
+-- methods of a signature this size on its own, and every generic traversal
+-- of the syntax, from readback to the benchmark's forcing, goes through them.
+instance Bifunctor TermSig where
+  {-# INLINE bimap #-}
+  bimap = $(makeBimap ''TermSig)
+instance Bifoldable TermSig where
+  {-# INLINE bifoldMap #-}
+  bifoldMap = $(makeBifoldMap ''TermSig)
+  {-# INLINE bifoldr #-}
+  bifoldr = $(makeBifoldr ''TermSig)
+instance Bitraversable TermSig where
+  {-# INLINE bitraverse #-}
+  bitraverse = $(makeBitraverse ''TermSig)
 instance ZipMatchK Raw.VarIdent where zipMatchWithK = zipMatchViaEq
 deriveZipMatchK ''TermSig
 
