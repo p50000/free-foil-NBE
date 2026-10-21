@@ -142,6 +142,27 @@ library naturals-demo
         , template-haskell
     default-language: Haskell2010
 
+-- Languages composed from fragments: each fragment gives its rules once, a
+-- language is a Sum of fragments with one pattern type, and the Eval instance
+-- of the sum is the library's.
+library fragments-demo
+    import:           warnings
+    visibility:       public
+    hs-source-dirs:   demo
+    exposed-modules:  Fragments.Combined
+        , Fragments.Lambda
+        , Fragments.Naturals
+        , Fragments.Pairs
+        , Fragments.Pattern
+    build-depends:    base ^>=4.20.2.0
+        , bifunctors
+        , deepseq
+        , free-foil ^>=0.5.0
+        , free-foil-nbe
+        , kind-generics >=0.5.0 && <0.6
+        , kind-generics-th
+    default-language: Haskell2010
+
 -- Baselines for measuring the generic normaliser on lambda-pi: a monomorphic
 -- NbE over the same syntax, and the bridge to the lambda-n-ways harness.
 -- Public so that the harness under bench/lambda-n-ways/ can use it.

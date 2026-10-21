@@ -1,0 +1,66 @@
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE DeriveFunctor         #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeFamilies          #-}
+-- | The fragment of pairs: a pair former, the two projections and @split@,
+-- whose pattern binds both components. The rules are those of Renata
+-- Shakirova's "Pairs", written for any language that contains the fragment:
+-- a projection fires on a pair value and is stuck otherwise; @split@ of a
+-- pair enters its body with both components in the environment, by position
+-- in the pattern, and on anything else it is suspended with its scrutinee
+-- evaluated.
+module Fragments.Pairs
+  ( PairF (..)
+  ) where
+
+import Control.DeepSeq        (NFData)
+import Control.Monad.Foil
+import Control.Monad.Free.Foil
+import Data.Bifunctor.TH       (deriveBifoldable, deriveBifunctor, deriveBitraversable)
+import Data.ZipMatchK          (ZipMatchK)
+import Generics.Kind.TH        (deriveGenericK)
+import GHC.Generics            (Generic)
+
+import FreeFoil.NbE            (Value (..), eval, evalNode)
+import FreeFoil.NbE.Sum
+
+-- | Pairs: @(t, u)@, @fst t@, @snd t@ and @split t as (x, y) in u@.
+data PairF scope term
+  = PairF term term
+  | FstF term
+  | SndF term
+  | SplitF term scope
+  deriving (Functor, Generic)
+
+deriveBifunctor ''PairF
+deriveBifoldable ''PairF
+deriveBitraversable ''PairF
+deriveGenericK ''PairF
+
+instance ZipMatchK PairF
+instance (NFData scope, NFData term) => NFData (PairF scope term)
+
+instance CoSinkable binder => EvalF binder PairF where
+  {-# INLINE evalF #-}
+  evalF pos scope env = \case
+    FstF p ->
+      case eval scope env p of
+        VNode node | Just (PairF a _) <- prj pos node -> a
+        p'                                            -> VNode (inj pos (FstF p'))
+    SndF p ->
+      case eval scope env p of
+        VNode node | Just (PairF _ b) <- prj pos node -> b
+        p'                                            -> VNode (inj pos (SndF p'))
+    SplitF p (ScopedAST binder body) ->
+      case eval scope env p of
+        VNode node | Just (PairF a b) <- prj pos node ->
+          case assertDistinct binder of
+            Distinct -> eval scope (addSubstPattern env binder [a, b]) body
+        p' -> VSuspended env (inj pos (SplitF p' (ScopedAST binder body)))
+    node -> evalNode (eval scope) env (inj pos node)
