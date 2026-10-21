@@ -22,19 +22,22 @@
 -- binder type must be 'Foil.CoSinkable', which free-foil generates, plus
 -- 'Foil.SinkableK' for 'whnf', which has a generic default.
 --
--- The recursive functions are @INLINABLE@, and a language specialises them
--- to its signature with @SPECIALIZE@ pragmas for 'nf', 'eval' and 'quote'
--- (and for the conversion checker of "FreeFoil.NbE.Conversion"), as
--- "LambdaPi" does. Each pragma keeps the scope polymorphic, as in
--- @Distinct n => Scope n -> ...@. GHC's own specialisation does not replace
--- them. At a call site it fixes the scope as well, so the copy it makes
--- covers the outermost scope only, and the recursion under binders, where
--- scopes grow, runs the overloaded code. Moreover, the calls to 'eval' from
--- 'evalSig' in the instance are on the instance's own dictionary and are not
--- specialised at all, so without the pragma for 'eval' every rule re-enters
--- evaluation through dictionary passing. On the monolithic demonstration
--- language, the pragmas are worth between 1.25× and 1.4×, evaluation and
--- readback each needing its own.
+-- A language specialises 'nf', 'eval' and 'quote' to its types, next to
+-- its 'Eval' instance, keeping the scope polymorphic:
+--
+-- > type Term n = AST Pattern TermSig n
+-- > type Value n = NbE.Value Pattern TermSig n
+-- >
+-- > {-# SPECIALIZE NbE.nf    :: Distinct n => Scope n -> Term n -> Term n #-}
+-- > {-# SPECIALIZE NbE.eval  :: (Distinct o, Distinct i) =>
+-- >       Scope o -> Substitution Value i o -> Term i -> Value o #-}
+-- > {-# SPECIALIZE NbE.quote :: Distinct n => Scope n -> Value n -> Term n #-}
+--
+-- and likewise 'FreeFoil.NbE.Conversion.conv' and
+-- 'FreeFoil.NbE.Conversion.convertible'. Without the pragmas the monolithic
+-- demonstration language is 1.25× to 1.4× slower: GHC's own specialisation
+-- at a call site fixes the scope too, so it ends at the first binder, and it
+-- never specialises the calls to 'eval' inside the instance.
 module FreeFoil.NbE
   ( -- * Semantic domain
     Value (..)
@@ -112,7 +115,7 @@ instance Bifunctor sig => Foil.Sinkable (Value binder sig) where
 -- 'evalNode'. The node arrives raw so that a redex never builds the
 -- interpreted node it would discard. The instance upholds the 'Value'
 -- invariant; "LambdaPi" is a one-rule example. An instance comes with the
--- @SPECIALIZE@ pragmas described in the module header.
+-- @SPECIALIZE@ pragmas shown in the module header.
 class (Bifunctor sig, Bifoldable sig) => Eval binder sig where
   evalSig ::
     (Foil.Distinct o, Foil.Distinct i) =>
