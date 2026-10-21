@@ -38,6 +38,9 @@ instance NFData (Pat n l) where
 -- | Written by hand, after the instance for 'NameBinderList': the generic
 -- default traverses the kind-generic representation on every refresh.
 instance CoSinkable Pat where
+  nameBinderListOf (PatVar x)    = NameBinderListCons x NameBinderListEmpty
+  nameBinderListOf (PatPair x y) = NameBinderListCons x (NameBinderListCons y NameBinderListEmpty)
+
   coSinkabilityProof rename (PatVar x) cont =
     coSinkabilityProof rename x $ \rename' x' ->
       cont rename' (PatVar x')
