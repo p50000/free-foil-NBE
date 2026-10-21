@@ -38,7 +38,13 @@ import           Data.Bifunctor.Sum      (Sum (..))
 import           FreeFoil.NbE            (Eval (..), Value, eval, evalNode)
 
 -- | The position of a fragment @f@ in a language @sig@: how to build one of
--- its nodes in the language and how to recognise one.
+-- its nodes in the language and how to recognise one. This is Swierstra's
+-- injection and projection as a record rather than a class: the instance of
+-- 'EvalF' for 'Sum' computes the position of each summand as it descends
+-- ('inL', 'inR'), which a class would have to find by instance search over
+-- the shape of the sum, with overlapping instances once a fragment may occur
+-- twice; and with the record every call is known once the language is
+-- fixed.
 data Inj f sig = Inj
   { inj :: forall s t. f s t -> sig s t
   , prj :: forall s t. sig s t -> Maybe (f s t)
