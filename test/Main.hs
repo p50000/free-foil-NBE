@@ -9,6 +9,7 @@ import qualified Test.Fragments
 import qualified Test.LambdaLet
 import qualified Test.LambdaNWays
 import qualified Test.LambdaPi
+import qualified Test.Monolith
 import qualified Test.Naturals
 import qualified Test.Pairs
 
@@ -23,6 +24,7 @@ main =
         , Test.Booleans.tests
         , Test.LambdaLet.tests
         , Test.LambdaNWays.tests
+        , Test.Monolith.tests
         , Test.Naturals.tests
         , Test.Pairs.tests
         ]

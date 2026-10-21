@@ -262,6 +262,7 @@ test-suite free-foil-nbe-test
                     , Test.LambdaNWays
                     , Test.LambdaPi
                     , Test.LambdaPi.Gen
+                    , Test.Monolith
                     , Test.Naturals
                     , Test.Pairs
     build-depends:    base ^>=4.20.2.0
@@ -275,6 +276,8 @@ test-suite free-foil-nbe-test
         , lambda-pi-baselines
         , lambda-pi-demo
         , lambda-pi-syntax
+        , monolith-baseline
+        , monolith-syntax
         , naturals-demo
         , naturals-syntax
         , pairs-demo
