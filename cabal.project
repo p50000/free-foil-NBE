@@ -12,7 +12,7 @@ with-compiler: ghc-9.10.3
 source-repository-package
   type: git
   location: https://github.com/fizruk/free-foil.git
-  tag: 3c067f0786225e7e8f5c26600f9af795c066540b
+  tag: a069d339e274dee4adf1158b70a708313dde0e85
   subdir: haskell/free-foil
 
 -- Build the test suite and benchmark as part of `cabal build all` (and CI),

@@ -17,7 +17,6 @@
 -- and @fromTerm@.
 module LambdaPi.Generated where
 
-import Control.DeepSeq (NFData (rnf))
 import qualified Control.Monad.Foil as Foil
 import Control.Monad.Free.Foil (AST)
 import Control.Monad.Free.Foil.TH.MkFreeFoil
@@ -44,9 +43,3 @@ mkFreeFoilConversions config
 -- named by foil identifier, so the output re-parses but is not α-canonical.
 instance Show (AST FFPattern TermSig n) where
   show = printTree . fromTerm
-
--- 'NFData' for the generated types, for benchmarks that force terms.
-instance NFData (FFPattern x y) where
-  rnf (FFPatternVar nb) = rnf (Foil.nameId (Foil.nameOf nb))
-
-instance (NFData scope, NFData term) => NFData (TermSig scope term)

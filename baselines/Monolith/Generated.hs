@@ -19,7 +19,6 @@
 -- so the raw syntax is imported qualified.
 module Monolith.Generated where
 
-import Control.DeepSeq (NFData (rnf))
 import qualified Control.Monad.Foil as Foil
 import Control.Monad.Free.Foil (AST (..))
 import Control.Monad.Free.Foil.TH.MkFreeFoil
@@ -48,10 +47,3 @@ mkFreeFoilConversions Raw.config
 -- named by foil identifier, so the output re-parses but is not α-canonical.
 instance Show (AST Pattern TermSig n) where
   show = printTree . fromTerm
-
--- 'NFData' for the generated types, for tests and benchmarks that force terms.
-instance NFData (Pattern x y) where
-  rnf (PatternVar x)    = rnf (Foil.nameId (Foil.nameOf x))
-  rnf (PatternPair x y) = rnf (Foil.nameId (Foil.nameOf x)) `seq` rnf (Foil.nameId (Foil.nameOf y))
-
-instance (NFData scope, NFData term) => NFData (TermSig scope term)
