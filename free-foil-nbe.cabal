@@ -276,6 +276,7 @@ test-suite free-foil-nbe-test
                     , Test.Booleans
                     , Test.Definitions
                     , Test.Fragments
+                    , Test.Glue
                     , Test.LambdaLet
                     , Test.LambdaNWays
                     , Test.LambdaPi
