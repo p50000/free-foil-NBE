@@ -17,23 +17,21 @@ import qualified LambdaPi.Monomorphic as Mono
 import LambdaPi.Parser ()  -- IsString instance for writing terms as strings
 
 import Control.Monad.Free.Foil (AST (..), ScopedAST (..))
+import Data.Bifoldable (Bifoldable, bifoldMap)
+import Data.Monoid (Sum (..))
 import Data.String (fromString)
-import Data.Bifunctor.Sum (Sum (..))
 import qualified Fragments.Combined as Composed
-import Fragments.Lambda (LamF (..))
-import Fragments.Naturals (NatF (..))
-import Fragments.Pairs (PairF (..))
 import qualified Monolith
-import Monolith (TermSig (..))
 import Monolith.Parser ()  -- IsString instance for the monolithic language
 
--- | The size of a term, used to force the whole normal form.
-sizeOf :: LambdaPi n -> Int
+-- | The size of a term of any language, used to force the whole normal form.
+-- A signature's 'bifoldMap' must inline for this to cost no more than the
+-- traversal itself: small signatures and sums of them inline on their own,
+-- and the monolith's instance carries an @INLINE@ pragma.
+sizeOf :: Bifoldable sig => AST binder sig n -> Int
 sizeOf = \case
-  Var {}     -> 1
-  App f x    -> 1 + sizeOf f + sizeOf x
-  Lam _ body -> 1 + sizeOf body
-  Pi dom _ b -> 1 + sizeOf dom + sizeOf b
+  Var _     -> 1
+  Node node -> 1 + getSum (bifoldMap (\(ScopedAST _ body) -> Sum (sizeOf body)) (Sum . sizeOf) node)
 
 -- | The Church numeral @n@: @\\s. \\z. s (s (... z))@ with @n@ applications.
 churchN :: Int -> LambdaPi VoidS
@@ -103,43 +101,6 @@ nestedLet n =
           Distinct ->
             App (Lam xi (go (extendScope xi scope) (nameOf xi) (k - 1))) (Var prev)
 
--- | The sizes of terms of the monolithic and of the composed language, used
--- to force the whole normal form. Written on the constructors, like 'sizeOf':
--- forcing must stay cheap next to the normalisation it forces, and a
--- traversal through 'Data.Bifoldable.bifoldMap' or through the pattern
--- synonyms costs several times this one.
-sizeOfMonolith :: Monolith.Monolith n -> Int
-sizeOfMonolith = \case
-  Var _ -> 1
-  Node node -> case node of
-    LamSig (ScopedAST _ body) -> 1 + sizeOfMonolith body
-    AppSig f a -> 1 + sizeOfMonolith f + sizeOfMonolith a
-    PiSig dom (ScopedAST _ cod) -> 1 + sizeOfMonolith dom + sizeOfMonolith cod
-    PairSig a b -> 1 + sizeOfMonolith a + sizeOfMonolith b
-    FstSig p -> 1 + sizeOfMonolith p
-    SndSig p -> 1 + sizeOfMonolith p
-    SplitSig p (ScopedAST _ body) -> 1 + sizeOfMonolith p + sizeOfMonolith body
-    ZeroSig -> 1
-    SucSig t -> 1 + sizeOfMonolith t
-    NatRecSig n z (ScopedAST _ s) -> 1 + sizeOfMonolith n + sizeOfMonolith z + sizeOfMonolith s
-
-sizeOfComposed :: Composed.Combined n -> Int
-sizeOfComposed = \case
-  Var _ -> 1
-  Node (L2 node) -> case node of
-    LamF (ScopedAST _ body) -> 1 + sizeOfComposed body
-    AppF f a -> 1 + sizeOfComposed f + sizeOfComposed a
-    PiF dom (ScopedAST _ cod) -> 1 + sizeOfComposed dom + sizeOfComposed cod
-  Node (R2 (L2 node)) -> case node of
-    PairF a b -> 1 + sizeOfComposed a + sizeOfComposed b
-    FstF p -> 1 + sizeOfComposed p
-    SndF p -> 1 + sizeOfComposed p
-    SplitF p (ScopedAST _ body) -> 1 + sizeOfComposed p + sizeOfComposed body
-  Node (R2 (R2 node)) -> case node of
-    ZeroF -> 1
-    SucF t -> 1 + sizeOfComposed t
-    NatRecF n z (ScopedAST _ s) -> 1 + sizeOfComposed n + sizeOfComposed z + sizeOfComposed s
-
 -- | A lambda-pi term in the monolithic language, through its printer and the
 -- monolith's parser: the lambda syntax is the same.
 monolithic :: LambdaPi VoidS -> Monolith.Monolith VoidS
@@ -163,8 +124,8 @@ compareComposition :: String -> LambdaPi VoidS -> Benchmark
 compareComposition name t =
   bgroup name
     [ bench "lambda-pi" $ whnf (sizeOf . nf emptyScope) t
-    , bench "monolith"  $ whnf (sizeOfMonolith . Monolith.nf emptyScope) tm
-    , bench "composed"  $ whnf (sizeOfComposed . Composed.nf emptyScope) (Composed.fromMonolith tm)
+    , bench "monolith"  $ whnf (sizeOf . Monolith.nf emptyScope) tm
+    , bench "composed"  $ whnf (sizeOf . Composed.nf emptyScope) (Composed.fromMonolith tm)
     ]
   where
     tm = monolithic t
@@ -174,8 +135,8 @@ compareComposition name t =
 compareComposed :: String -> Monolith.Monolith VoidS -> Benchmark
 compareComposed name tm =
   bgroup name
-    [ bench "monolith" $ whnf (sizeOfMonolith . Monolith.nf emptyScope) tm
-    , bench "composed" $ whnf (sizeOfComposed . Composed.nf emptyScope) (Composed.fromMonolith tm)
+    [ bench "monolith" $ whnf (sizeOf . Monolith.nf emptyScope) tm
+    , bench "composed" $ whnf (sizeOf . Composed.nf emptyScope) (Composed.fromMonolith tm)
     ]
 
 -- | Normalise @t@ three ways and force each result fully.

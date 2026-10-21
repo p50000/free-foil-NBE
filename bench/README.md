@@ -25,11 +25,12 @@ cabal bench nbe-bench --benchmark-options '--baseline bench/baseline.csv'
 ```
 
 Uses [`tasty-bench`](https://hackage.haskell.org/package/tasty-bench); results
-are forced by walking the whole normal form (`sizeOf` for lambda-pi, and one
-traversal per language, written on its constructors) rather than through an
-`NFData` instance, matching free-foil's own normalisation benchmark. Forcing
-must stay cheap next to the normalisation it forces; a generic `bifoldMap` or
-a `case` over pattern synonyms costs several times as much. Every
+are forced by walking the whole normal form with one generic `sizeOf` rather
+than through an `NFData` instance, matching free-foil's own normalisation
+benchmark. Forcing must stay cheap next to the normalisation it forces, so a
+signature's `bifoldMap` has to inline: the monolith's instances carry `INLINE`
+pragmas for that, since GHC does not inline the derived methods of a
+signature its size on its own. Every
 component is built at `-O2` (`optimization: 2` in `cabal.project`), so the
 library where `nf`/`nfSubst` live is optimised, not just the benchmark driver.
 
