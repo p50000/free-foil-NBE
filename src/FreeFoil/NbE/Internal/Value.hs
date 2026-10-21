@@ -39,6 +39,9 @@ data Value' (g :: Glue) binder sig (n :: Foil.S) :: Type where
     Foil.Substitution (Value binder sig) i n ->
     sig (ScopedAST binder sig i) (Value binder sig n) ->
     Value' g binder sig n
+  -- | A glued value: a neutral headed by a defined name, and its lazy
+  -- unfolding.
+  VGlued_ :: Value binder sig n -> Value binder sig n -> Value' g binder sig n
 
 -- | A semantic value in scope @n@. Term subterms are values already; only
 -- scoped subterms, the bodies under binders, are suspended. A
@@ -73,3 +76,5 @@ instance Bifunctor sig => Foil.Sinkable (Value' g binder sig) where
     VNode_ (bimap id (Foil.sinkabilityProof rename) node)
   sinkabilityProof rename (VSuspended_ env node) =
     VSuspended_ (Foil.sinkabilityProof rename env) (bimap id (Foil.sinkabilityProof rename) node)
+  sinkabilityProof rename (VGlued_ folded unfolded) =
+    VGlued_ (Foil.sinkabilityProof rename folded) (Foil.sinkabilityProof rename unfolded)

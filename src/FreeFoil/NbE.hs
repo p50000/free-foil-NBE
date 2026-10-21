@@ -71,6 +71,7 @@ import           Data.Bifunctor              (Bifunctor (..))
 import qualified Data.IntMap                 as IntMap
 import           Data.Monoid                 (Any (..))
 import           Data.Void                   (Void, absurd)
+import           GHC.Exts                    (inline)
 import           Data.Coerce                 (coerce)
 import           Unsafe.Coerce               (unsafeCoerce)
 
@@ -205,21 +206,40 @@ ensureBivacuousSecond x
 -- * Readback
 
 -- | Match the value of a principal subterm: an elimination rule sees it as a
--- 'Whnf', through the synonyms 'VVar', 'VNode', 'VSuspended' and 'Stuck'.
+-- 'Whnf', through the synonyms 'VVar', 'VNode', 'VSuspended' and 'Stuck'. On
+-- a glued value the rule applies to both sides: the folded side is a
+-- neutral, so the rule leaves it stuck, and the unfolded side may be glued
+-- again. The results are glued again, so that readback can still choose. On
+-- any other value the rule applies directly, and it is a closure only on a
+-- glued value.
 eliminate ::
   Value binder sig n ->
   (Whnf binder sig n -> Value binder sig n) ->
   Value binder sig n
 {-# INLINE eliminate #-}
-eliminate v rule = rule (force v)
+eliminate v rule = case v of
+  VGlued_ folded unfolded -> VGlued_ (eliminateLoop folded rule) (eliminateLoop unfolded rule)
+  _ -> inline rule (coerce v)
 
--- | The head of a value, as a 'Whnf'.
+-- | The loop of 'eliminate' under the first glue, out of line.
+eliminateLoop ::
+  Value binder sig n ->
+  (Whnf binder sig n -> Value binder sig n) ->
+  Value binder sig n
+{-# NOINLINE eliminateLoop #-}
+eliminateLoop v rule = case v of
+  VGlued_ folded unfolded -> VGlued_ (eliminateLoop folded rule) (eliminateLoop unfolded rule)
+  _ -> rule (coerce v)
+
+-- | The unfolded head of a value: peel every layer of glue off its root.
 force :: Value binder sig n -> Whnf binder sig n
-{-# INLINE force #-}
-force = coerce
+force = \case
+  VGlued_ _ unfolded -> force unfolded
+  v                  -> coerce v
 
 -- | Read a value back into a term. Term subterms recurse directly; scoped
--- subterms are read back under their binder by 'quoteScoped'.
+-- subterms are read back under their binder by 'quoteScoped'. A glued value
+-- is read back unfolded.
 --
 -- Every constraint here is used. An unused dictionary would make GHC split
 -- 'quote' into a wrapper and a worker, and a @SPECIALIZE@ pragma would then
@@ -234,6 +254,7 @@ quote scope = \case
   VVar_ x -> Var x
   VNode_ node -> Node $! bimap absurd (quote scope) node
   VSuspended_ env node -> Node $! bimap (quoteScoped scope env) (quote scope) node
+  VGlued_ _ unfolded -> quote scope unfolded
 
 -- | Read back one scoped subterm of a suspended node: refresh the binder,
 -- extend the captured environment with it as a fresh neutral, evaluate the
@@ -272,6 +293,7 @@ quoteWhnf scope = \case
   VVar_ x -> Var x
   VNode_ node -> Node $ bimap absurd (quote scope) node
   VSuspended_ env node -> Node $ bimap (freezeScoped scope env) (quote scope) node
+  VGlued_ _ unfolded -> quoteWhnf scope unfolded
 
 -- | Freeze one scoped subterm of a suspended node without evaluating under
 -- its binder: refresh the binder and substitute the captured environment,
