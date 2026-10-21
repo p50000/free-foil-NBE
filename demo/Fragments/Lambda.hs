@@ -14,7 +14,7 @@
 -- entered under its captured environment extended with the argument, a
 -- neutral head rebuilds the application, and @Pi@ falls through to the
 -- default. The binder of a lambda is expected to bind one name; applying a
--- lambda whose pattern binds none fails in 'addSubstPattern'.
+-- lambda whose pattern binds two fails in 'addSubstPattern'.
 module Fragments.Lambda
   ( LamF (..)
   ) where

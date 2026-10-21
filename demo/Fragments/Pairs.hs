@@ -9,8 +9,8 @@
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
 -- | The fragment of pairs: a pair former, the two projections and @split@,
--- whose pattern binds both components. The rules are those of Renata
--- Shakirova's "Pairs", written for any language that contains the fragment:
+-- whose pattern binds both components. The rules are those of "Pairs",
+-- written for any language that contains the fragment:
 -- a projection fires on a pair value and is stuck otherwise; @split@ of a
 -- pair enters its body with both components in the environment, by position
 -- in the pattern, and on anything else it is suspended with its scrutinee

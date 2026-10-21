@@ -18,7 +18,8 @@
   Haskell (`deriveZipMatchK`). The kind-generics default converted every node
   to its representation on comparison, which cost conversion checking and
   α-equivalence up to a third on a ten-constructor signature. free-foil is
-  pinned at its `main` after #114, whose written-out `ZipMatchK` instances
+  pinned at its `main` after [its #114](https://github.com/fizruk/free-foil/pull/114),
+  whose written-out `ZipMatchK` instances
   for `Sum` and `Product` and traversal-free `nameBinderListOf` make the
   composed language's α-equivalence 2.7× faster and its conversion checking
   2.2× faster.

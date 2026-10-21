@@ -4,18 +4,15 @@
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
--- The Eval instance is an orphan on purpose: it belongs with the language's
--- dynamics.
-{-# OPTIONS_GHC -Wno-orphans #-}
+{-# OPTIONS_GHC -Wno-orphans #-}  -- the Eval instance belongs with the rules
 -- | The monolithic demonstration language: functions, pairs and natural
 -- numbers in one signature, written the way a language is written without
 -- fragments, for comparison with "Fragments.Combined", which composes the
 -- same language from "Fragments.Lambda", "Fragments.Pairs" and
--- "Fragments.Naturals". The three rules are those of "LambdaPi" and of
--- Renata Shakirova's "Pairs" and "Naturals". The syntax is generated in
+-- "Fragments.Naturals". The three rules are those of "LambdaPi",
+-- "Pairs" and "Naturals". The syntax is generated in
 -- "Monolith.Generated"; this module adds pattern synonyms over it and the
--- 'Eval' instance. The composed language is its reference normaliser in the
--- tests, and it is theirs.
+-- 'Eval' instance.
 --
 -- A pattern binds one name or two, for every binder, so a lambda over a pair
 -- of names or a @split@ over one name is syntactically possible; the rules

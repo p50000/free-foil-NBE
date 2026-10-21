@@ -10,7 +10,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 -- | The fragment of natural numbers: @zero@, @suc@ and primitive recursion,
 -- whose @suc@ branch binds the predecessor and the recursive result with one
--- pattern. The rule is that of Renata Shakirova's "Naturals", written for any
+-- pattern. The rule is that of "Naturals", written for any
 -- language that contains the fragment: recursion on the value of the
 -- scrutinee with a stuck case for a neutral one, after Abel ("Normalization
 -- by Evaluation: Dependent Types and Impredicativity", 2013, Figure 3.2),

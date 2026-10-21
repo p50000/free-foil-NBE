@@ -19,8 +19,8 @@ pattern that binds two names) and naturals (primitive recursion, whose
 `suc` branch binds two names), and on a language composed from fragments
 of functions, pairs and naturals, whose rules the library combines
 (`FreeFoil.NbE.Sum`); the same language written in one signature serves as
-its baseline and lends it a parser. A hand-written monomorphic NbE serves as
-a baseline; the generic normaliser runs within 1.25× of it on the
+its baseline and lends it a parser. A hand-written monomorphic NbE is the
+baseline of the generic normaliser, which runs within 1.25× of it on the
 lambda-n-ways factorial term and 1.4× on its random corpora. The interface
 is documented in the haddocks of `FreeFoil.NbE`.
 

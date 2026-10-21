@@ -5,10 +5,7 @@
 {-# LANGUAGE LambdaCase       #-}
 {-# LANGUAGE PatternSynonyms  #-}
 {-# LANGUAGE TypeOperators    #-}
--- The specialisation rules, the printer and the string literals are orphans
--- on purpose: the Eval instance of a sum lives in the library, and this is
--- the module of the language.
-{-# OPTIONS_GHC -Wno-orphans #-}
+{-# OPTIONS_GHC -Wno-orphans #-}  -- the language is a synonym over library types
 -- | A language composed from the fragments of functions, pairs and natural
 -- numbers: its signature is the 'Sum' of theirs and its binders are 'Pat'.
 -- The language writes no rule of its own. The 'Eval' instance is the one of
