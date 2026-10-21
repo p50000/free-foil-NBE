@@ -23,6 +23,7 @@ GRAMMARS=(
   "LambdaLet demo/grammar/LambdaLet/Syntax.cf"
   "Pairs demo/grammar/Pairs/Syntax.cf"
   "Naturals demo/grammar/Naturals/Syntax.cf"
+  "Monolith demo/grammar/Monolith/Syntax.cf"
 )
 
 for entry in "${GRAMMARS[@]}"; do

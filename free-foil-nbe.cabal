@@ -142,6 +142,39 @@ library naturals-demo
         , template-haskell
     default-language: Haskell2010
 
+library monolith-syntax
+    hs-source-dirs:   gen
+    exposed-modules:  Monolith.Syntax.Abs
+        , Monolith.Syntax.Lex
+        , Monolith.Syntax.Par
+        , Monolith.Syntax.Print
+    build-depends:    base ^>=4.20.2.0
+        , array
+    default-language: Haskell2010
+
+-- The monolithic language: functions, pairs and naturals in one signature,
+-- written the usual way, as the baseline of the composed language, which
+-- also parses and prints through it.
+library monolith-baseline
+    import:           warnings
+    visibility:       public
+    hs-source-dirs:   baselines
+    exposed-modules:  Monolith
+        , Monolith.Parser
+        , Monolith.Raw
+    other-modules:    Monolith.Generated
+    build-depends:    base ^>=4.20.2.0
+        , bifunctors
+        , containers ^>=0.7
+        , deepseq
+        , free-foil ^>=0.5.0
+        , free-foil-nbe
+        , kind-generics >=0.5.0 && <0.6
+        , kind-generics-th
+        , monolith-syntax
+        , template-haskell
+    default-language: Haskell2010
+
 -- Languages composed from fragments: each fragment gives its rules once, a
 -- language is a Sum of fragments with one pattern type, and the Eval instance
 -- of the sum is the library's.

@@ -1,0 +1,30 @@
+-- LBNF grammar for the monolithic demonstration language: functions, pairs
+-- and natural numbers in one signature, the same language that
+-- Fragments.Combined composes from fragments. It lends the composed language
+-- its parser and printer.
+-- Generated modules live under Monolith.Syntax.* (see ../../../grammar-regen.sh).
+
+comment "--" ;
+comment "{-" "-}" ;
+
+token VarIdent letter (letter | digit | '_' | '\'')* ;
+
+Var.    Term2 ::= VarIdent ;
+Pair.   Term2 ::= "(" Term "," Term ")" ;
+Zero.   Term2 ::= "zero" ;
+App.    Term1 ::= Term1 Term2 ;
+Fst.    Term1 ::= "fst" Term2 ;
+Snd.    Term1 ::= "snd" Term2 ;
+Suc.    Term1 ::= "suc" Term2 ;
+Lam.    Term  ::= "\\" Pattern "." ScopedTerm ;
+Pi.     Term  ::= "(" Pattern ":" Term ")" "->" ScopedTerm ;
+Split.  Term  ::= "split" Term "as" Pattern "in" ScopedTerm ;
+NatRec. Term  ::= "natrec" Term "{" "zero" "->" Term ";" "suc" Pattern "->" ScopedTerm "}" ;
+coercions Term 2 ;
+
+AScopedTerm. ScopedTerm ::= Term ;
+
+PatternVar.  Pattern ::= VarIdent ;
+PatternPair. Pattern ::= "(" VarIdent "," VarIdent ")" ;
+
+entrypoints Term ;
