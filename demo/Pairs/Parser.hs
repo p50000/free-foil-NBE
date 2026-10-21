@@ -1,10 +1,10 @@
 {-# LANGUAGE DataKinds         #-}
 -- | Parsing pairs terms from strings: the BNFC-generated lexer and parser
--- plus free-foil's generated scope resolution, through "Demo.Parsing". @(a, b)@ is a pair, @fst t@
--- and @snd t@ the projections, @split p as (x, y) in t@ binds both
--- components. The language has no closed terms, so there is no 'IsString'
--- instance: 'parseOpen' takes a scope and an environment for the free
--- variables.
+-- plus free-foil's generated scope resolution, through "Demo.Parsing".
+-- @(a, b)@ is a pair, @fst t@ and @snd t@ the projections, and
+-- @split p as (x, y) in t@ binds both components. The language has no closed
+-- terms, so there is no 'IsString' instance: 'parseOpen' takes a scope and an
+-- environment for the free variables.
 module Pairs.Parser
   ( parseOpen
   , resolve

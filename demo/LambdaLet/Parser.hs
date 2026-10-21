@@ -2,10 +2,11 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}  -- the IsString instance of a synonym over library types
 -- | Parsing lambda-let terms from strings: the BNFC-generated lexer and
--- parser plus free-foil's generated scope resolution, through "Demo.Parsing". Application is
--- juxtaposition, @\\x. t@ is a lambda, @let x = e in t@ a let whose body
--- extends as far right as possible. The 'IsString' instance parses a closed
--- term; 'parseOpen' takes a scope and an environment for the free variables.
+-- parser plus free-foil's generated scope resolution, through "Demo.Parsing".
+-- Application is juxtaposition, @\\x. t@ is a lambda, @let x = e in t@ a let
+-- whose body extends as far right as possible. The 'IsString' instance parses
+-- a closed term; 'parseOpen' takes a scope and an environment for the free
+-- variables.
 module LambdaLet.Parser
   ( parseLambdaLet
   , parseOpen

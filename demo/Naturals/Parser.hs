@@ -2,10 +2,10 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}  -- the IsString instance of a synonym over library types
 -- | Parsing naturals terms from strings: the BNFC-generated lexer and parser
--- plus free-foil's generated scope resolution, through "Demo.Parsing". @zero@ and @suc t@ are the
--- numerals, @natrec n { zero -> z ; suc k, r -> s }@ is primitive recursion.
--- The 'IsString' instance parses a closed term; 'parseOpen' takes a scope
--- and an environment for the free variables.
+-- plus free-foil's generated scope resolution, through "Demo.Parsing". @zero@
+-- and @suc t@ are the numerals, @natrec n { zero -> z ; suc k, r -> s }@ is
+-- primitive recursion. The 'IsString' instance parses a closed term;
+-- 'parseOpen' takes a scope and an environment for the free variables.
 module Naturals.Parser
   ( parseNaturals
   , parseOpen

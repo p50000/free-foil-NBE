@@ -2,10 +2,10 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}  -- the IsString instance of a synonym over library types
 -- | Parsing lambda-pi terms from strings: the BNFC-generated lexer and parser
--- plus free-foil's generated scope resolution, through "Demo.Parsing". Application is juxtaposition,
--- @\\x. t@ is a lambda, @(x : A) -> B@ a dependent function type. The
--- 'IsString' instance parses a closed term; 'parseOpen' takes a scope and an
--- environment for the free variables.
+-- plus free-foil's generated scope resolution, through "Demo.Parsing".
+-- Application is juxtaposition, @\\x. t@ is a lambda, @(x : A) -> B@ a
+-- dependent function type. The 'IsString' instance parses a closed term;
+-- 'parseOpen' takes a scope and an environment for the free variables.
 module LambdaPi.Parser
   ( parseLambdaPi
   , parseOpen
