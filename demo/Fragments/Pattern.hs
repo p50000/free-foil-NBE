@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE KindSignatures    #-}
-{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TypeFamilies      #-}
@@ -35,26 +34,7 @@ instance NFData (Pat n l) where
   rnf (PatVar x)    = rnf (nameId (nameOf x))
   rnf (PatPair x y) = rnf (nameId (nameOf x)) `seq` rnf (nameId (nameOf y))
 
--- | Written by hand, after the instance for 'NameBinderList': the generic
--- default traverses the kind-generic representation on every refresh.
+-- | The generic defaults, listing the binders through the kind-generic
+-- representation as free-foil recommends.
 instance CoSinkable Pat where
-  nameBinderListOf (PatVar x)    = NameBinderListCons x NameBinderListEmpty
-  nameBinderListOf (PatPair x y) = NameBinderListCons x (NameBinderListCons y NameBinderListEmpty)
-
-  coSinkabilityProof rename (PatVar x) cont =
-    coSinkabilityProof rename x $ \rename' x' ->
-      cont rename' (PatVar x')
-  coSinkabilityProof rename (PatPair x y) cont =
-    coSinkabilityProof rename x $ \rename' x' ->
-      coSinkabilityProof rename' y $ \rename'' y' ->
-        cont rename'' (PatPair x' y')
-
-  withPattern withBinder _unit comp scope = \case
-    PatVar x -> \cont ->
-      withBinder scope x $ \f x' ->
-        cont f (PatVar x') (extendScope x' scope)
-    PatPair x y -> \cont ->
-      withBinder scope x $ \f x' ->
-        let scope' = extendScope x' scope
-        in withBinder scope' y $ \g y' ->
-             cont (comp f g) (PatPair x' y') (extendScope y' scope')
+  nameBinderListOf = gnameBinderListOf
