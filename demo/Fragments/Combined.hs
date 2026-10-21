@@ -49,6 +49,7 @@ import           Fragments.Naturals      (NatF (..))
 import           Fragments.Pairs         (PairF (..))
 import           Fragments.Pattern       (Pat (..))
 import           FreeFoil.NbE            (eval, nf, whnf)
+import           FreeFoil.NbE.Transform  (foldAST)
 import qualified FreeFoil.NbE            as NbE
 import qualified Monolith
 import           Monolith.Parser         (parseMonolith)
@@ -112,40 +113,43 @@ numeral k = iterate Suc Zero !! k
 -- * The monolithic language as concrete syntax
 
 -- | The same term in the monolithic language, which lends the composed one
--- its parser and printer.
+-- its parser and printer: the sum flattened into the one signature, with the
+-- same two shapes of binder.
 toMonolith :: Combined n -> Monolith.Monolith n
-toMonolith = \case
-  Var x -> Monolith.Var x
-  Lam pat body -> Monolith.Lam (toPat pat) (toMonolith body)
-  App fun arg -> Monolith.App (toMonolith fun) (toMonolith arg)
-  Pi dom pat cod -> Monolith.Pi (toMonolith dom) (toPat pat) (toMonolith cod)
-  Pair a b -> Monolith.Pair (toMonolith a) (toMonolith b)
-  Fst p -> Monolith.Fst (toMonolith p)
-  Snd p -> Monolith.Snd (toMonolith p)
-  Split p pat body -> Monolith.Split (toMonolith p) (toPat pat) (toMonolith body)
-  Zero -> Monolith.Zero
-  Suc t -> Monolith.Suc (toMonolith t)
-  NatRec n z pat s -> Monolith.NatRec (toMonolith n) (toMonolith z) (toPat pat) (toMonolith s)
+toMonolith = foldAST (Node . toSig) toPat
   where
+    toSig :: Sig a b -> Monolith.TermSig a b
+    toSig = \case
+      L2 (LamF body)          -> Monolith.LamSig body
+      L2 (AppF fun arg)       -> Monolith.AppSig fun arg
+      L2 (PiF dom cod)        -> Monolith.PiSig dom cod
+      R2 (L2 (PairF a b))     -> Monolith.PairSig a b
+      R2 (L2 (FstF p))        -> Monolith.FstSig p
+      R2 (L2 (SndF p))        -> Monolith.SndSig p
+      R2 (L2 (SplitF p body)) -> Monolith.SplitSig p body
+      R2 (R2 ZeroF)           -> Monolith.ZeroSig
+      R2 (R2 (SucF t))        -> Monolith.SucSig t
+      R2 (R2 (NatRecF n z s)) -> Monolith.NatRecSig n z s
     toPat :: Pat n l -> Monolith.Pattern n l
     toPat (PatVar x)    = Monolith.PatternVar x
     toPat (PatPair x y) = Monolith.PatternPair x y
 
 -- | The same term in the composed language.
 fromMonolith :: Monolith.Monolith n -> Combined n
-fromMonolith = \case
-  Monolith.Var x -> Var x
-  Monolith.Lam pat body -> Lam (fromPat pat) (fromMonolith body)
-  Monolith.App fun arg -> App (fromMonolith fun) (fromMonolith arg)
-  Monolith.Pi dom pat cod -> Pi (fromMonolith dom) (fromPat pat) (fromMonolith cod)
-  Monolith.Pair a b -> Pair (fromMonolith a) (fromMonolith b)
-  Monolith.Fst p -> Fst (fromMonolith p)
-  Monolith.Snd p -> Snd (fromMonolith p)
-  Monolith.Split p pat body -> Split (fromMonolith p) (fromPat pat) (fromMonolith body)
-  Monolith.Zero -> Zero
-  Monolith.Suc t -> Suc (fromMonolith t)
-  Monolith.NatRec n z pat s -> NatRec (fromMonolith n) (fromMonolith z) (fromPat pat) (fromMonolith s)
+fromMonolith = foldAST (Node . fromSig) fromPat
   where
+    fromSig :: Monolith.TermSig a b -> Sig a b
+    fromSig = \case
+      Monolith.LamSig body      -> L2 (LamF body)
+      Monolith.AppSig fun arg   -> L2 (AppF fun arg)
+      Monolith.PiSig dom cod    -> L2 (PiF dom cod)
+      Monolith.PairSig a b      -> R2 (L2 (PairF a b))
+      Monolith.FstSig p         -> R2 (L2 (FstF p))
+      Monolith.SndSig p         -> R2 (L2 (SndF p))
+      Monolith.SplitSig p body  -> R2 (L2 (SplitF p body))
+      Monolith.ZeroSig          -> R2 (R2 ZeroF)
+      Monolith.SucSig t         -> R2 (R2 (SucF t))
+      Monolith.NatRecSig n z s  -> R2 (R2 (NatRecF n z s))
     fromPat :: Monolith.Pattern n l -> Pat n l
     fromPat (Monolith.PatternVar x)    = PatVar x
     fromPat (Monolith.PatternPair x y) = PatPair x y
