@@ -223,6 +223,7 @@ test-suite free-foil-nbe-test
     other-modules:    Test.Agree
                     , Test.Booleans
                     , Test.Definitions
+                    , Test.Fragments
                     , Test.LambdaLet
                     , Test.LambdaNWays
                     , Test.LambdaPi
@@ -233,6 +234,7 @@ test-suite free-foil-nbe-test
         , bifunctors
         , containers ^>=0.7
         , deepseq
+        , fragments-demo
         , free-foil ^>=0.5.0
         , free-foil-nbe
         , lambda-let-demo

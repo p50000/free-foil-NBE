@@ -6,7 +6,7 @@
 -- normaliser must agree with the reference one and conversion checking with
 -- α-equivalence of normal forms. The language has no functions, so every
 -- term normalises and no time budget is needed.
-module Test.Naturals (tests) where
+module Test.Naturals (tests, ClosedTerm (..), OpenTerm (..), freeVars) where
 
 import qualified Data.Map.Strict as Map
 
