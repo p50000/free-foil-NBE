@@ -22,15 +22,10 @@ module Monolith.Generated where
 import qualified Control.Monad.Foil as Foil
 import Control.Monad.Free.Foil (AST (..))
 import Control.Monad.Free.Foil.TH.MkFreeFoil
-import Data.ZipMatchK
 import Generics.Kind.TH (deriveGenericK)
 
 import qualified Monolith.Raw as Raw
 import Monolith.Syntax.Print (printTree)
-
--- The identifier's instance comes first, since the generated 'ZipMatchK'
--- instance of the signature needs it in the same declaration group.
-instance ZipMatchK Raw.VarIdent where zipMatchWithK = zipMatchViaEq
 
 mkFreeFoil Raw.config
 
