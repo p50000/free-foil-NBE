@@ -31,6 +31,7 @@ import Control.Monad.Foil
 import Control.Monad.Free.Foil
 import FreeFoil.NbE (Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
+import qualified FreeFoil.NbE.Conversion as Conv
 
 import LambdaPi.Generated
   ( FFPattern (FFPatternVar)
@@ -56,6 +57,8 @@ type LambdaPi n = FFTerm n
       NbE.Value FFPattern TermSig o #-}
 {-# SPECIALIZE NbE.quote ::
       Distinct n => Scope n -> NbE.Value FFPattern TermSig n -> LambdaPi n #-}
+{-# SPECIALIZE Conv.conv :: Distinct n => Scope n -> Value n -> Value n -> Bool #-}
+{-# SPECIALIZE Conv.convertible :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n -> Bool #-}
 
 -- | Application.
 pattern App :: LambdaPi n -> LambdaPi n -> LambdaPi n

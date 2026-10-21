@@ -50,6 +50,7 @@ import           Fragments.Pairs         (PairF (..))
 import           Fragments.Pattern       (Pat (..))
 import           FreeFoil.NbE            (eval, nf, whnf)
 import qualified FreeFoil.NbE            as NbE
+import qualified FreeFoil.NbE.Conversion as Conv
 import qualified Monolith
 import           Monolith.Parser         (parseMonolith)
 
@@ -67,6 +68,8 @@ type Value = NbE.Value Pat Sig
       (Distinct o, Distinct i) =>
       Scope o -> Substitution Value i o -> Combined i -> Value o #-}
 {-# SPECIALIZE NbE.quote :: Distinct n => Scope n -> Value n -> Combined n #-}
+{-# SPECIALIZE Conv.conv :: Distinct n => Scope n -> Value n -> Value n -> Bool #-}
+{-# SPECIALIZE Conv.convertible :: Distinct n => Scope n -> Combined n -> Combined n -> Bool #-}
 
 pattern Lam :: Pat n l -> Combined l -> Combined n
 pattern Lam binder body = Node (L2 (LamF (ScopedAST binder body)))

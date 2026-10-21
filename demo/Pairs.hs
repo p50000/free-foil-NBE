@@ -37,6 +37,7 @@ import Control.Monad.Foil
 import Control.Monad.Free.Foil
 import FreeFoil.NbE (Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
+import qualified FreeFoil.NbE.Conversion as Conv
 
 import Pairs.Generated
   ( FFPattern (FFPatternPair)
@@ -61,6 +62,8 @@ type Pairs n = FFTerm n
       NbE.Value FFPattern TermSig o #-}
 {-# SPECIALIZE NbE.quote ::
       Distinct n => Scope n -> NbE.Value FFPattern TermSig n -> Pairs n #-}
+{-# SPECIALIZE Conv.conv :: Distinct n => Scope n -> Value n -> Value n -> Bool #-}
+{-# SPECIALIZE Conv.convertible :: Distinct n => Scope n -> Pairs n -> Pairs n -> Bool #-}
 
 -- | @(a, b)@.
 pattern Pair :: Pairs n -> Pairs n -> Pairs n

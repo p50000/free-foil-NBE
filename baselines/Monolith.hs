@@ -42,6 +42,7 @@ import Control.Monad.Foil
 import Control.Monad.Free.Foil
 import FreeFoil.NbE (Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
+import qualified FreeFoil.NbE.Conversion as Conv
 
 import Monolith.Generated
 
@@ -56,6 +57,8 @@ type Value = NbE.Value Pattern TermSig
       (Distinct o, Distinct i) =>
       Scope o -> Substitution Value i o -> Monolith i -> Value o #-}
 {-# SPECIALIZE NbE.quote :: Distinct n => Scope n -> Value n -> Monolith n #-}
+{-# SPECIALIZE Conv.conv :: Distinct n => Scope n -> Value n -> Value n -> Bool #-}
+{-# SPECIALIZE Conv.convertible :: Distinct n => Scope n -> Monolith n -> Monolith n -> Bool #-}
 
 -- | The numeral of a natural number.
 numeral :: Int -> Monolith n
