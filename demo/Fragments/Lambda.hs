@@ -23,8 +23,7 @@ import Control.DeepSeq        (NFData)
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
 import Data.Bifunctor.TH       (deriveBifoldable, deriveBifunctor, deriveBitraversable)
-import Data.ZipMatchK          (ZipMatchK)
-import Generics.Kind.TH        (deriveGenericK)
+import Data.ZipMatchK.TH       (deriveZipMatchK)
 import GHC.Generics            (Generic)
 
 import FreeFoil.NbE            (Value (..), eval, evalNode)
@@ -40,9 +39,8 @@ data LamF scope term
 deriveBifunctor ''LamF
 deriveBifoldable ''LamF
 deriveBitraversable ''LamF
-deriveGenericK ''LamF
 
-instance ZipMatchK LamF
+deriveZipMatchK ''LamF
 instance (NFData scope, NFData term) => NFData (LamF scope term)
 
 instance CoSinkable binder => EvalF binder LamF where

@@ -23,6 +23,7 @@ import Control.Monad.Free.Foil (AST)
 import Control.Monad.Free.Foil.TH.MkFreeFoil
 import Data.Bifunctor.TH
 import Data.ZipMatchK
+import Data.ZipMatchK.TH (deriveZipMatchK)
 import Generics.Kind.TH (deriveGenericK)
 
 import Naturals.Raw
@@ -39,9 +40,8 @@ deriveBifunctor ''TermSig
 deriveBifoldable ''TermSig
 deriveBitraversable ''TermSig
 
-deriveGenericK ''TermSig
 instance ZipMatchK VarIdent where zipMatchWithK = zipMatchViaEq
-instance ZipMatchK TermSig
+deriveZipMatchK ''TermSig
 
 mkFreeFoilConversions config
 
