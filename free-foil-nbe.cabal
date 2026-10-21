@@ -40,9 +40,7 @@ library
         , containers ^>=0.7
     default-language: Haskell2010
 
--- BNFC-generated parser/printer for lambda-pi, from demo/grammar/LambdaPi/Syntax.cf.
--- Kept in its own library so -Wall does not apply to generated code.
--- Regenerate with ./grammar-regen.sh (needs bnfc, alex, happy).
+-- Parsing shared by the demo languages: a BNFC parser, then scope resolution.
 library demo-parsing
     import:           warnings
     visibility:       public
@@ -53,6 +51,9 @@ library demo-parsing
         , free-foil ^>=0.5.0
     default-language: Haskell2010
 
+-- BNFC-generated parser/printer for lambda-pi, from demo/grammar/LambdaPi/Syntax.cf.
+-- Kept in its own library so -Wall does not apply to generated code.
+-- Regenerate with ./grammar-regen.sh (needs bnfc, alex, happy).
 library lambda-pi-syntax
     hs-source-dirs:   gen
     exposed-modules:  LambdaPi.Syntax.Abs
