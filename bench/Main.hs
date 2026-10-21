@@ -16,6 +16,14 @@ import LambdaPi hiding (whnf)
 import qualified LambdaPi.Monomorphic as Mono
 import LambdaPi.Parser ()  -- IsString instance for writing terms as strings
 
+import Control.Monad.Free.Foil (AST (..), ScopedAST (..))
+import Data.Bifoldable (Bifoldable, bifoldMap)
+import Data.Monoid (Sum (..))
+import Data.String (fromString)
+import qualified Fragments.Combined as Composed
+import qualified Monolith
+import Monolith.Parser ()  -- IsString instance for the monolithic language
+
 -- | The size of a term, used to force the whole normal form.
 sizeOf :: LambdaPi n -> Int
 sizeOf = \case
@@ -92,6 +100,50 @@ nestedLet n =
           Distinct ->
             App (Lam xi (go (extendScope xi scope) (nameOf xi) (k - 1))) (Var prev)
 
+-- | The size of a term of any language, used to force the whole normal form.
+sizeOfAST :: Bifoldable sig => AST binder sig n -> Int
+sizeOfAST = \case
+  Var _     -> 1
+  Node node -> 1 + getSum (bifoldMap (\(ScopedAST _ body) -> Sum (sizeOfAST body)) (Sum . sizeOfAST) node)
+
+-- | A lambda-pi term in the monolithic language, through its printer and the
+-- monolith's parser: the lambda syntax is the same.
+monolithic :: LambdaPi VoidS -> Monolith.Monolith VoidS
+monolithic = fromString . show
+
+-- | The numeral @n@ as a string.
+natural :: Int -> String
+natural 0 = "zero"
+natural k = "suc (" ++ natural (k - 1) ++ ")"
+
+-- | @m * n@ by primitive recursion, with addition inlined.
+natMul :: Int -> Int -> Monolith.Monolith VoidS
+natMul m n = fromString $
+  "(\\m. \\n. natrec m { zero -> zero ; suc (k, r) -> "
+    ++ "(\\a. \\b. natrec a { zero -> b ; suc (k', r') -> suc r' }) n r }) "
+    ++ "(" ++ natural m ++ ") (" ++ natural n ++ ")"
+
+-- | Normalise a lambda-pi term by the generic NbE of lambda-pi, by the
+-- monolithic language and by the composed one.
+compareComposition :: String -> LambdaPi VoidS -> Benchmark
+compareComposition name t =
+  bgroup name
+    [ bench "lambda-pi" $ whnf (sizeOf . nf emptyScope) t
+    , bench "monolith"  $ whnf (sizeOfAST . Monolith.nf emptyScope) tm
+    , bench "composed"  $ whnf (sizeOfAST . Composed.nf emptyScope) (Composed.fromMonolith tm)
+    ]
+  where
+    tm = monolithic t
+
+-- | Normalise a term of the full language by the monolithic and the composed
+-- normaliser.
+compareComposed :: String -> Monolith.Monolith VoidS -> Benchmark
+compareComposed name tm =
+  bgroup name
+    [ bench "monolith" $ whnf (sizeOfAST . Monolith.nf emptyScope) tm
+    , bench "composed" $ whnf (sizeOfAST . Composed.nf emptyScope) (Composed.fromMonolith tm)
+    ]
+
 -- | Normalise @t@ three ways and force each result fully.
 compareNormalisers :: String -> LambdaPi VoidS -> Benchmark
 compareNormalisers name t =
@@ -130,5 +182,11 @@ main =
         [ compareNormalisers "depth 100"  (nestedPi 100)
         , compareNormalisers "depth 500"  (nestedPi 500)
         , compareNormalisers "depth 1000" (nestedPi 1000)
+        ]
+    , bgroup "Composed vs monolith"
+        [ compareComposition "Church mult 16 16 = 256" (churchMul 16 16)
+        , compareComposition "Church 2^10 = 1024"      (power 10 2)
+        , compareComposed    "natrec mult 16 16 = 256" (natMul 16 16)
+        , compareComposed    "natrec mult 32 32 = 1024" (natMul 32 32)
         ]
     ]

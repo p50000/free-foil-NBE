@@ -299,7 +299,9 @@ benchmark nbe-bench
     build-depends:    base ^>=4.20.2.0
         , free-foil ^>=0.5.0
         , free-foil-nbe
+        , fragments-demo
         , lambda-pi-baselines
         , lambda-pi-demo
+        , monolith-baseline
         , tasty-bench
     default-language: Haskell2010
