@@ -14,6 +14,10 @@
   a language with no code of its own. A language composed from fragments of
   functions, pairs and naturals demonstrates it, against the same language
   written in one signature, which is its baseline and its parser.
+- `FreeFoil.NbE.Transform`: `foldAST` rebuilds a term bottom-up under an
+  algebra that may return any term, with the binders mapped, and `hoistAST`
+  changes the signature by a natural transformation. The languages share
+  scope resolution and parsing in `Demo.Parsing`.
 - Every language derives its `ZipMatchK` instance with free-foil's Template
   Haskell (`deriveZipMatchK`). The kind-generics default converted every node
   to its representation on comparison, which cost conversion checking and
