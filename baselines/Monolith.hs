@@ -23,6 +23,7 @@
 module Monolith
   ( Monolith
   , FFPattern (..)
+  , TermSig (..)
   , pattern Var
   , pattern Lam
   , pattern App

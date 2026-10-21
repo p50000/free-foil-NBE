@@ -25,10 +25,22 @@ cabal bench nbe-bench --benchmark-options '--baseline bench/baseline.csv'
 ```
 
 Uses [`tasty-bench`](https://hackage.haskell.org/package/tasty-bench); results
-are forced with `sizeOf` (walking the whole normal form) rather than an
-`NFData` instance, matching free-foil's own normalisation benchmark. Every
+are forced by walking the whole normal form (`sizeOf` for lambda-pi, and one
+traversal per language, written on its constructors) rather than through an
+`NFData` instance, matching free-foil's own normalisation benchmark. Forcing
+must stay cheap next to the normalisation it forces; a generic `bifoldMap` or
+a `case` over pattern synonyms costs several times as much. Every
 component is built at `-O2` (`optimization: 2` in `cabal.project`), so the
 library where `nf`/`nfSubst` live is optimised, not just the benchmark driver.
+
+## The composed language
+
+The group **Composed vs monolith** normalises the same terms by lambda-pi, by
+the monolithic language (`baselines/Monolith`: functions, pairs and naturals
+in one signature) and by the composed language (`Fragments.Combined`, the same
+language as a sum of fragments): Church arithmetic, which uses functions only,
+and multiplication by primitive recursion. The rows measure what composition
+costs against a language written by hand.
 
 ## A sample run
 
