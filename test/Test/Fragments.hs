@@ -1,13 +1,21 @@
-{-# LANGUAGE DataKinds       #-}
-{-# LANGUAGE GADTs           #-}
-{-# LANGUAGE LambdaCase      #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE RankNTypes      #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes        #-}
 -- | The language composed from fragments: examples on mixed terms, agreement
 -- with the standalone languages on embedded terms, properties on random mixed
 -- terms, and the shape check of binders in conversion, which only a pattern
--- type with two constructors reaches.
-module Test.Fragments (tests) where
+-- type with two constructors reaches. Terms are written in the syntax of the
+-- monolithic language, through which the composed one parses.
+module Test.Fragments
+  ( tests
+  , Mixed (..)
+  , parseIn
+  , resolve
+  , natural
+  , withFree
+  , budgeted
+  ) where
 
 import           Control.DeepSeq           (NFData, rnf)
 import           Control.Exception         (evaluate)
@@ -24,12 +32,15 @@ import           FreeFoil.NbE.Conversion   (convertible)
 
 import           Fragments.Combined
 import qualified LambdaPi
+import qualified Monolith.Parser
+import           Monolith.Syntax.Abs       (Term)
 import qualified Naturals
 import qualified Naturals.Parser
 import qualified Pairs
 import qualified Pairs.Parser
 import           Test.Agree                (agreesWithin)
 import           Test.LambdaPi.Gen         (Closed (..))
+import           Test.Monolith             (genTerm)
 import qualified Test.Naturals             as Naturals
 import qualified Test.Pairs                as Pairs
 
@@ -40,11 +51,11 @@ tests = testGroup "fragments"
       , testGroup "open terms" [ openExample name t expected | (name, t, expected) <- openExamples ]
       , testGroup "whnf"
           [ openWhnf "keeps a redex under a stuck split"
-              (RSplit (RVar "a") "x" "y" (RApp (RLam "z" (RVar "z")) (RVar "x")))
-              (RSplit (RVar "a") "x" "y" (RApp (RLam "z" (RVar "z")) (RVar "x")))
+              "split a as (x, y) in (\\z. z) x"
+              "split a as (x, y) in (\\z. z) x"
           , openWhnf "reduces the zero branch of a stuck recursion, not the suc branch"
-              (RNatRec (RVar "a") (RApp (RLam "z" (RVar "z")) RZero) "k" "r" (RApp (RLam "z" (RVar "z")) (RVar "r")))
-              (RNatRec (RVar "a") RZero "k" "r" (RApp (RLam "z" (RVar "z")) (RVar "r")))
+              "natrec a { zero -> (\\z. z) zero ; suc (k, r) -> (\\z. z) r }"
+              "natrec a { zero -> zero ; suc (k, r) -> (\\z. z) r }"
           ]
       ]
   , testGroup "agrees with the standalone language"
@@ -69,108 +80,80 @@ tests = testGroup "fragments"
       ]
   ]
 
--- * Terms, from a raw syntax with string names
+-- * Terms, in the monolithic language's syntax
 
-data Raw
-  = RVar String
-  | RLam String Raw
-  | RApp Raw Raw
-  | RPair Raw Raw
-  | RFst Raw
-  | RSnd Raw
-  | RSplit Raw String String Raw
-  | RZero
-  | RSuc Raw
-  | RNatRec Raw Raw String String Raw
-  deriving (Show)
+-- | A term of the composed language, parsed in a scope with named free
+-- variables.
+parseIn :: Distinct n => Scope n -> Map String (Name n) -> String -> Combined n
+parseIn scope env = either (error . ("Test.Fragments: " ++)) fromMonolith . Monolith.Parser.parseOpen scope env
 
-rnum :: Int -> Raw
-rnum k = iterate RSuc RZero !! k
+-- | A raw term of the monolithic language, resolved into the composed one.
+resolve :: Distinct n => Scope n -> Map String (Name n) -> Term -> Combined n
+resolve scope env = fromMonolith . Monolith.Parser.resolve scope env
 
-resolve :: Distinct n => Scope n -> Map String (Name n) -> Raw -> Combined n
-resolve scope env = \case
-  RVar x -> Var (env Map.! x)
-  RLam x body -> withFresh scope $ \b ->
-    Lam (PatVar b) (resolve (extendScope b scope) (bind x b env) body)
-  RApp f a -> App (resolve scope env f) (resolve scope env a)
-  RPair a b -> Pair (resolve scope env a) (resolve scope env b)
-  RFst p -> Fst (resolve scope env p)
-  RSnd p -> Snd (resolve scope env p)
-  RSplit p x y body -> withFresh scope $ \bx ->
-    let scope' = extendScope bx scope
-    in withFresh scope' $ \by ->
-         Split (resolve scope env p) (PatPair bx by)
-           (resolve (extendScope by scope') (bind y by (bind x bx env)) body)
-  RZero -> Zero
-  RSuc t -> Suc (resolve scope env t)
-  RNatRec n z k r s -> withFresh scope $ \bk ->
-    let scope' = extendScope bk scope
-    in withFresh scope' $ \br ->
-         NatRec (resolve scope env n) (resolve scope env z) (PatPair bk br)
-           (resolve (extendScope br scope') (bind r br (bind k bk env)) s)
-  where
-    bind :: DExt n l => String -> NameBinder n l -> Map String (Name n) -> Map String (Name l)
-    bind x b m = Map.insert x (nameOf b) (Map.map sink m)
+-- | The numeral @k@.
+natural :: Int -> String
+natural 0 = "zero"
+natural k = "suc (" ++ natural (k - 1) ++ ")"
 
 -- | Free variables of the open examples and the random mixed terms.
 freeVars :: [String]
 freeVars = ["a", "b"]
 
 withFree :: (forall n. Distinct n => Scope n -> Map String (Name n) -> r) -> r
-withFree = Pairs.Parser.withFreeVars emptyScope Map.empty freeVars
+withFree = Monolith.Parser.withFreeVars emptyScope Map.empty freeVars
 
 -- * Examples
 
-closedExamples :: [(String, Raw, Raw)]
+closedExamples :: [(String, String, String)]
 closedExamples =
   [ ( "beta through a pair"
-    , RApp (RLam "x" (RPair (RVar "x") (RVar "x"))) RZero
-    , RPair RZero RZero )
+    , "(\\x. (x, x)) zero"
+    , "(zero, zero)" )
   , ( "a projection of a function's result"
-    , RFst (RApp (RLam "x" (RPair (RSuc (RVar "x")) RZero)) (rnum 2))
-    , rnum 3 )
+    , "fst ((\\x. (suc x, zero)) (" ++ natural 2 ++ "))"
+    , natural 3 )
   , ( "recursion on a computed numeral"
-    , RNatRec (RApp (RLam "x" (RVar "x")) (rnum 2)) (rnum 3) "k" "r" (RSuc (RVar "r"))
-    , rnum 5 )
+    , "natrec ((\\x. x) (" ++ natural 2 ++ ")) { zero -> " ++ natural 3 ++ " ; suc (k, r) -> suc r }"
+    , natural 5 )
   , ( "addition through split"
-    , RSplit (RPair (rnum 1) (rnum 2)) "x" "y" (RNatRec (RVar "x") (RVar "y") "k" "r" (RSuc (RVar "r")))
-    , rnum 3 )
+    , "split (" ++ natural 1 ++ ", " ++ natural 2 ++ ") as (x, y) in natrec x { zero -> y ; suc (k, r) -> suc r }"
+    , natural 3 )
   , ( "a function under natrec"
-    , RNatRec (rnum 2) (RLam "f" (RVar "f")) "k" "r" (RApp (RLam "g" (RVar "g")) (RVar "r"))
-    , RLam "f" (RVar "f") )
+    , "natrec (" ++ natural 2 ++ ") { zero -> \\f. f ; suc (k, r) -> (\\g. g) r }"
+    , "\\f. f" )
   ]
 
-openExamples :: [(String, Raw, Raw)]
+openExamples :: [(String, String, String)]
 openExamples =
   [ ( "a stuck projection"
-    , RFst (RApp (RVar "a") RZero)
-    , RFst (RApp (RVar "a") RZero) )
+    , "fst (a zero)"
+    , "fst (a zero)" )
   , ( "beta under a stuck split"
-    , RSplit (RVar "a") "x" "y" (RApp (RLam "z" (RVar "z")) (RVar "x"))
-    , RSplit (RVar "a") "x" "y" (RVar "x") )
+    , "split a as (x, y) in (\\z. z) x"
+    , "split a as (x, y) in x" )
   , ( "a stuck recursion with normal branches"
-    , RNatRec (RVar "a") (RApp (RLam "z" (RVar "z")) RZero) "k" "r" (RApp (RLam "z" (RVar "z")) (RVar "r"))
-    , RNatRec (RVar "a") RZero "k" "r" (RVar "r") )
+    , "natrec a { zero -> (\\z. z) zero ; suc (k, r) -> (\\z. z) r }"
+    , "natrec a { zero -> zero ; suc (k, r) -> r }" )
   , ( "split of a pair of neutrals"
-    , RSplit (RPair (RVar "a") (RVar "b")) "x" "y" (RPair (RVar "y") (RVar "x"))
-    , RPair (RVar "b") (RVar "a") )
+    , "split (a, b) as (x, y) in (y, x)"
+    , "(b, a)" )
   ]
 
-example :: String -> Raw -> Raw -> TestTree
+example :: String -> String -> String -> TestTree
 example name t expected = testCase name $
-  assertBool (show (nf emptyScope term)) (alphaEquiv emptyScope (nf emptyScope term) (resolve emptyScope Map.empty expected))
-  where
-    term = resolve emptyScope Map.empty t
+  let term = parseIn emptyScope Map.empty t
+  in assertBool (show (nf emptyScope term)) (alphaEquiv emptyScope (nf emptyScope term) (parseIn emptyScope Map.empty expected))
 
-openExample :: String -> Raw -> Raw -> TestTree
+openExample :: String -> String -> String -> TestTree
 openExample name t expected = testCase name $ withFree $ \scope env ->
-  let term = resolve scope env t
-  in assertBool (show (nf scope term)) (alphaEquiv scope (nf scope term) (resolve scope env expected))
+  let term = parseIn scope env t
+  in assertBool (show (nf scope term)) (alphaEquiv scope (nf scope term) (parseIn scope env expected))
 
-openWhnf :: String -> Raw -> Raw -> TestTree
+openWhnf :: String -> String -> String -> TestTree
 openWhnf name t expected = testCase name $ withFree $ \scope env ->
-  let term = resolve scope env t
-  in assertBool (show (whnf scope term)) (alphaEquiv scope (whnf scope term) (resolve scope env expected))
+  let term = parseIn scope env t
+  in assertBool (show (whnf scope term)) (alphaEquiv scope (whnf scope term) (parseIn scope env expected))
 
 -- * Agreement with the standalone languages on embedded terms
 
@@ -222,33 +205,11 @@ propNaturalsOpen (Naturals.OpenTerm raw) =
 
 -- * Random mixed terms
 
-newtype Mixed = Mixed Raw
+newtype Mixed = Mixed Term
   deriving (Show)
 
 instance Arbitrary Mixed where
-  arbitrary = Mixed <$> sized (genRaw freeVars)
-
--- | A random term over all three fragments. Binder names are positional, so
--- binders on one spine are distinct.
-genRaw :: [String] -> Int -> Gen Raw
-genRaw vars n
-  | n <= 1 = oneof [RVar <$> elements vars, pure RZero]
-  | otherwise =
-      frequency
-        [ (3, RApp <$> sub <*> sub)
-        , (3, RLam x <$> genRaw (x : vars) (n - 1))
-        , (2, RPair <$> sub <*> sub)
-        , (1, RFst <$> sub)
-        , (1, RSnd <$> sub)
-        , (2, RSplit <$> sub <*> pure x <*> pure y <*> genRaw (y : x : vars) half)
-        , (2, RSuc <$> genRaw vars (n - 1))
-        , (2, RNatRec <$> sub <*> sub <*> pure x <*> pure y <*> genRaw (y : x : vars) half)
-        ]
-  where
-    half = n `div` 2
-    sub = genRaw vars half
-    x = "x" ++ show n
-    y = "y" ++ show n
+  arbitrary = Mixed <$> sized (genTerm freeVars)
 
 -- | Mixed terms contain functions, so a normal form may not exist: a case is
 -- discarded when forcing @x@ does not finish within one second.
@@ -279,9 +240,7 @@ propConversion (Mixed raw1) (Mixed raw2) = withFree $ \scope env ->
 -- * Binders of different shapes
 
 oneName :: Combined VoidS
-oneName = withFresh emptyScope $ \x -> Lam (PatVar x) (Var (nameOf x))
+oneName = "\\x. x"
 
 twoNames :: Combined VoidS
-twoNames = withFresh emptyScope $ \x ->
-  withFresh (extendScope x emptyScope) $ \y ->
-    Lam (PatPair x y) (Var (sink (nameOf x)))
+twoNames = "\\(x, y). x"

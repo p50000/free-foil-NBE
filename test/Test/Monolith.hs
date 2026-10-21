@@ -4,7 +4,7 @@
 -- | The monolithic language against the composed one: the two normalisers
 -- agree on examples and on random terms, and the conversion between the two
 -- syntaxes is the identity up to α.
-module Test.Monolith (tests) where
+module Test.Monolith (tests, genTerm) where
 
 import qualified Data.Map.Strict        as Map
 import           Test.Tasty
