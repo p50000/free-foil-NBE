@@ -28,7 +28,7 @@ ppValue scope = printTree . fromTerm . quote scope
 -- | Print the structure of a value: @#n@ for a neutral variable, @{node}@ for
 -- a node, and @body |env=[...]@ for a suspended body with its environment.
 ppValueStruct :: Value n -> String
-ppValueStruct = \case
+ppValueStruct v = case NbE.force v of
   NbE.VVar x -> '#' : show (nameId x)
   NbE.VNode node ->
     "{" ++ body ++ "}"

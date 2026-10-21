@@ -96,19 +96,19 @@ type Value = NbE.Value FFPattern TermSig
 instance Eval FFPattern TermSig where
   evalSig scope env = \case
     FstSig p ->
-      case eval scope env p of
+      NbE.eliminate (eval scope env p) $ \case
         NbE.VNode (PairSig a _) -> a
-        p'                     -> NbE.VNode (FstSig p')
+        NbE.Stuck p'                     -> NbE.vnode (FstSig p')
     SndSig p ->
-      case eval scope env p of
+      NbE.eliminate (eval scope env p) $ \case
         NbE.VNode (PairSig _ b) -> b
-        p'                     -> NbE.VNode (SndSig p')
+        NbE.Stuck p'                     -> NbE.vnode (SndSig p')
     SplitSig p (ScopedAST (FFPatternPair x y) body) ->
-      case eval scope env p of
+      NbE.eliminate (eval scope env p) $ \case
         NbE.VNode (PairSig a b) ->
           case assertDistinct (FFPatternPair x y) of
             Distinct -> eval scope (addSubst (addSubst env x a) y b) body
-        p' -> NbE.VSuspended env (SplitSig p' (ScopedAST (FFPatternPair x y) body))
+        NbE.Stuck p' -> NbE.vsuspended env (SplitSig p' (ScopedAST (FFPatternPair x y) body))
     node -> NbE.evalNode scope env node
 
 -- | Weak-head normal form by substitution, the reference for the tests.

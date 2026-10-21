@@ -26,7 +26,7 @@ import Control.Monad.Free.Foil
 import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor, deriveBitraversable)
 import Data.ZipMatchK.TH (deriveZipMatchK)
 
-import FreeFoil.NbE (Eval (evalSig), Value (VNode), eval, evalNode)
+import FreeFoil.NbE (Eval (evalSig), Value' (Stuck, VNode), eval, evalNode, vnode)
 import qualified FreeFoil.NbE as NbE
 
 -- | Two introduction forms and one eliminator; no scoped positions.
@@ -62,10 +62,10 @@ pattern If c t f = Node (IfSig c t f)
 -- neutral condition leaves the @if@ stuck.
 instance Eval NameBinder BoolSig where
   evalSig scope env = \case
-    IfSig cond t f -> case eval scope env cond of
+    IfSig cond t f -> NbE.eliminate (eval scope env cond) $ \case
       VNode TrueSig  -> eval scope env t
       VNode FalseSig -> eval scope env f
-      cond'          -> VNode (IfSig cond' (eval scope env t) (eval scope env f))
+      Stuck cond'          -> vnode (IfSig cond' (eval scope env t) (eval scope env f))
     node -> evalNode scope env node
 
 -- | Normal form, inherited from the generic 'NbE.nf'.

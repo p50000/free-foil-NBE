@@ -30,7 +30,8 @@ import           Data.Maybe                  (isJust)
 import           Data.Void                   (absurd)
 import           Data.ZipMatchK              (Mappings (..), ZipMatchK (..))
 
-import           FreeFoil.NbE                (Eval, Value (..), eval)
+import           FreeFoil.NbE                (Eval, Value, eval)
+import           FreeFoil.NbE.Internal.Value (Value' (..))
 
 -- | Two values are convertible: their normal forms are equal up to renaming
 -- of bound variables. Nodes match when they have the same constructor, and
@@ -48,13 +49,13 @@ conv ::
 -- constraint is unused).
 {-# INLINABLE conv #-}
 conv scope = \cases
-  (VVar x) (VVar y) -> x == y
-  (VNode l) (VNode r) ->
+  (VVar_ x) (VVar_ y) -> x == y
+  (VNode_ l) (VNode_ r) ->
     matches (zipMatchWithK ((\v _ -> absurd v) :^: check (conv scope) :^: M0) l r)
-  (VSuspended envL l) (VSuspended envR r) ->
+  (VSuspended_ envL l) (VSuspended_ envR r) ->
     matches (zipMatchWithK (check (convScoped scope envL envR) :^: check (conv scope) :^: M0) l r)
-  -- A node goes to 'VNode' exactly when it has no scoped subterms, so a
-  -- 'VNode' and a 'VSuspended' never have the same constructor.
+  -- A node goes to 'VNode_' exactly when it has no scoped subterms, so a
+  -- 'VNode_' and a 'VSuspended_' never have the same constructor.
   _ _ -> False
   where
     matches = isJust
@@ -81,7 +82,7 @@ convScoped scope envL envR (ScopedAST binderL bodyL) (ScopedAST binderR bodyR)
       Foil.withRefreshedPattern scope binderL $ \extendL binderL' scope' ->
         case (Foil.assertDistinct binderL, Foil.assertDistinct binderR) of
           (Foil.Distinct, Foil.Distinct) ->
-            let fresh = map VVar (Foil.namesOfPattern binderL')
+            let fresh = map VVar_ (Foil.namesOfPattern binderL')
                 envR' = Foil.addSubstPattern (Foil.sink envR) binderR fresh
             in convertibleUnder scope' (extendL envL) envR' bodyL bodyR
 

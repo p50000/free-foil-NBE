@@ -72,8 +72,9 @@ inR (Inj i p) = Inj (i . R2) (\node -> p node >>= \case
 -- | The elimination rules of a fragment, for any language @sig@ in which it
 -- sits at position @pos@. Like 'evalSig', 'evalF' receives the raw node and
 -- the environment, matches its eliminators and evaluates the principal
--- subterm with the language's 'eval'; it recognises its own introduction
--- forms in the result with 'prj' and rebuilds a stuck node with 'inj'. Every
+-- subterm with the language's 'eval' and 'FreeFoil.NbE.eliminate'; it
+-- recognises its own introduction forms in the result with 'prj' and
+-- rebuilds a stuck node with 'inj'. Every
 -- other node falls through to 'evalNode' on the injected node, which is the
 -- default for a fragment without eliminators.
 class (Bifunctor f, Bifoldable f) => EvalF binder f where

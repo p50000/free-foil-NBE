@@ -85,11 +85,11 @@ type Value = NbE.Value FFPattern TermSig
 instance Eval FFPattern TermSig where
   evalSig scope env = \case
     AppSig fun arg ->
-      case eval scope env fun of
+      NbE.eliminate (eval scope env fun) $ \case
         NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
           case assertDistinct binder of
             Distinct -> eval scope (addSubst env' binder (eval scope env arg)) body
-        fun' -> NbE.VNode (AppSig fun' (eval scope env arg))
+        NbE.Stuck fun' -> NbE.vnode (AppSig fun' (eval scope env arg))
     node -> NbE.evalNode scope env node
 
 -- | Weak-head normal form by substitution, the reference for the tests.
