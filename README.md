@@ -69,6 +69,7 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 | `src/FreeFoil/NbE/Conversion.hs` | Conversion checking on values: `conv`, `convertible` and `convertibleUnder`. |
 | `src/FreeFoil/NbE/Definitions.hs` | Top-level definitions: a telescope and the environment it gives to `eval`. |
 | `src/FreeFoil/NbE/Sum.hs` | Elimination rules à la carte: `EvalF` for a fragment, the `Eval` instance of a `Sum` of fragments. |
+| `src/FreeFoil/NbE/Transform.hs` | `foldAST` and `hoistAST`: rebuild a term under another signature. |
 | `demo/grammar/<Lang>/Syntax.cf`, `gen/<Lang>/` | The LBNF grammar of each demo language and the committed BNFC output. |
 | `demo/<Lang>/Raw.hs`, `Generated.hs` | free-foil's Template Haskell: the configuration and the generated scope-safe syntax. |
 | `demo/LambdaPi.hs`, `demo/LambdaLet.hs`, `demo/Booleans.hs`, `demo/Pairs.hs`, `demo/Naturals.hs` | The languages: pattern synonyms, the `Eval` instance, a reference normaliser. |
