@@ -17,6 +17,11 @@
 --
 -- Like the normaliser, the check is untyped and intensional: it decides β
 -- and the language's own reductions, not η.
+--
+-- Two glued values are compared folded first: if the defined names and their
+-- spines agree, the unfoldings agree, and nothing is unfolded. Otherwise, or
+-- when only one side is glued, the comparison continues on the unfolded
+-- sides. This is the folded-first unfolding of Kovács's smalltt.
 module FreeFoil.NbE.Conversion
   ( conv
   , convertible
@@ -49,6 +54,9 @@ conv ::
 -- constraint is unused).
 {-# INLINABLE conv #-}
 conv scope = \cases
+  (VGlued_ fl ul) (VGlued_ fr ur) -> conv scope fl fr || conv scope ul ur
+  (VGlued_ _ ul) r -> conv scope ul r
+  l (VGlued_ _ ur) -> conv scope l ur
   (VVar_ x) (VVar_ y) -> x == y
   (VNode_ l) (VNode_ r) ->
     matches (zipMatchWithK ((\v _ -> absurd v) :^: check (conv scope) :^: M0) l r)
