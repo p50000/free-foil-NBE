@@ -79,6 +79,7 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 | `baselines/LambdaPi/Monomorphic.hs` | The monomorphic baseline, `LambdaPi.Monomorphic.nf`. |
 | `baselines/LambdaPi/LambdaNWays.hs` | The bridge to the lambda-n-ways harness. |
 | `baselines/Monolith.hs`, `baselines/Monolith/` | The monolithic language, functions, pairs and naturals in one signature: the baseline of the composed language, with its parser. |
+| `parsing/Demo/Parsing.hs` | Parsing shared by the languages: a BNFC parser, then scope resolution in a scope with named free variables. |
 | `test/`, `bench/` | The test suite; the microbenchmarks and the lambda-n-ways harness. |
 
 ## A first look

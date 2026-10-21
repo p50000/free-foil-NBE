@@ -44,6 +44,16 @@ library
 -- BNFC-generated parser/printer for lambda-pi, from demo/grammar/LambdaPi/Syntax.cf.
 -- Kept in its own library so -Wall does not apply to generated code.
 -- Regenerate with ./grammar-regen.sh (needs bnfc, alex, happy).
+library demo-parsing
+    import:           warnings
+    visibility:       public
+    hs-source-dirs:   parsing
+    exposed-modules:  Demo.Parsing
+    build-depends:    base ^>=4.20.2.0
+        , containers ^>=0.7
+        , free-foil ^>=0.5.0
+    default-language: Haskell2010
+
 library lambda-pi-syntax
     hs-source-dirs:   gen
     exposed-modules:  LambdaPi.Syntax.Abs
@@ -70,6 +80,7 @@ library lambda-pi-demo
     build-depends:    base ^>=4.20.2.0
         , bifunctors
         , containers ^>=0.7
+        , demo-parsing
         , deepseq
         , free-foil ^>=0.5.0
         , free-foil-nbe
@@ -103,6 +114,7 @@ library pairs-demo
     build-depends:    base ^>=4.20.2.0
         , bifunctors
         , containers ^>=0.7
+        , demo-parsing
         , free-foil ^>=0.5.0
         , free-foil-nbe
         , kind-generics >=0.5.0 && <0.6
@@ -135,6 +147,7 @@ library naturals-demo
     build-depends:    base ^>=4.20.2.0
         , bifunctors
         , containers ^>=0.7
+        , demo-parsing
         , free-foil ^>=0.5.0
         , free-foil-nbe
         , kind-generics >=0.5.0 && <0.6
@@ -167,6 +180,7 @@ library monolith-baseline
     build-depends:    base ^>=4.20.2.0
         , bifunctors
         , containers ^>=0.7
+        , demo-parsing
         , deepseq
         , free-foil ^>=0.5.0
         , free-foil-nbe
@@ -241,6 +255,7 @@ library lambda-let-demo
     build-depends:    base ^>=4.20.2.0
         , bifunctors
         , containers ^>=0.7
+        , demo-parsing
         , free-foil ^>=0.5.0
         , free-foil-nbe
         , kind-generics >=0.5.0 && <0.6
