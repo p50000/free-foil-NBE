@@ -54,4 +54,4 @@ instance CoSinkable binder => EvalF binder LamF where
                  case assertDistinct binder of
                    Distinct -> eval scope (addSubstPattern env' binder [arg']) body
            fun' -> VNode (inj pos (AppF fun' arg'))
-    node -> evalNode (eval scope) env (inj pos node)
+    node -> evalNode scope env (inj pos node)

@@ -35,7 +35,7 @@ import           Data.Bifoldable         (Bifoldable)
 import           Data.Bifunctor          (Bifunctor)
 import           Data.Bifunctor.Sum      (Sum (..))
 
-import           FreeFoil.NbE            (Eval (..), Value, eval, evalNode)
+import           FreeFoil.NbE            (Eval (..), Value, evalNode)
 
 -- | The position of a fragment @f@ in a language @sig@: how to build one of
 -- its nodes in the language and how to recognise one. This is Swierstra's
@@ -84,7 +84,7 @@ class (Bifunctor f, Bifoldable f) => EvalF binder f where
     Foil.Substitution (Value binder sig) i o ->
     f (ScopedAST binder sig i) (AST binder sig i) ->
     Value binder sig o
-  evalF pos scope env node = evalNode (eval scope) env (inj pos node)
+  evalF pos scope env node = evalNode scope env (inj pos node)
 
 -- | The rules of a sum are the rules of its summands.
 instance (EvalF binder f, EvalF binder g) => EvalF binder (Sum f g) where

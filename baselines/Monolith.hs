@@ -101,4 +101,4 @@ instance Eval Pattern TermSig where
           in recurse (eval scope env n)
     NatRecSig _ _ (ScopedAST PatternVar {} _) ->
       error "Monolith: the suc branch of natrec binds two names"
-    node -> NbE.evalNode (eval scope) env node
+    node -> NbE.evalNode scope env node

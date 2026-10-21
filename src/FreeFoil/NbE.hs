@@ -120,7 +120,7 @@ class (Bifunctor sig, Bifoldable sig) => Eval binder sig where
     Foil.Substitution (Value binder sig) i o ->
     sig (ScopedAST binder sig i) (AST binder sig i) ->
     Value binder sig o
-  evalSig scope env = evalNode (eval scope) env
+  evalSig = evalNode
 
 -- | Evaluate a term under an environment: look variables up, hand nodes to
 -- 'evalSig'. A variable that the environment does not map is a neutral.
@@ -137,24 +137,24 @@ eval scope !env = \case
 
 -- | Evaluate a node that has no elimination rule: suspend it whole under the
 -- environment if it has scoped subterms, otherwise evaluate its term
--- subterms. The evaluator comes as @env -> term -> value@ so that one
--- environment both suspends the node and drives its subterms. A node with no
--- subterms of one kind is reused by coercion, which requires the signature
--- to be representational in both parameters; every ordinary data type is.
+-- subterms. The same environment both suspends the node and drives its
+-- subterms. A node with no subterms of one kind is reused by coercion, which
+-- requires the signature to be representational in both parameters; every
+-- ordinary data type is.
 evalNode ::
-  (Bifunctor sig, Bifoldable sig, Foil.Distinct i) =>
-  (Foil.Substitution (Value binder sig) i o -> AST binder sig i -> Value binder sig o) ->
+  (Eval binder sig, Foil.Distinct o, Foil.Distinct i) =>
+  Foil.Scope o ->
   Foil.Substitution (Value binder sig) i o ->
   sig (ScopedAST binder sig i) (AST binder sig i) ->
   Value binder sig o
 {-# INLINE evalNode #-}
-evalNode ev env node =
+evalNode scope env node =
   case ensureBivacuousFirst node of
-    Just node' -> VNode (bimap absurd (ev env) node')
+    Just node' -> VNode (bimap absurd (eval scope env) node')
     Nothing -> VSuspended env $ case ensureBivacuousSecond node of
       -- Nothing to evaluate either (a lambda, say): reuse the cell as it is.
       Just node' -> vacuous node'
-      Nothing    -> bimap id (ev env) node
+      Nothing    -> bimap id (eval scope env) node
 
 -- A node whose parameter positions are provably empty is the same heap
 -- object at any parameter type, so it is reused by coercion rather than

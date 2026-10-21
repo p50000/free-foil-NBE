@@ -61,4 +61,4 @@ instance CoSinkable binder => EvalF binder PairF where
           case assertDistinct binder of
             Distinct -> eval scope (addSubstPattern env binder [a, b]) body
         p' -> VSuspended env (inj pos (SplitF p' (ScopedAST binder body)))
-    node -> evalNode (eval scope) env (inj pos node)
+    node -> evalNode scope env (inj pos node)

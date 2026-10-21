@@ -106,7 +106,7 @@ instance Eval FFPattern TermSig where
           case assertDistinct (FFPatternPair x y) of
             Distinct -> eval scope (addSubst (addSubst env x a) y b) body
         p' -> NbE.VSuspended env (SplitSig p' (ScopedAST (FFPatternPair x y) body))
-    node -> NbE.evalNode (eval scope) env node
+    node -> NbE.evalNode scope env node
 
 -- | Weak-head normal form by substitution, the reference for the tests.
 whnfSubst :: Distinct n => Scope n -> Pairs n -> Pairs n

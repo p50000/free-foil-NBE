@@ -66,7 +66,7 @@ instance Eval NameBinder BoolSig where
       VNode TrueSig  -> eval scope env t
       VNode FalseSig -> eval scope env f
       cond'          -> VNode (IfSig cond' (eval scope env t) (eval scope env f))
-    node -> evalNode (eval scope) env node
+    node -> evalNode scope env node
 
 -- | Normal form, inherited from the generic 'NbE.nf'.
 nf :: Distinct n => Scope n -> BoolTm n -> BoolTm n

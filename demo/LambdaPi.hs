@@ -87,7 +87,7 @@ instance Eval FFPattern TermSig where
           case assertDistinct binder of
             Distinct -> eval scope (addSubst env' binder (eval scope env arg)) body
         fun' -> NbE.VNode (AppSig fun' (eval scope env arg))
-    node -> NbE.evalNode (eval scope) env node
+    node -> NbE.evalNode scope env node
 
 -- | Weak-head normal form by substitution, the reference for the tests.
 whnfSubst :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n

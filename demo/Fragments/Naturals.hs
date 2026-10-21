@@ -58,4 +58,4 @@ instance CoSinkable binder => EvalF binder NatF where
                       eval scope (addSubstPattern env binder [p, recurse p]) s
                 m' -> VSuspended env (inj pos (NatRecF m' zeroCase (ScopedAST binder s)))
           in recurse (eval scope env n)
-    node -> evalNode (eval scope) env (inj pos node)
+    node -> evalNode scope env (inj pos node)
