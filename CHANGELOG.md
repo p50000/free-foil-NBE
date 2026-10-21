@@ -12,7 +12,8 @@
 - Elimination rules à la carte (`FreeFoil.NbE.Sum`): a fragment gives its
   rules once, for any language that contains it, and a `Sum` of fragments is
   a language with no code of its own. A language composed from fragments of
-  functions, pairs and naturals demonstrates it.
+  functions, pairs and naturals demonstrates it, against the same language
+  written in one signature, which is its baseline and its parser.
 - A hand-written monomorphic NbE for lambda-pi as a performance baseline.
 - A test suite and two benchmark suites, including a harness against the
   lambda-n-ways corpus.
