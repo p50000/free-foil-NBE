@@ -18,8 +18,9 @@ binders), lambda-let (`let`), pairs (projections, and `split` with a
 pattern that binds two names) and naturals (primitive recursion, whose
 `suc` branch binds two names), and on a language composed from fragments
 of functions, pairs and naturals, whose rules the library combines
-(`FreeFoil.NbE.Sum`). A hand-written monomorphic NbE serves as a
-baseline; the generic normaliser runs within 1.25× of it on the
+(`FreeFoil.NbE.Sum`); the same language written in one signature serves as
+its baseline and lends it a parser. A hand-written monomorphic NbE serves as
+a baseline; the generic normaliser runs within 1.25× of it on the
 lambda-n-ways factorial term and 1.4× on its random corpora. The interface
 is documented in the haddocks of `FreeFoil.NbE`.
 
@@ -50,7 +51,7 @@ BNFC-generated parsers are committed, so nothing else is needed.
 
 ```sh
 cabal build all
-cabal test            # 193 tests; --test-show-details=direct lists them
+cabal test            # 204 tests; --test-show-details=direct lists them
 cabal bench nbe-bench
 ```
 
@@ -76,6 +77,7 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 | `demo/LambdaPi/Parser.hs`, `PrettyPrint.hs` | Terms as string literals; two printers for values. |
 | `baselines/LambdaPi/Monomorphic.hs` | The monomorphic baseline, `LambdaPi.Monomorphic.nf`. |
 | `baselines/LambdaPi/LambdaNWays.hs` | The bridge to the lambda-n-ways harness. |
+| `baselines/Monolith.hs`, `baselines/Monolith/` | The monolithic language, functions, pairs and naturals in one signature: the baseline of the composed language, with its parser. |
 | `test/`, `bench/` | The test suite; the microbenchmarks and the lambda-n-ways harness. |
 
 ## A first look
