@@ -49,7 +49,6 @@ import           Fragments.Naturals      (NatF (..))
 import           Fragments.Pairs         (PairF (..))
 import           Fragments.Pattern       (Pat (..))
 import           FreeFoil.NbE            (eval, nf, whnf)
-import           FreeFoil.NbE.Transform  (foldAST)
 import qualified FreeFoil.NbE            as NbE
 import qualified Monolith
 import           Monolith.Parser         (parseMonolith)
@@ -116,7 +115,7 @@ numeral k = iterate Suc Zero !! k
 -- its parser and printer: the sum flattened into the one signature, with the
 -- same two shapes of binder.
 toMonolith :: Combined n -> Monolith.Monolith n
-toMonolith = foldAST (Node . toSig) toPat
+toMonolith = foldAST Var (ScopedAST . toPat) (Node . toSig)
   where
     toSig :: Sig a b -> Monolith.TermSig a b
     toSig = \case
@@ -136,7 +135,7 @@ toMonolith = foldAST (Node . toSig) toPat
 
 -- | The same term in the composed language.
 fromMonolith :: Monolith.Monolith n -> Combined n
-fromMonolith = foldAST (Node . fromSig) fromPat
+fromMonolith = foldAST Var (ScopedAST . fromPat) (Node . fromSig)
   where
     fromSig :: Monolith.TermSig a b -> Sig a b
     fromSig = \case
