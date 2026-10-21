@@ -127,9 +127,9 @@ toMonolith = \case
   Suc t -> Monolith.Suc (toMonolith t)
   NatRec n z pat s -> Monolith.NatRec (toMonolith n) (toMonolith z) (toPat pat) (toMonolith s)
   where
-    toPat :: Pat n l -> Monolith.FFPattern n l
-    toPat (PatVar x)    = Monolith.FFPatternVar x
-    toPat (PatPair x y) = Monolith.FFPatternPair x y
+    toPat :: Pat n l -> Monolith.Pattern n l
+    toPat (PatVar x)    = Monolith.PatternVar x
+    toPat (PatPair x y) = Monolith.PatternPair x y
 
 -- | The same term in the composed language.
 fromMonolith :: Monolith.Monolith n -> Combined n
@@ -146,9 +146,9 @@ fromMonolith = \case
   Monolith.Suc t -> Suc (fromMonolith t)
   Monolith.NatRec n z pat s -> NatRec (fromMonolith n) (fromMonolith z) (fromPat pat) (fromMonolith s)
   where
-    fromPat :: Monolith.FFPattern n l -> Pat n l
-    fromPat (Monolith.FFPatternVar x)    = PatVar x
-    fromPat (Monolith.FFPatternPair x y) = PatPair x y
+    fromPat :: Monolith.Pattern n l -> Pat n l
+    fromPat (Monolith.PatternVar x)    = PatVar x
+    fromPat (Monolith.PatternPair x y) = PatPair x y
 
 -- | Terms print through the monolithic language and BNFC's printer.
 instance Show (AST Pat Sig n) where

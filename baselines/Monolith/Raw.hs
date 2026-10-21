@@ -45,9 +45,9 @@ config = FreeFoilConfig
           , rawTermToScopeName = 'rawScopedTerm
           , rawScopeToTermName = 'rawScopeToTerm
           } ]
-  , freeFoilNameModifier = ("FF" ++)
-  , freeFoilScopeNameModifier = ("FFScoped" ++)
-  , freeFoilConNameModifier = ("FF" ++)
+  , freeFoilNameModifier = id
+  , freeFoilScopeNameModifier = ("Scoped" ++)
+  , freeFoilConNameModifier = id
   , freeFoilConvertFromName = ("from" ++)
   , freeFoilConvertToName = ("to" ++)
   , signatureNameModifier = (++ "Sig")
