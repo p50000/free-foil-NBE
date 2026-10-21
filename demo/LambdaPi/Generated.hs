@@ -21,13 +21,15 @@ import Control.DeepSeq (NFData (rnf))
 import qualified Control.Monad.Foil as Foil
 import Control.Monad.Free.Foil (AST)
 import Control.Monad.Free.Foil.TH.MkFreeFoil
-import Data.Bifunctor.TH
 import Data.ZipMatchK
-import Data.ZipMatchK.TH (deriveZipMatchK)
 import Generics.Kind.TH (deriveGenericK)
 
 import LambdaPi.Raw
 import LambdaPi.Syntax.Print (printTree)
+
+-- The identifier's instance comes first, since the generated 'ZipMatchK'
+-- instance of the signature needs it in the same declaration group.
+instance ZipMatchK VarIdent where zipMatchWithK = zipMatchViaEq
 
 mkFreeFoil config
 
@@ -35,13 +37,6 @@ deriveGenericK ''FFPattern
 instance Foil.SinkableK FFPattern
 instance Foil.HasNameBinders FFPattern
 instance Foil.UnifiablePattern FFPattern
-
-deriveBifunctor ''TermSig
-deriveBifoldable ''TermSig
-deriveBitraversable ''TermSig
-
-instance ZipMatchK VarIdent where zipMatchWithK = zipMatchViaEq
-deriveZipMatchK ''TermSig
 
 mkFreeFoilConversions config
 

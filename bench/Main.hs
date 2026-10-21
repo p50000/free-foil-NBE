@@ -26,8 +26,9 @@ import Monolith.Parser ()  -- IsString instance for the monolithic language
 
 -- | The size of a term of any language, used to force the whole normal form.
 -- A signature's 'bifoldMap' must inline for this to cost no more than the
--- traversal itself: small signatures and sums of them inline on their own,
--- and the monolith's instance carries an @INLINE@ pragma.
+-- traversal itself. Small signatures and sums of them inline on their own,
+-- and @mkFreeFoil@ generates the instances of a large one with @INLINE@
+-- pragmas.
 sizeOf :: Bifoldable sig => AST binder sig n -> Int
 sizeOf = \case
   Var _     -> 1
