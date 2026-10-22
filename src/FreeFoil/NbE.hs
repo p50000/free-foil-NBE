@@ -79,9 +79,6 @@ import           FreeFoil.NbE.Internal.Value
 
 -- * Semantic domain
 
--- | A rule matches a 'Whnf' with these synonyms. 'eval' returns a 'Value',
--- which has no synonyms, so a rule cannot inspect a value without
--- 'eliminate'.
 -- | A neutral variable.
 pattern VVar :: Foil.Name n -> Whnf binder sig n
 pattern VVar x <- VVar_ x

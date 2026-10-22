@@ -63,6 +63,8 @@ data Value' (g :: Glue) binder sig (n :: Foil.S) :: Type where
 type Value = Value' 'MayGlue
 
 -- | A value that is not glued at its root: what an elimination rule sees.
+-- The rule matches it with the synonyms 'FreeFoil.NbE.VVar',
+-- 'FreeFoil.NbE.VNode', 'FreeFoil.NbE.VSuspended' and 'FreeFoil.NbE.Stuck'.
 type Whnf = Value' 'NoGlue
 
 instance Foil.InjectName (Value' g binder sig) where
