@@ -33,8 +33,9 @@ is documented in the haddocks of `FreeFoil.NbE`.
   need.
 - Conversion checking (`FreeFoil.NbE.Conversion`) compares values without
   reading them back, but like readback it does not decide η.
-- Top-level definitions (`FreeFoil.NbE.Definitions`) are non-recursive and
-  always unfolded: no readback keeps the defined names.
+- Top-level definitions (`FreeFoil.NbE.Definitions`) are non-recursive. With
+  glue (`FreeFoil.NbE.Glue`), a normal form is read back folded, keeping the
+  defined names, or unfolded.
 - The core works with any free-foil pattern. The demo languages bind one
   variable at a time, except `split` in pairs and the `suc` branch of
   `natrec` in naturals, which bind two; the composed language has both
@@ -51,7 +52,7 @@ BNFC-generated parsers are committed, so nothing else is needed.
 
 ```sh
 cabal build all
-cabal test            # 204 tests; --test-show-details=direct lists them
+cabal test            # 218 tests; --test-show-details=direct lists them
 cabal bench nbe-bench
 ```
 
@@ -67,7 +68,8 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 |------|-----------|
 | `src/FreeFoil/NbE.hs` | The core: `Value`, the `Eval` class, generic `eval` and `quote`, `nf` and `whnf`. |
 | `src/FreeFoil/NbE/Conversion.hs` | Conversion checking on values: `conv`, `convertible` and `convertibleUnder`. |
-| `src/FreeFoil/NbE/Definitions.hs` | Top-level definitions: a telescope and the environment it gives to `eval`. |
+| `src/FreeFoil/NbE/Definitions.hs` | Top-level definitions: a telescope and the environment it gives to `eval`, plain or glued. |
+| `src/FreeFoil/NbE/Glue.hs` | Glued evaluation for definitions: readback folded or unfolded. |
 | `src/FreeFoil/NbE/Sum.hs` | Elimination rules à la carte: `EvalF` for a fragment, the `Eval` instance of a `Sum` of fragments. |
 | `demo/grammar/<Lang>/Syntax.cf`, `gen/<Lang>/` | The LBNF grammar of each demo language and the committed BNFC output. |
 | `demo/<Lang>/Raw.hs`, `Generated.hs` | free-foil's Template Haskell: the configuration and the generated scope-safe syntax. |
@@ -112,7 +114,8 @@ from `cabal repl lambda-let-demo`.
   The evaluate-then-quote structure.
 - A. Kovács. [elaboration-zoo](https://github.com/AndrasKovacs/elaboration-zoo)
   and [smalltt](https://github.com/AndrasKovacs/smalltt). The eager-values
-  domain with one suspension point per binder.
+  domain with one suspension point per binder, and glued evaluation for
+  definitions.
 - A. Abel. *Normalization by evaluation: dependent types and impredicativity.*
   Habilitation, 2013. Type-directed readback and the neutral-versus-value
   split, which this library leaves for later.

@@ -39,6 +39,7 @@ import Control.Monad.Foil
 import Control.Monad.Free.Foil
 import FreeFoil.NbE (Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
+import qualified FreeFoil.NbE.Conversion as Conv
 
 import Naturals.Generated
   ( FFPattern (FFPatternRec)
@@ -62,6 +63,8 @@ type Naturals n = FFTerm n
       NbE.Value FFPattern TermSig o #-}
 {-# SPECIALIZE NbE.quote ::
       Distinct n => Scope n -> NbE.Value FFPattern TermSig n -> Naturals n #-}
+{-# SPECIALIZE Conv.conv :: Distinct n => Scope n -> Value n -> Value n -> Bool #-}
+{-# SPECIALIZE Conv.convertible :: Distinct n => Scope n -> Naturals n -> Naturals n -> Bool #-}
 
 -- | @zero@.
 pattern Zero :: Naturals n
@@ -105,10 +108,10 @@ instance Eval FFPattern TermSig where
       case assertDistinct (FFPatternRec k r) of
         Distinct ->
           let zeroCase = eval scope env z
-              recurse m = case m of
+              recurse m = NbE.eliminate m $ \case
                 NbE.VNode ZeroSig    -> zeroCase
                 NbE.VNode (SucSig p) -> eval scope (addSubst (addSubst env k p) r (recurse p)) s
-                m' -> NbE.VSuspended env (NatRecSig m' zeroCase (ScopedAST (FFPatternRec k r) s))
+                NbE.Stuck m' -> NbE.vsuspended env (NatRecSig m' zeroCase (ScopedAST (FFPatternRec k r) s))
           in recurse (eval scope env n)
     node -> NbE.evalNode scope env node
 

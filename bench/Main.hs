@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- | Microbenchmarks for lambda-pi normalisation. Each input is normalised by
@@ -23,6 +24,12 @@ import Data.String (fromString)
 import qualified Fragments.Combined as Composed
 import qualified Monolith
 import Monolith.Parser ()  -- IsString instance for the monolithic language
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+import FreeFoil.NbE.Conversion (convertibleUnder)
+import FreeFoil.NbE.Definitions (Definitions (..), convertibleIn, definitionsEnv, nfFolded, nfUnfolded, nfWith)
+import FreeFoil.NbE.Glue (Unfolding (..))
+import qualified Monolith.Parser as MonolithParser
 
 -- | The size of a term of any language, used to force the whole normal form.
 -- A signature's 'bifoldMap' must inline for this to cost no more than the
@@ -140,6 +147,77 @@ compareComposed name tm =
     , bench "composed" $ whnf (sizeOf . Composed.nf emptyScope) (Composed.fromMonolith tm)
     ]
 
+-- | A telescope of definitions of the composed language, each body parsed in
+-- the scope of the names before it, with the scope and the names it binds.
+withProgram ::
+  forall r.
+  [(String, String)] ->
+  (forall l. Distinct l => Definitions Composed.Pat Composed.Sig VoidS l -> Scope l -> Map String (Name l) -> r) ->
+  r
+withProgram = go emptyScope Map.empty NoDefinitions
+  where
+    go ::
+      forall m. Distinct m =>
+      Scope m ->
+      Map String (Name m) ->
+      Definitions Composed.Pat Composed.Sig VoidS m ->
+      [(String, String)] ->
+      (forall l. Distinct l => Definitions Composed.Pat Composed.Sig VoidS l -> Scope l -> Map String (Name l) -> r) ->
+      r
+    go scope names defs [] k = k defs scope names
+    go scope names defs ((x, body) : rest) k =
+      withFresh scope $ \b ->
+        go (extendScope b scope) (Map.insert x (nameOf b) (Map.map sink names))
+           (Define defs b (parseComposed scope names body)) rest k
+
+-- | A term of the composed language with the given free names.
+parseComposed :: Distinct n => Scope n -> Map String (Name n) -> String -> Composed.Combined n
+parseComposed scope names = Composed.fromMonolith . either error id . MonolithParser.parseOpen scope names
+
+-- | @plus@ by primitive recursion.
+plusDefinition :: (String, String)
+plusDefinition = ("plus", "\\m. \\n. natrec m { zero -> n ; suc (k, r) -> suc r }")
+
+-- | @plus@ and @mult@ by primitive recursion.
+arithmetic :: [(String, String)]
+arithmetic =
+  [ plusDefinition
+  , ("mult", "\\m. \\n. natrec m { zero -> zero ; suc (k, r) -> plus n r }")
+  ]
+
+-- | @mult m n@ under the definitions, normalised with the plain unfolded
+-- environment and with glue, read back unfolded and folded.
+compareDefinitions :: String -> Int -> Int -> Benchmark
+compareDefinitions name m n =
+  withProgram arithmetic $ \defs scope names ->
+    let t = parseComposed scope names ("mult (" ++ natural m ++ ") (" ++ natural n ++ ")")
+    in bgroup name
+         [ bench "plain, unfolded" $ whnf (sizeOf . nfUnfolded emptyScope defs) t
+         , bench "glued, unfolded" $ whnf (sizeOf . nfWith Unfolded emptyScope defs) t
+         , bench "glued, folded"   $ whnf (sizeOf . nfFolded emptyScope defs) t
+         ]
+
+-- | @d0 = 1@ and @dᵢ₊₁ = plus dᵢ dᵢ@ up to @dₖ₊₁@, so that @dᵢ@ unfolds to
+-- the numeral @2ⁱ@.
+doubling :: Int -> [(String, String)]
+doubling k =
+  plusDefinition : ("d0", "suc zero")
+    : [ ("d" ++ show i, "plus d" ++ show (i - 1) ++ " d" ++ show (i - 1)) | i <- [1 .. k + 1] ]
+
+-- | Check @t ≡ u@ under @'doubling' k@ with the plain unfolded environment
+-- and with glue. Both build their environment inside the benchmarked
+-- function, so that no iteration reuses the values of another.
+compareConversion :: String -> Int -> String -> String -> Benchmark
+compareConversion name k t u =
+  withProgram (doubling k) $ \defs scope names ->
+    let terms = (parseComposed scope names t, parseComposed scope names u)
+    in bgroup name
+         [ bench "plain" $ whnf
+             (\ds -> let values = definitionsEnv emptyScope ds
+                     in uncurry (convertibleUnder emptyScope values values) terms) defs
+         , bench "glued" $ whnf (\ds -> uncurry (convertibleIn emptyScope ds) terms) defs
+         ]
+
 -- | Normalise @t@ three ways and force each result fully.
 compareNormalisers :: String -> LambdaPi VoidS -> Benchmark
 compareNormalisers name t =
@@ -184,5 +262,18 @@ main =
         , compareComposition "Church 2^10 = 1024"      (power 10 2)
         , compareComposed    "natrec mult 16 16 = 256" (natMul 16 16)
         , compareComposed    "natrec mult 32 32 = 1024" (natMul 32 32)
+        ]
+    , bgroup "Definitions: plain vs glued"
+        [ compareDefinitions "mult 16 16 = 256"  16 16
+        , compareDefinitions "mult 32 32 = 1024" 32 32
+        ]
+    , bgroup "Conversion under definitions: plain vs glued"
+        [ compareConversion (name ++ ", 2^" ++ show k) k t u
+        | k <- [8, 12]
+        , (name, t, u) <-
+            [ ("a definition and its body", "d" ++ show (k + 1), "plus d" ++ show k ++ " d" ++ show k)
+            , ("a computation around a definition", "plus (suc zero) d" ++ show k, "suc d" ++ show k)
+            , ("not convertible", "d" ++ show k, "suc d" ++ show k)
+            ]
         ]
     ]

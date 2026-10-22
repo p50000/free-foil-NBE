@@ -30,6 +30,7 @@ import Control.Monad.Foil
 import Control.Monad.Free.Foil
 import FreeFoil.NbE (Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
+import qualified FreeFoil.NbE.Conversion as Conv
 
 import LambdaLet.Generated
   ( FFPattern (FFPatternVar)
@@ -53,6 +54,8 @@ type LambdaLet n = FFTerm n
       NbE.Value FFPattern TermSig o #-}
 {-# SPECIALIZE NbE.quote ::
       Distinct n => Scope n -> NbE.Value FFPattern TermSig n -> LambdaLet n #-}
+{-# SPECIALIZE Conv.conv :: Distinct n => Scope n -> Value n -> Value n -> Bool #-}
+{-# SPECIALIZE Conv.convertible :: Distinct n => Scope n -> LambdaLet n -> LambdaLet n -> Bool #-}
 
 -- | Application.
 pattern App :: LambdaLet n -> LambdaLet n -> LambdaLet n
@@ -81,11 +84,11 @@ type Value = NbE.Value FFPattern TermSig
 instance Eval FFPattern TermSig where
   evalSig scope env = \case
     AppSig fun arg ->
-      case eval scope env fun of
+      NbE.eliminate (eval scope env fun) $ \case
         NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
           case assertDistinct binder of
             Distinct -> eval scope (addSubst env' binder (eval scope env arg)) body
-        fun' -> NbE.VNode (AppSig fun' (eval scope env arg))
+        NbE.Stuck fun' -> NbE.vnode (AppSig fun' (eval scope env arg))
     LetSig e (ScopedAST (FFPatternVar binder) body) ->
       case assertDistinct binder of
         Distinct -> eval scope (addSubst env binder (eval scope env e)) body

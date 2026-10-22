@@ -26,7 +26,7 @@ import Data.Bifunctor.TH       (deriveBifoldable, deriveBifunctor, deriveBitrave
 import Data.ZipMatchK.TH       (deriveZipMatchK)
 import GHC.Generics            (Generic)
 
-import FreeFoil.NbE            (Value (..), eval, evalNode)
+import FreeFoil.NbE            (Value' (..), eliminate, eval, evalNode, vnode)
 import FreeFoil.NbE.Sum
 
 -- | Functions: @λx. t@, @t u@ and @Π (x : a). b@.
@@ -48,10 +48,10 @@ instance CoSinkable binder => EvalF binder LamF where
   evalF pos scope env = \case
     AppF fun arg ->
       let arg' = eval scope env arg
-      in case eval scope env fun of
+      in eliminate (eval scope env fun) $ \case
            VSuspended env' node
              | Just (LamF (ScopedAST binder body)) <- prj pos node ->
                  case assertDistinct binder of
                    Distinct -> eval scope (addSubstPattern env' binder [arg']) body
-           fun' -> VNode (inj pos (AppF fun' arg'))
+           Stuck fun' -> vnode (inj pos (AppF fun' arg'))
     node -> evalNode scope env (inj pos node)

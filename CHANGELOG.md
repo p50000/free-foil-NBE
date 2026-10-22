@@ -14,6 +14,15 @@
   a language with no code of its own. A language composed from fragments of
   functions, pairs and naturals demonstrates it, against the same language
   written in one signature, which is its baseline and its parser.
+- An elimination rule matches the value of its principal subterm through
+  `eliminate`, which hands it a `Whnf`. `eval` returns an opaque `Value`, so
+  a rule that matches a value directly does not type-check.
+- Glued evaluation for definitions (`FreeFoil.NbE.Glue`): a defined name
+  evaluates to a glued value, normal forms are read back folded, keeping the
+  defined names, or unfolded, and conversion checking compares defined names
+  folded first. Every language has glue. When no definition is used, it
+  allocates no more, except 1–2% on `natrec`, and is 4–10% slower on β-heavy
+  terms and no slower on the others.
 - The composed language converts to and from the monolith with free-foil's
   `foldAST`. The languages share scope resolution and parsing in
   `Demo.Parsing`.

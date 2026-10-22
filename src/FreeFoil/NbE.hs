@@ -1,11 +1,14 @@
 {-# LANGUAGE BangPatterns          #-}
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE InstanceSigs          #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE ViewPatterns          #-}
 -- | Normalisation by evaluation, generic in the signature of the object
 -- language. A language is a signature bifunctor @sig@ and a binder type, as
 -- in "Control.Monad.Free.Foil"; to normalise its terms it supplies one 'Eval'
@@ -40,11 +43,17 @@
 -- never specialises the calls to 'eval' inside the instance.
 module FreeFoil.NbE
   ( -- * Semantic domain
-    Value (..)
+    Value
+  , Whnf
+  , Value' (VVar, VNode, VSuspended, Stuck)
+  , vnode
+  , vsuspended
     -- * Evaluation
   , Eval (..)
   , eval
   , evalNode
+  , eliminate
+  , force
     -- * Readback
   , quote
   , quoteScoped
@@ -62,60 +71,78 @@ import           Data.Bifunctor              (Bifunctor (..))
 import qualified Data.IntMap                 as IntMap
 import           Data.Monoid                 (Any (..))
 import           Data.Void                   (Void, absurd)
+import           GHC.Exts                    (inline)
+import           Data.Coerce                 (coerce)
 import           Unsafe.Coerce               (unsafeCoerce)
+
+import           FreeFoil.NbE.Internal.Value
 
 -- * Semantic domain
 
--- | A semantic value in scope @n@. Term subterms are values already; only
--- scoped subterms, the bodies under binders, are suspended. A 'VSuspended'
--- node keeps its term subterms as values, its scoped subterms as syntax, and
--- one captured environment for them all: a @Pi@ holds its domain as a value
--- while its codomain waits, unevaluated, for the environment. Since 'eval'
--- and 'quote' each visit every subterm exactly once, readback is linear in
--- the size of the term, and nested @Pi@ types do not re-normalise their
--- codomains.
---
--- /Invariant./ Every value 'eval' produces is weak-head normal at every
--- position: no node is an eliminator applied to the introduction form it
--- eliminates. The type cannot enforce this, as it does not know which
--- constructors of @sig@ eliminate; the language's 'evalSig' establishes it,
--- and every function here preserves it.
-data Value binder sig n where
-  -- | A neutral variable.
-  VVar :: {-# UNPACK #-} !(Foil.Name n) -> Value binder sig n
-  -- | A node without scoped subterms.
-  VNode :: sig Void (Value binder sig n) -> Value binder sig n
-  -- | A node with scoped subterms, suspended under its environment; the
-  -- environment sits in the constructor, so the node costs one heap object
-  -- beside its @sig@ cell.
-  VSuspended ::
-    Foil.Distinct i =>
-    Foil.Substitution (Value binder sig) i n ->
-    sig (ScopedAST binder sig i) (Value binder sig n) ->
-    Value binder sig n
+-- | A neutral variable.
+pattern VVar :: Foil.Name n -> Whnf binder sig n
+pattern VVar x <- (fromWhnf -> VVar_ x)
 
-instance Foil.InjectName (Value binder sig) where
-  injectName = VVar
+-- | A node without scoped subterms.
+pattern VNode :: sig Void (Value binder sig n) -> Whnf binder sig n
+pattern VNode node <- (fromWhnf -> VNode_ node)
 
-instance Bifunctor sig => Foil.Sinkable (Value binder sig) where
-  sinkabilityProof :: (Foil.Name n -> Foil.Name l) -> Value binder sig n -> Value binder sig l
-  sinkabilityProof rename (VVar x) =
-    VVar (rename x)
-  sinkabilityProof rename (VNode node) =
-    VNode (bimap id (Foil.sinkabilityProof rename) node)
-  sinkabilityProof rename (VSuspended env node) =
-    VSuspended (Foil.sinkabilityProof rename env) (bimap id (Foil.sinkabilityProof rename) node)
+-- | A node with scoped subterms, suspended under its environment.
+pattern VSuspended ::
+  () => Foil.Distinct i =>
+  Foil.Substitution (Value binder sig) i n ->
+  sig (ScopedAST binder sig i) (Value binder sig n) ->
+  Whnf binder sig n
+pattern VSuspended env node <- (fromWhnf -> VSuspended_ env node)
+
+{-# COMPLETE VVar, VNode, VSuspended #-}
+
+-- | Any head, as a value: the stuck case of a rule.
+pattern Stuck :: Value binder sig n -> Whnf binder sig n
+pattern Stuck v <- (fromWhnf -> v)
+
+{-# COMPLETE Stuck #-}
+
+-- | The synonyms match a 'Whnf' as the 'Value' it was cast from, so that a
+-- rule's case scrutinises the same variable as the case in 'eliminate' and
+-- GHC merges the two.
+fromWhnf :: Whnf binder sig n -> Value binder sig n
+{-# INLINE fromWhnf #-}
+fromWhnf = coerce
+
+-- | A node without scoped subterms, as a value.
+vnode :: sig Void (Value binder sig n) -> Value binder sig n
+{-# INLINE vnode #-}
+vnode = VNode_
+
+-- | A node with scoped subterms suspended under an environment, as a value.
+vsuspended ::
+  Foil.Distinct i =>
+  Foil.Substitution (Value binder sig) i n ->
+  sig (ScopedAST binder sig i) (Value binder sig n) ->
+  Value binder sig n
+{-# INLINE vsuspended #-}
+vsuspended = VSuspended_
 
 -- * Evaluation
 
--- | A language becomes an NbE instance by giving its elimination rules:
--- 'evalSig' receives a raw node and the environment, matches the
--- eliminators, evaluates the principal subterm and either reduces or, on a
--- neutral, rebuilds the node as a 'VNode'. Every other node falls through to
--- 'evalNode'. The node arrives raw so that a redex never builds the
--- interpreted node it would discard. The instance upholds the 'Value'
--- invariant; "LambdaPi" is a one-rule example. An instance comes with the
--- @SPECIALIZE@ pragmas shown in the module header.
+-- | The elimination rules of a language. An eliminator evaluates its
+-- principal subterm and matches the value through 'eliminate', as β does in
+-- "LambdaPi":
+--
+-- > evalSig scope env = \case
+-- >   AppSig fun arg ->
+-- >     NbE.eliminate (eval scope env fun) $ \case
+-- >       NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
+-- >         case assertDistinct binder of
+-- >           Distinct -> eval scope (addSubst env' binder (eval scope env arg)) body
+-- >       NbE.Stuck fun' -> NbE.vnode (AppSig fun' (eval scope env arg))
+-- >   node -> NbE.evalNode scope env node
+--
+-- Every other node falls through to 'evalNode'. The node arrives raw, so that
+-- a redex never builds the interpreted node it would discard. The instance
+-- upholds the 'Value' invariant, and it comes with the @SPECIALIZE@ pragmas
+-- shown in the module header.
 class (Bifunctor sig, Bifoldable sig) => Eval binder sig where
   evalSig ::
     (Foil.Distinct o, Foil.Distinct i) =>
@@ -153,8 +180,8 @@ evalNode ::
 {-# INLINE evalNode #-}
 evalNode scope env node =
   case ensureBivacuousFirst node of
-    Just node' -> VNode (bimap absurd (eval scope env) node')
-    Nothing -> VSuspended env $ case ensureBivacuousSecond node of
+    Just node' -> VNode_ (bimap absurd (eval scope env) node')
+    Nothing -> VSuspended_ env $ case ensureBivacuousSecond node of
       -- Nothing to evaluate either (a lambda, say): reuse the cell as it is.
       Just node' -> vacuous node'
       Nothing    -> bimap id (eval scope env) node
@@ -182,12 +209,41 @@ ensureBivacuousSecond x
 
 -- * Readback
 
+-- | Match the value of a principal subterm: an elimination rule sees it as a
+-- 'Whnf', through the synonyms 'VVar', 'VNode', 'VSuspended' and 'Stuck'. On
+-- a glued value the rule applies to both sides: the folded side is a
+-- neutral, so the rule leaves it stuck, and the unfolded side may be glued
+-- again. The results are glued again, so that readback can still choose. On
+-- any other value the rule applies directly, and it is a closure only on a
+-- glued value.
+eliminate ::
+  Value binder sig n ->
+  (Whnf binder sig n -> Value binder sig n) ->
+  Value binder sig n
+{-# INLINE eliminate #-}
+eliminate v rule = case v of
+  VGlued_ folded unfolded -> VGlued_ (eliminateLoop folded rule) (eliminateLoop unfolded rule)
+  _ -> inline rule (coerce v)
+
+-- | The loop of 'eliminate' under the first glue, out of line.
+eliminateLoop ::
+  Value binder sig n ->
+  (Whnf binder sig n -> Value binder sig n) ->
+  Value binder sig n
+{-# NOINLINE eliminateLoop #-}
+eliminateLoop v rule = case v of
+  VGlued_ folded unfolded -> VGlued_ (eliminateLoop folded rule) (eliminateLoop unfolded rule)
+  _ -> rule (coerce v)
+
+-- | The unfolded head of a value: peel every layer of glue off its root.
+force :: Value binder sig n -> Whnf binder sig n
+force = \case
+  VGlued_ _ unfolded -> force unfolded
+  v                  -> coerce v
+
 -- | Read a value back into a term. Term subterms recurse directly; scoped
--- subterms are read back under their binder by 'quoteScoped'.
---
--- Every constraint here is used. An unused dictionary would make GHC split
--- 'quote' into a wrapper and a worker, and a @SPECIALIZE@ pragma would then
--- specialise only the wrapper.
+-- subterms are read back under their binder by 'quoteScoped'. A glued value
+-- is read back unfolded.
 quote ::
   (Eval binder sig, Foil.Distinct n, Foil.CoSinkable binder) =>
   Foil.Scope n ->
@@ -195,9 +251,10 @@ quote ::
   AST binder sig n
 {-# INLINABLE quote #-}
 quote scope = \case
-  VVar x -> Var x
-  VNode node -> Node $! bimap absurd (quote scope) node
-  VSuspended env node -> Node $! bimap (quoteScoped scope env) (quote scope) node
+  VVar_ x -> Var x
+  VNode_ node -> Node $! bimap absurd (quote scope) node
+  VSuspended_ env node -> Node $! bimap (quoteScoped scope env) (quote scope) node
+  VGlued_ _ unfolded -> quote scope unfolded
 
 -- | Read back one scoped subterm of a suspended node: refresh the binder,
 -- extend the captured environment with it as a fresh neutral, evaluate the
@@ -233,9 +290,10 @@ quoteWhnf ::
   Value binder sig n ->
   AST binder sig n
 quoteWhnf scope = \case
-  VVar x -> Var x
-  VNode node -> Node $ bimap absurd (quote scope) node
-  VSuspended env node -> Node $ bimap (freezeScoped scope env) (quote scope) node
+  VVar_ x -> Var x
+  VNode_ node -> Node $ bimap absurd (quote scope) node
+  VSuspended_ env node -> Node $ bimap (freezeScoped scope env) (quote scope) node
+  VGlued_ _ unfolded -> quoteWhnf scope unfolded
 
 -- | Freeze one scoped subterm of a suspended node without evaluating under
 -- its binder: refresh the binder and substitute the captured environment,

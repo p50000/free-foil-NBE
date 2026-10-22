@@ -42,6 +42,7 @@ import Control.Monad.Foil
 import Control.Monad.Free.Foil
 import FreeFoil.NbE (Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
+import qualified FreeFoil.NbE.Conversion as Conv
 
 import Monolith.Generated
 
@@ -56,6 +57,8 @@ type Value = NbE.Value Pattern TermSig
       (Distinct o, Distinct i) =>
       Scope o -> Substitution Value i o -> Monolith i -> Value o #-}
 {-# SPECIALIZE NbE.quote :: Distinct n => Scope n -> Value n -> Monolith n #-}
+{-# SPECIALIZE Conv.conv :: Distinct n => Scope n -> Value n -> Value n -> Bool #-}
+{-# SPECIALIZE Conv.convertible :: Distinct n => Scope n -> Monolith n -> Monolith n -> Bool #-}
 
 -- | The numeral of a natural number.
 numeral :: Int -> Monolith n
@@ -67,37 +70,37 @@ numeral k = iterate Suc Zero !! k
 instance Eval Pattern TermSig where
   evalSig scope env = \case
     AppSig fun arg ->
-      case eval scope env fun of
+      NbE.eliminate (eval scope env fun) $ \case
         NbE.VSuspended env' (LamSig (ScopedAST (PatternVar binder) body)) ->
           case assertDistinct binder of
             Distinct -> eval scope (addSubst env' binder (eval scope env arg)) body
         NbE.VSuspended _ (LamSig (ScopedAST PatternPair {} _)) ->
           error "Monolith: a lambda binds one name"
-        fun' -> NbE.VNode (AppSig fun' (eval scope env arg))
+        NbE.Stuck fun' -> NbE.vnode (AppSig fun' (eval scope env arg))
     FstSig p ->
-      case eval scope env p of
+      NbE.eliminate (eval scope env p) $ \case
         NbE.VNode (PairSig a _) -> a
-        p'                     -> NbE.VNode (FstSig p')
+        NbE.Stuck p'                     -> NbE.vnode (FstSig p')
     SndSig p ->
-      case eval scope env p of
+      NbE.eliminate (eval scope env p) $ \case
         NbE.VNode (PairSig _ b) -> b
-        p'                     -> NbE.VNode (SndSig p')
+        NbE.Stuck p'                     -> NbE.vnode (SndSig p')
     SplitSig p (ScopedAST (PatternPair x y) body) ->
-      case eval scope env p of
+      NbE.eliminate (eval scope env p) $ \case
         NbE.VNode (PairSig a b) ->
           case assertDistinct (PatternPair x y) of
             Distinct -> eval scope (addSubst (addSubst env x a) y b) body
-        p' -> NbE.VSuspended env (SplitSig p' (ScopedAST (PatternPair x y) body))
+        NbE.Stuck p' -> NbE.vsuspended env (SplitSig p' (ScopedAST (PatternPair x y) body))
     SplitSig _ (ScopedAST PatternVar {} _) ->
       error "Monolith: split binds two names"
     NatRecSig n z (ScopedAST (PatternPair k r) s) ->
       case assertDistinct (PatternPair k r) of
         Distinct ->
           let zeroCase = eval scope env z
-              recurse m = case m of
+              recurse m = NbE.eliminate m $ \case
                 NbE.VNode ZeroSig    -> zeroCase
                 NbE.VNode (SucSig p) -> eval scope (addSubst (addSubst env k p) r (recurse p)) s
-                m' -> NbE.VSuspended env (NatRecSig m' zeroCase (ScopedAST (PatternPair k r) s))
+                NbE.Stuck m' -> NbE.vsuspended env (NatRecSig m' zeroCase (ScopedAST (PatternPair k r) s))
           in recurse (eval scope env n)
     NatRecSig _ _ (ScopedAST PatternVar {} _) ->
       error "Monolith: the suc branch of natrec binds two names"
