@@ -10,8 +10,7 @@
 -- value of its body (δ-reduction). The environment is lazy, so a body is
 -- evaluated at most once, and only when its name is used. This is how
 -- Coquand evaluates @let@ ("An algorithm for type-checking dependent types",
--- 1996, §3), and how Renata Shakirova's "LambdaLet" demo evaluates its local
--- @let@.
+-- 1996, §3), and how the "LambdaLet" demo evaluates its local @let@.
 --
 -- With glue ("FreeFoil.NbE.Glue"), 'withDefinitions' maps each name to a
 -- glued value instead, the name itself beside the lazy value of its body, and
