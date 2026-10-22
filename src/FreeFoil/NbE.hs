@@ -81,11 +81,11 @@ import           FreeFoil.NbE.Internal.Value
 
 -- | A neutral variable.
 pattern VVar :: Foil.Name n -> Whnf binder sig n
-pattern VVar x <- VVar_ x
+pattern VVar x <- (fromWhnf -> VVar_ x)
 
 -- | A node without scoped subterms.
 pattern VNode :: sig Void (Value binder sig n) -> Whnf binder sig n
-pattern VNode node <- VNode_ node
+pattern VNode node <- (fromWhnf -> VNode_ node)
 
 -- | A node with scoped subterms, suspended under its environment.
 pattern VSuspended ::
@@ -93,15 +93,22 @@ pattern VSuspended ::
   Foil.Substitution (Value binder sig) i n ->
   sig (ScopedAST binder sig i) (Value binder sig n) ->
   Whnf binder sig n
-pattern VSuspended env node <- VSuspended_ env node
+pattern VSuspended env node <- (fromWhnf -> VSuspended_ env node)
 
 {-# COMPLETE VVar, VNode, VSuspended #-}
 
 -- | Any head, as a value: the stuck case of a rule.
 pattern Stuck :: Value binder sig n -> Whnf binder sig n
-pattern Stuck v <- (coerce -> v)
+pattern Stuck v <- (fromWhnf -> v)
 
 {-# COMPLETE Stuck #-}
+
+-- | The synonyms match a 'Whnf' as the 'Value' it was cast from, so that a
+-- rule's case scrutinises the same variable as the case in 'eliminate' and
+-- GHC merges the two.
+fromWhnf :: Whnf binder sig n -> Value binder sig n
+{-# INLINE fromWhnf #-}
+fromWhnf = coerce
 
 -- | A node without scoped subterms, as a value.
 vnode :: sig Void (Value binder sig n) -> Value binder sig n
