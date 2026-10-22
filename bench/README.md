@@ -49,6 +49,13 @@ ways: with the plain unfolded environment (`nfUnfolded`), and with the glued
 environment read back unfolded (`nfWith Unfolded`) and folded (`nfFolded`),
 which keeps the defined names and unfolds nothing.
 
+The group **Conversion under definitions: plain vs glued** checks
+convertibility under `d₀ = suc zero` and `dᵢ₊₁ = plus dᵢ dᵢ`, where `dₖ`
+unfolds to the numeral `2ᵏ`, with the plain unfolded environment
+(`convertibleUnder` with `definitionsEnv`) and with glue (`convertibleIn`):
+a definition against its body, a computation around a definition, and two
+terms that are not convertible.
+
 ## A sample run
 
 Numbers below are from one run (Apple M3 Pro, macOS 15.7, GHC 9.10.3, `-O2`)
