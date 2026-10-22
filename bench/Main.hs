@@ -26,7 +26,8 @@ import qualified Monolith
 import Monolith.Parser ()  -- IsString instance for the monolithic language
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import FreeFoil.NbE.Definitions (Definitions (..), nfFolded, nfUnfolded, nfWith)
+import FreeFoil.NbE.Conversion (convertibleUnder)
+import FreeFoil.NbE.Definitions (Definitions (..), convertibleIn, definitionsEnv, nfFolded, nfUnfolded, nfWith)
 import FreeFoil.NbE.Glue (Unfolding (..))
 import qualified Monolith.Parser as MonolithParser
 
@@ -196,6 +197,27 @@ compareDefinitions name m n =
          , bench "glued, folded"   $ whnf (sizeOf . nfFolded emptyScope defs) t
          ]
 
+-- | @d0 = 1@ and @dᵢ₊₁ = plus dᵢ dᵢ@ up to @dₖ₊₁@, so that @dᵢ@ unfolds to
+-- the numeral @2ⁱ@.
+doubling :: Int -> [(String, String)]
+doubling k =
+  plusDefinition : ("d0", "suc zero")
+    : [ ("d" ++ show i, "plus d" ++ show (i - 1) ++ " d" ++ show (i - 1)) | i <- [1 .. k + 1] ]
+
+-- | Check @t ≡ u@ under @'doubling' k@ with the plain unfolded environment
+-- and with glue. Both build their environment inside the benchmarked
+-- function, so that no iteration reuses the values of another.
+compareConversion :: String -> Int -> String -> String -> Benchmark
+compareConversion name k t u =
+  withProgram (doubling k) $ \defs scope names ->
+    let terms = (parseComposed scope names t, parseComposed scope names u)
+    in bgroup name
+         [ bench "plain" $ whnf
+             (\ds -> let values = definitionsEnv emptyScope ds
+                     in uncurry (convertibleUnder emptyScope values values) terms) defs
+         , bench "glued" $ whnf (\ds -> uncurry (convertibleIn emptyScope ds) terms) defs
+         ]
+
 -- | Normalise @t@ three ways and force each result fully.
 compareNormalisers :: String -> LambdaPi VoidS -> Benchmark
 compareNormalisers name t =
@@ -244,5 +266,14 @@ main =
     , bgroup "Definitions: plain vs glued"
         [ compareDefinitions "mult 16 16 = 256"  16 16
         , compareDefinitions "mult 32 32 = 1024" 32 32
+        ]
+    , bgroup "Conversion under definitions: plain vs glued"
+        [ compareConversion (name ++ ", 2^" ++ show k) k t u
+        | k <- [8, 12]
+        , (name, t, u) <-
+            [ ("a definition and its body", "d" ++ show (k + 1), "plus d" ++ show k ++ " d" ++ show k)
+            , ("a computation around a definition", "plus (suc zero) d" ++ show k, "suc d" ++ show k)
+            , ("not convertible", "d" ++ show k, "suc d" ++ show k)
+            ]
         ]
     ]
