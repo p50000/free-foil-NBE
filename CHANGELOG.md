@@ -20,8 +20,9 @@
 - Glued evaluation for definitions (`FreeFoil.NbE.Glue`): a defined name
   evaluates to a glued value, normal forms are read back folded, keeping the
   defined names, or unfolded, and conversion checking compares defined names
-  folded first. Every language has glue. When no definition is used, it costs
-  1–4% on β-heavy terms and nothing on the others.
+  folded first. Every language has glue. When no definition is used, it
+  allocates no more, except 1–2% on `natrec`, and is 4–10% slower on β-heavy
+  terms and no slower on the others.
 - The composed language converts to and from the monolith with free-foil's
   `foldAST`. The languages share scope resolution and parsing in
   `Demo.Parsing`.
