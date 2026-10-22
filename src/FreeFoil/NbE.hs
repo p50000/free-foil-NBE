@@ -244,10 +244,6 @@ force = \case
 -- | Read a value back into a term. Term subterms recurse directly; scoped
 -- subterms are read back under their binder by 'quoteScoped'. A glued value
 -- is read back unfolded.
---
--- Every constraint here is used. An unused dictionary would make GHC split
--- 'quote' into a wrapper and a worker, and a @SPECIALIZE@ pragma would then
--- specialise only the wrapper.
 quote ::
   (Eval binder sig, Foil.Distinct n, Foil.CoSinkable binder) =>
   Foil.Scope n ->

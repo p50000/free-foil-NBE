@@ -47,11 +47,6 @@ conv ::
   Value binder sig n ->
   Value binder sig n ->
   Bool
--- Every constraint here is used: an unused dictionary would make GHC split
--- 'conv' into a wrapper and a worker, and the languages' @SPECIALIZE@
--- pragmas would then specialise only the wrapper (which is why the nodes are
--- matched with 'zipMatchWithK' and not 'zipMatchWith2', whose 'Bitraversable'
--- constraint is unused).
 {-# INLINABLE conv #-}
 conv scope = \cases
   (VGlued_ fl ul) (VGlued_ fr ur) -> conv scope fl fr || conv scope ul ur
