@@ -146,31 +146,50 @@ compareComposed name tm =
     , bench "composed" $ whnf (sizeOf . Composed.nf emptyScope) (Composed.fromMonolith tm)
     ]
 
--- | @plus@ and @mult@ by primitive recursion, as top-level definitions of
--- the composed language, with the scope and the names they bind.
-withArithmetic ::
+-- | A telescope of definitions of the composed language, each body parsed in
+-- the scope of the names before it, with the scope and the names it binds.
+withProgram ::
+  forall r.
+  [(String, String)] ->
   (forall l. Distinct l => Definitions Composed.Pat Composed.Sig VoidS l -> Scope l -> Map String (Name l) -> r) ->
   r
-withArithmetic k =
-  withFresh emptyScope $ \plus ->
-    let scope1 = extendScope plus emptyScope
-        env1 = Map.singleton "plus" (nameOf plus)
-        plusBody = parseIn emptyScope Map.empty "\\m. \\n. natrec m { zero -> n ; suc (k, r) -> suc r }"
-    in withFresh scope1 $ \mult ->
-         let scope2 = extendScope mult scope1
-             env2 = Map.insert "mult" (nameOf mult) (Map.map sink env1)
-             multBody = parseIn scope1 env1 "\\m. \\n. natrec m { zero -> zero ; suc (k, r) -> plus n r }"
-         in k (Define (Define NoDefinitions plus plusBody) mult multBody) scope2 env2
+withProgram = go emptyScope Map.empty NoDefinitions
   where
-    parseIn scope names = Composed.fromMonolith . either error id . MonolithParser.parseOpen scope names
+    go ::
+      forall m. Distinct m =>
+      Scope m ->
+      Map String (Name m) ->
+      Definitions Composed.Pat Composed.Sig VoidS m ->
+      [(String, String)] ->
+      (forall l. Distinct l => Definitions Composed.Pat Composed.Sig VoidS l -> Scope l -> Map String (Name l) -> r) ->
+      r
+    go scope names defs [] k = k defs scope names
+    go scope names defs ((x, body) : rest) k =
+      withFresh scope $ \b ->
+        go (extendScope b scope) (Map.insert x (nameOf b) (Map.map sink names))
+           (Define defs b (parseComposed scope names body)) rest k
+
+-- | A term of the composed language with the given free names.
+parseComposed :: Distinct n => Scope n -> Map String (Name n) -> String -> Composed.Combined n
+parseComposed scope names = Composed.fromMonolith . either error id . MonolithParser.parseOpen scope names
+
+-- | @plus@ by primitive recursion.
+plusDefinition :: (String, String)
+plusDefinition = ("plus", "\\m. \\n. natrec m { zero -> n ; suc (k, r) -> suc r }")
+
+-- | @plus@ and @mult@ by primitive recursion.
+arithmetic :: [(String, String)]
+arithmetic =
+  [ plusDefinition
+  , ("mult", "\\m. \\n. natrec m { zero -> zero ; suc (k, r) -> plus n r }")
+  ]
 
 -- | @mult m n@ under the definitions, normalised with the plain unfolded
 -- environment and with glue, read back unfolded and folded.
 compareDefinitions :: String -> Int -> Int -> Benchmark
 compareDefinitions name m n =
-  withArithmetic $ \defs scope names ->
-    let t = Composed.fromMonolith . either error id $
-          MonolithParser.parseOpen scope names ("mult (" ++ natural m ++ ") (" ++ natural n ++ ")")
+  withProgram arithmetic $ \defs scope names ->
+    let t = parseComposed scope names ("mult (" ++ natural m ++ ") (" ++ natural n ++ ")")
     in bgroup name
          [ bench "plain, unfolded" $ whnf (sizeOf . nfUnfolded emptyScope defs) t
          , bench "glued, unfolded" $ whnf (sizeOf . nfWith Unfolded emptyScope defs) t
