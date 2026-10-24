@@ -187,14 +187,28 @@ conversionTests =
             "\\x. \\y. x" "\\x. \\y. y"
         , convertibleAs False "a lambda and a Pi type"
             "\\x. x" "(x : \\a. a) -> x"
-        , convertibleAs False "a term without a normal form is told apart"
-            "\\x. x" ("\\x. \\y. " ++ omega)
+        , convertibleAs False "a term without a normal form is told apart when no η applies"
+            "\\x. x" ("\\x. (y : x) -> " ++ omega)
         , convertibleAs False "the first mismatch decides"
             ("\\x. \\y. x (" ++ omega ++ ")") ("\\x. \\y. y (" ++ omega ++ ")")
         ]
+    , testGroup "η for functions"
+        [ convertibleAs True "a lambda against the function it applies"
+            "\\f. \\x. f x" "\\f. f"
+        , convertibleAs True "two steps"
+            "\\f. \\x. \\y. f x y" "\\f. f"
+        , convertibleAs True "on the right"
+            "\\x. x" "\\x. \\y. x y"
+        , convertibleAs True "under a redex"
+            "\\f. (\\g. \\x. g x) f" "\\f. f"
+        , convertibleAs False "an argument used twice is not η"
+            "\\f. \\x. f x x" "\\f. f"
+        , convertibleAs False "a lambda against a Pi type"
+            "\\f. \\x. f x" "\\f. (x : f) -> f x"
+        ]
     , testGroup "properties"
         [ testProperty "a term is convertible with its normal form" propConvNf
-        , testProperty "agrees with α-equivalence of normal forms" propConvPairs
+        , testProperty "α-equal normal forms are convertible" propConvPairs
         ]
     ]
   where
@@ -216,11 +230,11 @@ propConvNf (Closed t) =
   where
     normal = nfSubst emptyScope t
 
--- | Conversion agrees with comparing reference normal forms up to α. Most
--- random pairs differ, so this mainly checks the negative answers.
+-- | α-equal reference normal forms are convertible. The converse fails
+-- with η: @\\x. f x@ and @f@ are convertible and their normal forms differ.
 propConvPairs :: Closed -> Closed -> Property
 propConvPairs (Closed t) (Closed u) =
   ioProperty $
-    agreesWithin "convertible" (==)
+    agreesWithin "convertible" (\same conv -> conv || not same)
       (alphaEquiv emptyScope (nfSubst emptyScope t) (nfSubst emptyScope u))
       (convertible emptyScope t u)

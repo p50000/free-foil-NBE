@@ -9,14 +9,16 @@
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
 -- | The fragment of functions: lambda, application and the dependent
--- function type. Its one rule is β, as in "LambdaPi", written for any
--- language that contains the fragment and any binder: a suspended lambda is
+-- function type. Its one rule is β, and its one η law is that of lambdas,
+-- both as in "LambdaPi" and written for any language that contains the
+-- fragment and any binder: a suspended lambda is
 -- entered under its captured environment extended with the argument, a
 -- neutral head rebuilds the application, and @Pi@ falls through to the
 -- default. The binder of a lambda is expected to bind one name; applying a
 -- lambda whose pattern binds two fails in 'addSubstPattern'.
 module Fragments.Lambda
   ( LamF (..)
+  , appValue
   ) where
 
 import Control.DeepSeq        (NFData)
@@ -26,7 +28,7 @@ import Data.Bifunctor.TH       (deriveBifoldable, deriveBifunctor, deriveBitrave
 import Data.ZipMatchK.TH       (deriveZipMatchK)
 import GHC.Generics            (Generic)
 
-import FreeFoil.NbE            (Value (..), eval, evalNode)
+import FreeFoil.NbE            (EtaScoped (..), Eval, Value (..), eval, evalNode)
 import FreeFoil.NbE.Sum
 
 -- | Functions: @λx. t@, @t u@ and @Π (x : a). b@.
@@ -46,12 +48,25 @@ instance (NFData scope, NFData term) => NFData (LamF scope term)
 instance CoSinkable binder => EvalF binder LamF where
   {-# INLINE evalF #-}
   evalF pos scope env = \case
-    AppF fun arg ->
-      let arg' = eval scope env arg
-      in case eval scope env fun of
-           VSuspended env' node
-             | Just (LamF (ScopedAST binder body)) <- prj pos node ->
-                 case assertDistinct binder of
-                   Distinct -> eval scope (addSubstPattern env' binder [arg']) body
-           fun' -> VNode (inj pos (AppF fun' arg'))
+    AppF fun arg -> appValue pos scope (eval scope env fun) (eval scope env arg)
     node -> evalNode scope env (inj pos node)
+
+  etaMatchF pos = \case
+    LamF _ -> Just (LamF (EtaScoped (\scope binder other ->
+      foldl (appValue pos scope) other (map VVar (namesOfPattern binder)))))
+    _ -> Nothing
+
+-- | Apply a function value to an argument value in a language containing
+-- the fragment: a suspended lambda of the fragment is entered under its
+-- environment extended with the argument, any other function is a stuck
+-- application.
+appValue ::
+  (Eval binder sig, CoSinkable binder, Distinct n) =>
+  Inj LamF sig -> Scope n -> Value binder sig n -> Value binder sig n -> Value binder sig n
+{-# INLINE appValue #-}
+appValue pos scope fun arg = case fun of
+  VSuspended env' node
+    | Just (LamF (ScopedAST binder body)) <- prj pos node ->
+        case assertDistinct binder of
+          Distinct -> eval scope (addSubstPattern env' binder [arg]) body
+  _ -> VNode (inj pos (AppF fun arg))

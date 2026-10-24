@@ -35,7 +35,7 @@ import           Data.Bifoldable         (Bifoldable)
 import           Data.Bifunctor          (Bifunctor)
 import           Data.Bifunctor.Sum      (Sum (..))
 
-import           FreeFoil.NbE            (Eval (..), Value, evalNode)
+import           FreeFoil.NbE            (EtaScoped, EtaTerm, Eval (..), Value, evalNode)
 
 -- | The position of a fragment @f@ in a language @sig@: how to build one of
 -- its nodes in the language and how to recognise one. This is Swierstra's
@@ -86,15 +86,28 @@ class (Bifunctor f, Bifoldable f) => EvalF binder f where
     Value binder sig o
   evalF pos scope env node = evalNode scope env (inj pos node)
 
+  -- | The η laws of the fragment's introduction forms at a position, as
+  -- 'etaMatch'; by default none.
+  etaMatchF ::
+    Eval binder sig =>
+    Inj f sig ->
+    f a b ->
+    Maybe (f (EtaScoped binder sig n) (EtaTerm binder sig n))
+  etaMatchF _ _ = Nothing
+
 -- | The rules of a sum are the rules of its summands.
 instance (EvalF binder f, EvalF binder g) => EvalF binder (Sum f g) where
   {-# INLINE evalF #-}
   evalF pos scope env = \case
     L2 node -> evalF (inL pos) scope env node
     R2 node -> evalF (inR pos) scope env node
+  etaMatchF pos = \case
+    L2 node -> L2 <$> etaMatchF (inL pos) node
+    R2 node -> R2 <$> etaMatchF (inR pos) node
 
 -- | A sum of fragments is a language: its rules are those of the sum at the
 -- root position.
 instance (EvalF binder f, EvalF binder g) => Eval binder (Sum f g) where
   {-# INLINE evalSig #-}
   evalSig = evalF root
+  etaMatch = etaMatchF root

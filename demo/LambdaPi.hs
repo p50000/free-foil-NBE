@@ -11,8 +11,9 @@
 -- | The lambda-pi demonstration language: the untyped lambda calculus with
 -- the dependent function type @Pi@ as a term former. The syntax is generated
 -- in "LambdaPi.Generated"; this module adds pattern synonyms over it, the
--- one 'Eval' instance (β), and a substitution-based reference normaliser.
--- Example terms are in "LambdaPi.Examples".
+-- one 'Eval' instance (β, and the η law of lambdas for conversion checking),
+-- and a substitution-based reference normaliser. Example terms are in
+-- "LambdaPi.Examples".
 module LambdaPi
   ( LambdaPi
   , pattern Var
@@ -81,13 +82,23 @@ type Value = NbE.Value FFPattern TermSig
 -- @Pi@ keeps its domain as a value and its codomain suspended.
 instance Eval FFPattern TermSig where
   evalSig scope env = \case
-    AppSig fun arg ->
-      case eval scope env fun of
-        NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
-          case assertDistinct binder of
-            Distinct -> eval scope (addSubst env' binder (eval scope env arg)) body
-        fun' -> NbE.VNode (AppSig fun' (eval scope env arg))
+    AppSig fun arg -> appValue scope (eval scope env fun) (eval scope env arg)
     node -> NbE.evalNode scope env node
+
+  etaMatch = \case
+    LamSig _ -> Just (LamSig (NbE.EtaScoped (\scope (FFPatternVar x) other ->
+      appValue scope other (NbE.VVar (nameOf x)))))
+    _ -> Nothing
+
+-- | Apply a function value to an argument value: a suspended lambda is
+-- entered under its environment extended with the argument, any other
+-- function is a stuck application.
+appValue :: Distinct n => Scope n -> Value n -> Value n -> Value n
+appValue scope fun arg = case fun of
+  NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
+    case assertDistinct binder of
+      Distinct -> eval scope (addSubst env' binder arg) body
+  _ -> NbE.VNode (AppSig fun arg)
 
 -- | Weak-head normal form by substitution, the reference for the tests.
 whnfSubst :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n
