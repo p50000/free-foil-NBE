@@ -2,10 +2,12 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
 -- | Conversion checking: decide whether two values have the same normal form
--- up to renaming of bound variables, without reading them back.
+-- up to renaming of bound variables and η, without reading them back.
 --
 -- This follows the conversion algorithm of Coquand, "An algorithm for
--- type-checking dependent types" (1996, §2.3.2 and Appendix A).
+-- type-checking dependent types" (1996, §2.3.2 and Appendix A), with the
+-- untyped η for surjective pairs of Abel and Coquand, "Untyped algorithmic
+-- equality for Martin-Löf's logical framework with surjective pairs" (2007).
 --
 -- The check walks both values together and matches nodes with 'zipMatchWith2'
 -- from free-foil, as free-foil's 'Control.Monad.Free.Foil.alphaEquiv' does
@@ -15,8 +17,18 @@
 -- normal form, and on convertible terms it does the work of normalisation
 -- minus readback.
 --
--- Like the normaliser, the check is untyped and intensional: it decides β
--- and the language's own reductions, not η.
+-- Two values of different shapes are compared by one-step η when either is
+-- an introduction form with an η law ('FreeFoil.NbE.etaMatch'): each
+-- position of that form against the other value observed at that position.
+-- So @λx. f x@ against @f@ compares, under a fresh @x'@, the body @f x'@
+-- with @f@ applied to @x'@, and @(fst p, snd p)@ against @p@ compares the
+-- components with the projections of @p@.
+--
+-- Like the normaliser, the check is untyped and intensional: it decides β,
+-- the language's own reductions, and η for the forms the language marks,
+-- and it is specified on well-typed terms. η evaluates a lambda's body
+-- against a neutral, so @λx. x@ against @λx. λy. Ω@ diverges, whereas
+-- against @λx. (y : x) -> Ω@ it answers at once, @Pi@ having no η law.
 module FreeFoil.NbE.Conversion
   ( conv
   , convertible
@@ -26,16 +38,18 @@ module FreeFoil.NbE.Conversion
 import qualified Control.Monad.Foil          as Foil
 import qualified Control.Monad.Foil.Internal as Foil (unsafeUnifiablePatterns)
 import           Control.Monad.Free.Foil     (AST, ScopedAST (..))
+import           Data.Bifoldable             (bifoldMap)
 import           Data.Bitraversable          (Bitraversable)
-import           Data.Maybe                  (isJust)
+import           Data.Maybe                  (fromMaybe, isJust)
+import           Data.Monoid                 (All (..))
 import           Data.Void                   (absurd)
-import           Data.ZipMatchK              (ZipMatchK, zipMatchWith2)
+import           Data.ZipMatchK              (ZipMatchK, zipMatch2, zipMatchWith2)
 
-import           FreeFoil.NbE                (Eval, Value (..), eval)
+import           FreeFoil.NbE                (EtaScoped (..), EtaTerm (..), Eval (..), Value (..), eval)
 
 -- | Two values are convertible: their normal forms are equal up to renaming
--- of bound variables. Nodes match when they have the same constructor, and
--- then their subterms are compared left to right.
+-- of bound variables and η. Nodes match when they have the same constructor,
+-- and then their subterms are compared left to right.
 conv ::
   (Eval binder sig, Bitraversable sig, ZipMatchK sig, Foil.Distinct n, Foil.UnifiablePattern binder) =>
   Foil.Scope n ->
@@ -43,18 +57,69 @@ conv ::
   Value binder sig n ->
   Bool
 {-# INLINABLE conv #-}
-conv scope = \cases
-  (VVar x) (VVar y) -> x == y
-  (VNode l) (VNode r) ->
-    matches (zipMatchWith2 (\v _ -> absurd v) (check (conv scope)) l r)
-  (VSuspended envL l) (VSuspended envR r) ->
-    matches (zipMatchWith2 (check (convScoped scope envL envR)) (check (conv scope)) l r)
+conv scope l r = case (l, r) of
+  (VVar x, VVar y) -> x == y
+  (VNode a, VNode b)
+    | matches (zipMatchWith2 (\v _ -> absurd v) (check (conv scope)) a b) -> True
+    | sameConstructor a b -> False
+  (VSuspended envL a, VSuspended envR b)
+    | matches (zipMatchWith2 (check (convScoped scope envL envR)) (check (conv scope)) a b) -> True
+    | sameConstructor a b -> False
   -- A node goes to 'VNode' exactly when it has no scoped subterms, so a
   -- 'VNode' and a 'VSuspended' never have the same constructor.
-  _ _ -> False
+  _ -> convEta scope l r || convEta scope r l
   where
     matches = isJust
     check same x y = if same x y then Just () else Nothing
+    sameConstructor a b = isJust (zipMatch2 a b)
+
+-- | One-step η: each position of an introduction form with an η law against
+-- the other value observed at that position; 'False' for any other value.
+convEta ::
+  (Eval binder sig, Bitraversable sig, ZipMatchK sig, Foil.Distinct n, Foil.UnifiablePattern binder) =>
+  Foil.Scope n ->
+  Value binder sig n ->
+  Value binder sig n ->
+  Bool
+{-# INLINABLE convEta #-}
+convEta scope intro other = case intro of
+  VNode node
+    | Just observers <- etaMatch node ->
+        allPositions (absurd . fst) observedTerm (observed node observers)
+  VSuspended env node
+    | Just observers <- etaMatch node ->
+        allPositions (convObserved scope env other) observedTerm (observed node observers)
+  _ -> False
+  where
+    observedTerm (v, EtaTerm observe) = conv scope v (observe scope other)
+    allPositions scoped term = getAll . bifoldMap (All . scoped) (All . term)
+
+-- | The positions of an introduction form, each paired with its observer.
+-- An 'etaMatch' that answers with a node of another constructor is a bug in
+-- the language, not a property of the terms.
+observed :: (Bitraversable sig, ZipMatchK sig) => sig a b -> sig s t -> sig (a, s) (b, t)
+observed node observers =
+  fromMaybe
+    (error "FreeFoil.NbE.Conversion: etaMatch answered with a node of another constructor")
+    (zipMatch2 node observers)
+
+-- | A scoped position of an introduction form against the other value
+-- observed under the position's refreshed binder.
+convObserved ::
+  (Eval binder sig, Bitraversable sig, ZipMatchK sig, Foil.Distinct n, Foil.Distinct i, Foil.UnifiablePattern binder) =>
+  Foil.Scope n ->
+  Foil.Substitution (Value binder sig) i n ->
+  Value binder sig n ->
+  (ScopedAST binder sig i, EtaScoped binder sig n) ->
+  Bool
+{-# INLINABLE convObserved #-}
+convObserved scope env other (ScopedAST binder body, EtaScoped observe) =
+  Foil.withRefreshedPattern scope binder $ \extendEnv binder' scope' ->
+    case Foil.assertDistinct binder of
+      Foil.Distinct ->
+        conv scope'
+          (eval scope' (extendEnv env) body)
+          (observe scope' binder' (Foil.sink other))
 
 -- | Compare two scoped subterms under their environments. Their binders must
 -- have the same shape; they come from different scopes, so free-foil's
