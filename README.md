@@ -53,7 +53,7 @@ BNFC-generated parsers are committed, so nothing else is needed.
 
 ```sh
 cabal build all
-cabal test            # 220 tests; --test-show-details=direct lists them
+cabal test            # 221 tests; --test-show-details=direct lists them
 cabal bench nbe-bench
 ```
 
