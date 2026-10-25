@@ -38,10 +38,9 @@ module FreeFoil.NbE.Conversion
 import qualified Control.Monad.Foil          as Foil
 import qualified Control.Monad.Foil.Internal as Foil (unsafeUnifiablePatterns)
 import           Control.Monad.Free.Foil     (AST, ScopedAST (..))
-import           Data.Bifoldable             (bifoldMap)
+import           Data.Bifoldable             (biall)
 import           Data.Bitraversable          (Bitraversable)
 import           Data.Maybe                  (fromMaybe, isJust)
-import           Data.Monoid                 (All (..))
 import           Data.Void                   (absurd)
 import           Data.ZipMatchK              (ZipMatchK, zipMatch2, zipMatchWith2)
 
@@ -85,14 +84,13 @@ convEta ::
 convEta scope intro other = case intro of
   VNode node
     | Just observers <- etaMatch node ->
-        allPositions (absurd . fst) observedTerm (observed node observers)
+        biall (absurd . fst) observedTerm (observed node observers)
   VSuspended env node
     | Just observers <- etaMatch node ->
-        allPositions (convObserved scope env other) observedTerm (observed node observers)
+        biall (convObserved scope env other) observedTerm (observed node observers)
   _ -> False
   where
     observedTerm (v, EtaTerm observe) = conv scope v (observe scope other)
-    allPositions scoped term = getAll . bifoldMap (All . scoped) (All . term)
 
 -- | The positions of an introduction form, each paired with its observer.
 -- An 'etaMatch' that answers with a node of another constructor is a bug in
