@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 -- | Tests of lambda-pi: the generic 'nf' and 'whnf', the monomorphic
@@ -19,9 +20,11 @@ import Control.Monad.Free.Foil
 import FreeFoil.NbE.Conversion (convertible)
 import LambdaPi
 import LambdaPi.Examples
+import LambdaPi.Generated (fromTerm)
 import LambdaPi.Parser (parseLambdaPi, resolve, withFreeVars)
 import LambdaPi.PrettyPrint (ppValue, ppValueStruct)
 import qualified LambdaPi.Monomorphic as Mono
+import qualified LambdaPi.Syntax.Abs as Abs
 import Test.Agree (agreesWithin)
 import Test.LambdaPi.Gen (Closed (..), OpenTerm (..), freeVars)
 
@@ -208,7 +211,8 @@ conversionTests =
         ]
     , testGroup "properties"
         [ testProperty "a term is convertible with its normal form" propConvNf
-        , testProperty "α-equal normal forms are convertible" propConvPairs
+        , testProperty "a term is convertible with its βη-normal form" propConvEtaNf
+        , testProperty "agrees with α-equivalence of βη-normal forms" propConvPairs
         ]
     ]
   where
@@ -230,11 +234,45 @@ propConvNf (Closed t) =
   where
     normal = nfSubst emptyScope t
 
--- | α-equal reference normal forms are convertible. The converse fails
--- with η: @\\x. f x@ and @f@ are convertible and their normal forms differ.
+-- | A term is convertible with its βη-normal form, whenever that exists
+-- within the budget.
+propConvEtaNf :: Closed -> Property
+propConvEtaNf (Closed t) =
+  ioProperty $
+    agreesWithin "convertible" (==)
+      (normal `deepseq` True) (convertible emptyScope t normal)
+  where
+    normal = betaEtaNormal t
+
+-- | Conversion agrees with comparing βη-normal forms up to α. Most random
+-- pairs differ, so this mainly checks the negative answers.
 propConvPairs :: Closed -> Closed -> Property
 propConvPairs (Closed t) (Closed u) =
   ioProperty $
-    agreesWithin "convertible" (\same conv -> conv || not same)
-      (alphaEquiv emptyScope (nfSubst emptyScope t) (nfSubst emptyScope u))
+    agreesWithin "convertible" (==)
+      (alphaEquiv emptyScope (betaEtaNormal t) (betaEtaNormal u))
       (convertible emptyScope t u)
+
+-- | The βη-normal form of a closed term: its reference normal form with every
+-- η-redex contracted. Contraction keeps a β-normal term β-normal, and βη is
+-- confluent, so two terms are βη-equal exactly when these are α-equal.
+betaEtaNormal :: LambdaPi VoidS -> LambdaPi VoidS
+betaEtaNormal = resolve emptyScope Map.empty . etaContract . fromTerm . nfSubst emptyScope
+
+-- | Contract @λx. f x@ to @f@ when @x@ is not free in @f@, innermost first.
+etaContract :: Abs.Term -> Abs.Term
+etaContract = \case
+  Abs.Lam (Abs.PatternVar x) (Abs.AScopedTerm body) ->
+    case etaContract body of
+      Abs.App f (Abs.Var y) | x == y, x `notElem` freeIn f -> f
+      body' -> Abs.Lam (Abs.PatternVar x) (Abs.AScopedTerm body')
+  Abs.Pi (Abs.PatternVar x) a (Abs.AScopedTerm b) ->
+    Abs.Pi (Abs.PatternVar x) (etaContract a) (Abs.AScopedTerm (etaContract b))
+  Abs.App f a -> Abs.App (etaContract f) (etaContract a)
+  t -> t
+  where
+    freeIn = \case
+      Abs.Var y -> [y]
+      Abs.App f a -> freeIn f ++ freeIn a
+      Abs.Lam (Abs.PatternVar y) (Abs.AScopedTerm b) -> filter (/= y) (freeIn b)
+      Abs.Pi (Abs.PatternVar y) a (Abs.AScopedTerm b) -> freeIn a ++ filter (/= y) (freeIn b)
