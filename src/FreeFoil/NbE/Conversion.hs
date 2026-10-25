@@ -40,9 +40,8 @@ import qualified Control.Monad.Foil.Internal as Foil (unsafeUnifiablePatterns)
 import           Control.Monad.Free.Foil     (AST, ScopedAST (..))
 import           Data.Bifoldable             (biall, biand)
 import           Data.Bitraversable          (Bitraversable)
-import           Data.Maybe                  (isJust)
 import           Data.Void                   (absurd)
-import           Data.ZipMatchK              (ZipMatchK, zipMatch2, zipMatchWith2)
+import           Data.ZipMatchK              (ZipMatchK, zipMatchWith2)
 
 import           FreeFoil.NbE                (EtaScoped (..), EtaTerm (..), Eval (..), Value (..), eval)
 
@@ -59,18 +58,17 @@ conv ::
 conv scope l r = case (l, r) of
   (VVar x, VVar y) -> x == y
   (VNode a, VNode b)
-    | matches (zipMatchWith2 (\v _ -> absurd v) (check (conv scope)) a b) -> True
-    | sameConstructor a b -> False
+    | Just positions <- zipMatchWith2 (\v _ -> absurd v) (compared (conv scope)) a b ->
+        biall absurd id positions
   (VSuspended envL a, VSuspended envR b)
-    | matches (zipMatchWith2 (check (convScoped scope envL envR)) (check (conv scope)) a b) -> True
-    | sameConstructor a b -> False
-  -- A node goes to 'VNode' exactly when it has no scoped subterms, so a
-  -- 'VNode' and a 'VSuspended' never have the same constructor.
+    | Just positions <- zipMatchWith2 (compared (convScoped scope envL envR)) (compared (conv scope)) a b ->
+        biand positions
+  -- Nodes of different constructors are compared by η. A node goes to
+  -- 'VNode' exactly when it has no scoped subterms, so a 'VNode' and a
+  -- 'VSuspended' never have the same constructor.
   _ -> convEta scope l r || convEta scope r l
   where
-    matches = isJust
-    check same x y = if same x y then Just () else Nothing
-    sameConstructor a b = isJust (zipMatch2 a b)
+    compared same x y = Just (same x y)
 
 -- | One-step η: each position of an introduction form with an η law against
 -- the other value observed at that position; 'False' for any other value.
