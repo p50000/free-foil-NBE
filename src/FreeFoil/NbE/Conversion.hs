@@ -9,7 +9,7 @@
 -- untyped η for surjective pairs of Abel and Coquand, "Untyped algorithmic
 -- equality for Martin-Löf's logical framework with surjective pairs" (2007).
 --
--- The check walks both values together and matches nodes with 'zipMatchWithK'
+-- The check walks both values together and matches nodes with 'zipMatchFoldK'
 -- from free-foil, as free-foil's 'Control.Monad.Free.Foil.alphaEquiv' does
 -- for terms. Under a binder it evaluates both bodies with the same fresh
 -- names, but only when the comparison gets there, and it stops at the first
@@ -42,7 +42,8 @@ import qualified Control.Monad.Foil.Internal as Foil (unsafeUnifiablePatterns)
 import           Control.Monad.Free.Foil     (AST, ScopedAST (..))
 import           Data.Bifoldable             (biall, biand)
 import           Data.Void                   (absurd)
-import           Data.ZipMatchK              (Mappings (..), ZipMatchK (..))
+import           Data.Monoid                 (All (..))
+import           Data.ZipMatchK              (Folds (..), ZipMatchFoldK (..))
 
 import           FreeFoil.NbE                (EtaScoped (..), EtaTerm (..), Eval (..), Value (..), eval)
 
@@ -50,7 +51,7 @@ import           FreeFoil.NbE                (EtaScoped (..), EtaTerm (..), Eval
 -- of bound variables and η. Nodes match when they have the same constructor,
 -- and then their subterms are compared left to right.
 conv ::
-  (Eval binder sig, ZipMatchK sig, Foil.Distinct n, Foil.UnifiablePattern binder) =>
+  (Eval binder sig, ZipMatchFoldK sig, Foil.Distinct n, Foil.UnifiablePattern binder) =>
   Foil.Scope n ->
   Value binder sig n ->
   Value binder sig n ->
@@ -59,23 +60,23 @@ conv ::
 conv scope l r = case (l, r) of
   (VVar x, VVar y) -> x == y
   (VNode a, VNode b)
-    | Just positions <- zipMatchWithK (paired :^: paired :^: M0) a b ->
-        biall (absurd . fst) (uncurry (conv scope)) positions
+    | Just same <- zipMatchFoldK ((\v _ -> absurd v) :%: compared (conv scope) :%: F0) a b ->
+        getAll same
   (VSuspended envL a, VSuspended envR b)
-    | Just positions <- zipMatchWithK (paired :^: paired :^: M0) a b ->
-        biall (uncurry (convScoped scope envL envR)) (uncurry (conv scope)) positions
+    | Just same <- zipMatchFoldK (compared (convScoped scope envL envR) :%: compared (conv scope) :%: F0) a b ->
+        getAll same
   -- Nodes of different constructors are compared by η. A node goes to
   -- 'VNode' exactly when it has no scoped subterms, so a 'VNode' and a
   -- 'VSuspended' never have the same constructor.
   _ -> convEta scope l r || convEta scope r l
   where
-    paired x y = Just (x, y)
+    compared same x y = All (same x y)
 
 -- | One step of η: each position of an introduction form with an η law
 -- against the other value observed at that position. 'False' for any other
 -- value.
 convEta ::
-  (Eval binder sig, ZipMatchK sig, Foil.Distinct n, Foil.UnifiablePattern binder) =>
+  (Eval binder sig, ZipMatchFoldK sig, Foil.Distinct n, Foil.UnifiablePattern binder) =>
   Foil.Scope n ->
   Value binder sig n ->
   Value binder sig n ->
@@ -93,7 +94,7 @@ convEta scope intro other = case intro of
 -- | A scoped position of an introduction form against the other value
 -- observed under the position's refreshed binder.
 convObserved ::
-  (Eval binder sig, ZipMatchK sig, Foil.Distinct n, Foil.Distinct i, Foil.UnifiablePattern binder) =>
+  (Eval binder sig, ZipMatchFoldK sig, Foil.Distinct n, Foil.Distinct i, Foil.UnifiablePattern binder) =>
   Foil.Scope n ->
   Foil.Substitution (Value binder sig) i n ->
   Value binder sig n ->
@@ -116,7 +117,7 @@ convObserved scope env other (ScopedAST binder body) (EtaScoped observe) =
 -- right one by position in the pattern), and the bodies are compared with
 -- 'convertibleUnder'.
 convScoped ::
-  (Eval binder sig, ZipMatchK sig, Foil.Distinct n, Foil.Distinct i1, Foil.Distinct i2, Foil.UnifiablePattern binder) =>
+  (Eval binder sig, ZipMatchFoldK sig, Foil.Distinct n, Foil.Distinct i1, Foil.Distinct i2, Foil.UnifiablePattern binder) =>
   Foil.Scope n ->
   Foil.Substitution (Value binder sig) i1 n ->
   Foil.Substitution (Value binder sig) i2 n ->
@@ -137,7 +138,7 @@ convScoped scope envL envR (ScopedAST binderL bodyL) (ScopedAST binderR bodyR)
 -- | Two terms are convertible under their environments: evaluate each under
 -- its own environment, then compare with 'conv'.
 convertibleUnder ::
-  (Eval binder sig, ZipMatchK sig, Foil.Distinct n, Foil.Distinct i1, Foil.Distinct i2, Foil.UnifiablePattern binder) =>
+  (Eval binder sig, ZipMatchFoldK sig, Foil.Distinct n, Foil.Distinct i1, Foil.Distinct i2, Foil.UnifiablePattern binder) =>
   Foil.Scope n ->
   Foil.Substitution (Value binder sig) i1 n ->
   Foil.Substitution (Value binder sig) i2 n ->
@@ -150,7 +151,7 @@ convertibleUnder scope envL envR t u =
 
 -- | Two terms are convertible: evaluate both, then compare with 'conv'.
 convertible ::
-  (Eval binder sig, ZipMatchK sig, Foil.Distinct n, Foil.UnifiablePattern binder) =>
+  (Eval binder sig, ZipMatchFoldK sig, Foil.Distinct n, Foil.UnifiablePattern binder) =>
   Foil.Scope n ->
   AST binder sig n ->
   AST binder sig n ->
