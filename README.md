@@ -32,9 +32,9 @@ is documented in the haddocks of `FreeFoil.NbE`.
   have value formers that its syntax lacks, as extensional booleans and sums
   need.
 - Conversion checking (`FreeFoil.NbE.Conversion`) compares values without
-  reading them back and decides one-step η for the introduction forms a
-  language marks with `etaMatchWith`, lambdas and pairs in the demos;
-  readback does not.
+  reading them back and decides η for the introduction forms a language
+  marks with `etaMatchWith`, lambdas and pairs in the demos. Readback does
+  not.
 - Top-level definitions (`FreeFoil.NbE.Definitions`) are non-recursive and
   always unfolded: no readback keeps the defined names.
 - The core works with any free-foil pattern. The demo languages bind one

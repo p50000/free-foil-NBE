@@ -16,8 +16,8 @@
 -- The normaliser is untyped and intensional: it decides β and the language's
 -- own reductions, not η, and it keeps one signature for terms and values, so
 -- neutral and normal values are not told apart by type (see 'Value').
--- Conversion checking adds one-step η for the introduction forms a language
--- describes with 'etaMatchWith'.
+-- Conversion checking adds η for the introduction forms a language describes
+-- with 'etaMatchWith'.
 --
 -- A language's signature must be a 'Bifunctor' and a 'Bifoldable', both
 -- derivable, and representational in both parameters (see 'evalNode'). Its

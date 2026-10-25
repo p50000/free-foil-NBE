@@ -17,12 +17,14 @@
 -- normal form, and on convertible terms it does the work of normalisation
 -- minus readback.
 --
--- Two values of different shapes are compared by one-step η when either is
--- an introduction form with an η law ('FreeFoil.NbE.etaMatchWith'): each
+-- Two values of different shapes are compared by η when either is an
+-- introduction form with an η law ('FreeFoil.NbE.etaMatchWith'): each
 -- position of that form against the other value observed at that position.
 -- So @λx. f x@ against @f@ compares, under a fresh @x'@, the body @f x'@
 -- with @f@ applied to @x'@, and @(fst p, snd p)@ against @p@ compares the
--- components with the projections of @p@.
+-- components with the projections of @p@. Each step expands one layer, and
+-- the positions are compared by the same check, so η applies again inside
+-- them: @λx. λy. f x y@ against @f@ takes two steps.
 --
 -- Like the normaliser, the check is untyped and intensional: it decides β,
 -- the language's own reductions, and η for the forms the language marks,
@@ -70,8 +72,9 @@ conv scope l r = case (l, r) of
   where
     compared same x y = Just (same x y)
 
--- | One-step η: each position of an introduction form with an η law against
--- the other value observed at that position; 'False' for any other value.
+-- | One step of η: each position of an introduction form with an η law
+-- against the other value observed at that position. 'False' for any other
+-- value.
 convEta ::
   (Eval binder sig, Bitraversable sig, ZipMatchK sig, Foil.Distinct n, Foil.UnifiablePattern binder) =>
   Foil.Scope n ->
