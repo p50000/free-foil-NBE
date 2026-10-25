@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 -- | Tests of lambda-pi: the generic 'nf' and 'whnf', the monomorphic
@@ -19,9 +20,11 @@ import Control.Monad.Free.Foil
 import FreeFoil.NbE.Conversion (convertible)
 import LambdaPi
 import LambdaPi.Examples
+import LambdaPi.Generated (fromTerm)
 import LambdaPi.Parser (parseLambdaPi, resolve, withFreeVars)
 import LambdaPi.PrettyPrint (ppValue, ppValueStruct)
 import qualified LambdaPi.Monomorphic as Mono
+import qualified LambdaPi.Syntax.Abs as Abs
 import Test.Agree (agreesWithin)
 import Test.LambdaPi.Gen (Closed (..), OpenTerm (..), freeVars)
 
@@ -187,14 +190,29 @@ conversionTests =
             "\\x. \\y. x" "\\x. \\y. y"
         , convertibleAs False "a lambda and a Pi type"
             "\\x. x" "(x : \\a. a) -> x"
-        , convertibleAs False "a term without a normal form is told apart"
-            "\\x. x" ("\\x. \\y. " ++ omega)
+        , convertibleAs False "a term without a normal form is told apart when no η applies"
+            "\\x. x" ("\\x. (y : x) -> " ++ omega)
         , convertibleAs False "the first mismatch decides"
             ("\\x. \\y. x (" ++ omega ++ ")") ("\\x. \\y. y (" ++ omega ++ ")")
         ]
+    , testGroup "η for functions"
+        [ convertibleAs True "a lambda against the function it applies"
+            "\\f. \\x. f x" "\\f. f"
+        , convertibleAs True "two steps"
+            "\\f. \\x. \\y. f x y" "\\f. f"
+        , convertibleAs True "on the right"
+            "\\x. x" "\\x. \\y. x y"
+        , convertibleAs True "under a redex"
+            "\\f. (\\g. \\x. g x) f" "\\f. f"
+        , convertibleAs False "an argument used twice is not η"
+            "\\f. \\x. f x x" "\\f. f"
+        , convertibleAs False "a lambda against a Pi type"
+            "\\f. \\x. f x" "\\f. (x : f) -> f x"
+        ]
     , testGroup "properties"
         [ testProperty "a term is convertible with its normal form" propConvNf
-        , testProperty "agrees with α-equivalence of normal forms" propConvPairs
+        , testProperty "a term is convertible with its βη-normal form" propConvEtaNf
+        , testProperty "agrees with α-equivalence of βη-normal forms" propConvPairs
         ]
     ]
   where
@@ -216,11 +234,45 @@ propConvNf (Closed t) =
   where
     normal = nfSubst emptyScope t
 
--- | Conversion agrees with comparing reference normal forms up to α. Most
--- random pairs differ, so this mainly checks the negative answers.
+-- | A term is convertible with its βη-normal form, whenever that exists
+-- within the budget.
+propConvEtaNf :: Closed -> Property
+propConvEtaNf (Closed t) =
+  ioProperty $
+    agreesWithin "convertible" (==)
+      (normal `deepseq` True) (convertible emptyScope t normal)
+  where
+    normal = betaEtaNormal t
+
+-- | Conversion agrees with comparing βη-normal forms up to α. Most random
+-- pairs differ, so this mainly checks the negative answers.
 propConvPairs :: Closed -> Closed -> Property
 propConvPairs (Closed t) (Closed u) =
   ioProperty $
     agreesWithin "convertible" (==)
-      (alphaEquiv emptyScope (nfSubst emptyScope t) (nfSubst emptyScope u))
+      (alphaEquiv emptyScope (betaEtaNormal t) (betaEtaNormal u))
       (convertible emptyScope t u)
+
+-- | The βη-normal form of a closed term: its reference normal form with every
+-- η-redex contracted. Contraction keeps a β-normal term β-normal, and βη is
+-- confluent, so two terms are βη-equal exactly when these are α-equal.
+betaEtaNormal :: LambdaPi VoidS -> LambdaPi VoidS
+betaEtaNormal = resolve emptyScope Map.empty . etaContract . fromTerm . nfSubst emptyScope
+
+-- | Contract @λx. f x@ to @f@ when @x@ is not free in @f@, innermost first.
+etaContract :: Abs.Term -> Abs.Term
+etaContract = \case
+  Abs.Lam (Abs.PatternVar x) (Abs.AScopedTerm body) ->
+    case etaContract body of
+      Abs.App f (Abs.Var y) | x == y, x `notElem` freeIn f -> f
+      body' -> Abs.Lam (Abs.PatternVar x) (Abs.AScopedTerm body')
+  Abs.Pi (Abs.PatternVar x) a (Abs.AScopedTerm b) ->
+    Abs.Pi (Abs.PatternVar x) (etaContract a) (Abs.AScopedTerm (etaContract b))
+  Abs.App f a -> Abs.App (etaContract f) (etaContract a)
+  t -> t
+  where
+    freeIn = \case
+      Abs.Var y -> [y]
+      Abs.App f a -> freeIn f ++ freeIn a
+      Abs.Lam (Abs.PatternVar y) (Abs.AScopedTerm b) -> filter (/= y) (freeIn b)
+      Abs.Pi (Abs.PatternVar y) a (Abs.AScopedTerm b) -> freeIn a ++ filter (/= y) (freeIn b)

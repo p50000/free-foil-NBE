@@ -18,7 +18,7 @@ module Test.Fragments
   ) where
 
 import           Control.DeepSeq           (NFData, rnf)
-import           Control.Exception         (evaluate)
+import           Control.Exception         (ErrorCall (..), evaluate, try)
 import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
 import           System.Timeout            (timeout)
@@ -67,7 +67,19 @@ tests = testGroup "fragments"
   , testGroup "mixed terms"
       [ testProperty "nf is idempotent" propIdempotent
       , testProperty "a term is convertible with its normal form" propConvertibleNf
-      , testProperty "conversion agrees with alpha-equivalence of normal forms" propConversion
+      , testProperty "alpha-equal normal forms are convertible" propConversion
+      ]
+  , testGroup "η across fragments"
+      [ etaCase True  "a lambda against the function it applies" "\\f. \\x. f x" "\\f. f"
+      , etaCase True  "a pair of projections against the variable" "\\p. (fst p, snd p)" "\\p. p"
+      , etaCase True  "both laws, one inside the other" "\\f. \\x. (fst (f x), snd (f x))" "\\f. f"
+      , etaCase False "the same projection twice" "\\p. (fst p, fst p)" "\\p. p"
+      , etaCase False "no η for naturals" "\\n. natrec n { zero -> zero ; suc (k, r) -> suc r }" "\\n. n"
+      , testCase "a lambda that binds two names fails, as β does" $ do
+          result <- try (evaluate (convertible emptyScope "\\f. \\(x, y). f x y" ("\\f. f" :: Combined VoidS)))
+          case result of
+            Left (ErrorCall _) -> pure ()
+            Right answer       -> assertFailure ("answered " ++ show answer)
       ]
   , testGroup "binders of different shapes"
       [ testCase "are not convertible" $ do
@@ -230,12 +242,17 @@ propConvertibleNf (Mixed raw) = withFree $ \scope env ->
   let t = resolve scope env raw
   in ioProperty $ budgeted (nf scope t) $ \v -> convertible scope t v
 
+-- | α-equal normal forms are convertible. The converse fails with η.
 propConversion :: Mixed -> Mixed -> Property
 propConversion (Mixed raw1) (Mixed raw2) = withFree $ \scope env ->
   let t1 = resolve scope env raw1
       t2 = resolve scope env raw2
   in ioProperty $ budgeted (nf scope t1, nf scope t2) $ \(v1, v2) ->
-       convertible scope t1 t2 == alphaEquiv scope v1 v2
+       convertible scope t1 t2 || not (alphaEquiv scope v1 v2)
+
+-- | Two closed terms of the composed language are, or are not, convertible.
+etaCase :: Bool -> TestName -> Combined VoidS -> Combined VoidS -> TestTree
+etaCase expected name t u = testCase name (convertible emptyScope t u @?= expected)
 
 -- * Binders of different shapes
 

@@ -16,6 +16,8 @@
 -- The normaliser is untyped and intensional: it decides β and the language's
 -- own reductions, not η, and it keeps one signature for terms and values, so
 -- neutral and normal values are not told apart by type (see 'Value').
+-- Conversion checking adds η for the introduction forms a language describes
+-- with 'etaMatchWith'.
 --
 -- A language's signature must be a 'Bifunctor' and a 'Bifoldable', both
 -- derivable, and representational in both parameters (see 'evalNode'). Its
@@ -45,6 +47,9 @@ module FreeFoil.NbE
   , Eval (..)
   , eval
   , evalNode
+    -- * η
+  , EtaTerm (..)
+  , EtaScoped (..)
     -- * Readback
   , quote
   , quoteScoped
@@ -106,6 +111,25 @@ instance Bifunctor sig => Foil.Sinkable (Value binder sig) where
   sinkabilityProof rename (VSuspended env node) =
     VSuspended (Foil.sinkabilityProof rename env) (bimap id (Foil.sinkabilityProof rename) node)
 
+-- * η
+
+-- | The observer of a term position of an introduction form: the eliminator
+-- of that position, from the scope and any value to the component. The two
+-- observers of a pair are @fst@ and @snd@.
+newtype EtaTerm binder sig n =
+  EtaTerm (Foil.Scope n -> Value binder sig n -> Value binder sig n)
+
+-- | The observer of a scoped position of an introduction form: from the
+-- scope under the position's refreshed binder, that binder, and the other
+-- value sunk into that scope, the eliminator applied to the names the binder
+-- binds. The observer of a lambda's body applies the other value to the
+-- bound name. The outer scope is distinct so that an observer may list the
+-- binder's names.
+newtype EtaScoped binder sig n =
+  EtaScoped
+    (forall l. (Foil.Distinct n, Foil.DExt n l) =>
+      Foil.Scope l -> binder n l -> Value binder sig l -> Value binder sig l)
+
 -- * Evaluation
 
 -- | A language becomes an NbE instance by giving its elimination rules:
@@ -124,6 +148,28 @@ class (Bifunctor sig, Bifoldable sig) => Eval binder sig where
     sig (ScopedAST binder sig i) (AST binder sig i) ->
     Value binder sig o
   evalSig = evalNode
+
+  -- | The η law of an introduction form, for conversion checking, in the
+  -- style of 'Data.ZipMatchK.zipMatchWith2':
+  --
+  -- > etaMatchWith _ term = \case
+  -- >   PairSig a b -> Just (PairSig (term a (EtaTerm (const fstValue))) (term b (EtaTerm (const sndValue))))
+  -- >   _ -> Nothing
+  --
+  -- A constructor with an η law combines each of its positions with the
+  -- position's observer, a t'EtaScoped' or a t'EtaTerm'. Any other
+  -- constructor answers 'Nothing', the default. Whether the answer is a
+  -- 'Just' depends only on the node, not on its subterms. A lambda observes
+  -- its body by applying the other value to the bound name (Coquand 1996),
+  -- a pair observes its components by the projections (Abel and Coquand
+  -- 2007).
+  etaMatchWith ::
+    (a -> EtaScoped binder sig n -> c) ->
+    (b -> EtaTerm binder sig n -> d) ->
+    sig a b ->
+    Maybe (sig c d)
+  {-# INLINE etaMatchWith #-}
+  etaMatchWith _ _ _ = Nothing
 
 -- | Evaluate a term under an environment: look variables up, hand nodes to
 -- 'evalSig'. A variable that the environment does not map is a neutral.
@@ -216,6 +262,20 @@ quoteScoped scope env (ScopedAST binder body) =
       Foil.Distinct -> ScopedAST binder' (quote scope' (eval scope' (extendEnv env) body))
 
 -- | Normal form: evaluate, then read back fully.
+--
+-- > nf (λf. (λg. λx. g x) f)  =  λf. λx. f x
+--
+-- The normal form is β-normal but not η-short. For example, @nf@ does not
+-- contract @λx. f x@ to @f@, although 'FreeFoil.NbE.Conversion.conv'
+-- identifies the two. Contraction can change the type of a term. In Rocq
+-- the type of @f@ need not be convertible to the type of @λx. f x@, which is
+-- why Rocq defines η-expansion but no η-reduction
+-- (<https://rocq-prover.org/doc/master/refman/language/core/conversion.html#expansion Rocq reference manual, η-expansion>).
+-- In Rzk an η-expanded witness of an extension type type-checks where the
+-- contracted one does not (Kudasov, Sim and Ahrens,
+-- /Rzk: a Proof Assistant for Synthetic ∞-Categories/, 2026, Remark 4.5,
+-- <https://arxiv.org/abs/2607.12207>). So readback keeps the η-shape of the
+-- term.
 nf ::
   (Eval binder sig, Foil.Distinct n, Foil.CoSinkable binder) =>
   Foil.Scope n ->

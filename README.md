@@ -32,7 +32,9 @@ is documented in the haddocks of `FreeFoil.NbE`.
   have value formers that its syntax lacks, as extensional booleans and sums
   need.
 - Conversion checking (`FreeFoil.NbE.Conversion`) compares values without
-  reading them back, but like readback it does not decide η.
+  reading them back and decides η for the introduction forms a language
+  marks with `etaMatchWith`, lambdas and pairs in the demos. Readback does
+  not.
 - Top-level definitions (`FreeFoil.NbE.Definitions`) are non-recursive and
   always unfolded: no readback keeps the defined names.
 - The core works with any free-foil pattern. The demo languages bind one
@@ -51,7 +53,7 @@ BNFC-generated parsers are committed, so nothing else is needed.
 
 ```sh
 cabal build all
-cabal test            # 204 tests; --test-show-details=direct lists them
+cabal test            # 222 tests; --test-show-details=direct lists them
 cabal bench nbe-bench
 ```
 

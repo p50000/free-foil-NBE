@@ -12,8 +12,9 @@
 -- @split@, whose pattern binds both components at once. There are no
 -- functions and no constants, so every term is open. The syntax is generated
 -- in "Pairs.Generated"; this module adds pattern synonyms over it, the 'Eval'
--- instance, and a substitution-based reference normaliser. Example terms are
--- in "Pairs.Examples".
+-- instance with the η law of pairs for conversion checking, and a
+-- substitution-based reference normaliser. Example terms are in
+-- "Pairs.Examples".
 --
 -- New against the other languages is a pattern that binds two names:
 -- readback refreshes both at once, and conversion checking pairs them by
@@ -92,14 +93,8 @@ type Value = NbE.Value FFPattern TermSig
 -- lazy values.
 instance Eval FFPattern TermSig where
   evalSig scope env = \case
-    FstSig p ->
-      case eval scope env p of
-        NbE.VNode (PairSig a _) -> a
-        p'                     -> NbE.VNode (FstSig p')
-    SndSig p ->
-      case eval scope env p of
-        NbE.VNode (PairSig _ b) -> b
-        p'                     -> NbE.VNode (SndSig p')
+    FstSig p -> fstValue (eval scope env p)
+    SndSig p -> sndValue (eval scope env p)
     SplitSig p (ScopedAST (FFPatternPair x y) body) ->
       case eval scope env p of
         NbE.VNode (PairSig a b) ->
@@ -107,6 +102,22 @@ instance Eval FFPattern TermSig where
             Distinct -> eval scope (addSubst (addSubst env x a) y b) body
         p' -> NbE.VSuspended env (SplitSig p' (ScopedAST (FFPatternPair x y) body))
     node -> NbE.evalNode scope env node
+
+  etaMatchWith _ term = \case
+    PairSig a b -> Just (PairSig (term a (NbE.EtaTerm (const fstValue))) (term b (NbE.EtaTerm (const sndValue))))
+    _ -> Nothing
+
+-- | The first component of a pair value; stuck on anything else.
+fstValue :: Value n -> Value n
+fstValue p = case p of
+  NbE.VNode (PairSig a _) -> a
+  _                       -> NbE.VNode (FstSig p)
+
+-- | The second component of a pair value; stuck on anything else.
+sndValue :: Value n -> Value n
+sndValue p = case p of
+  NbE.VNode (PairSig _ b) -> b
+  _                       -> NbE.VNode (SndSig p)
 
 -- | Weak-head normal form by substitution, the reference for the tests.
 whnfSubst :: Distinct n => Scope n -> Pairs n -> Pairs n

@@ -19,7 +19,7 @@ import Control.Monad.Free.Foil (alphaEquiv)
 import FreeFoil.NbE.Conversion (convertible)
 import Pairs (Pairs, nf, nfSubst, whnf)
 import Pairs.Examples
-import Pairs.Parser (resolve, withFreeVars)
+import Pairs.Parser (parseOpen, resolve, withFreeVars)
 import Pairs.Syntax.Abs (Pattern (..), ScopedTerm (..), Term (..), VarIdent (..))
 
 tests :: TestTree
@@ -40,15 +40,31 @@ tests =
             testCase "leaves a redex under the two names of a stuck split" $
               alphaEq scope (whnf scope term) term
         ]
+    , testGroup "η for pairs"
+        [ etaCase True  "a pair of the projections of a variable" "(fst p, snd p)" "p"
+        , etaCase True  "nested" "(fst (fst p), snd (fst p))" "fst p"
+        , etaCase True  "on the right, under a redex" "p" "(fst (fst (p, p)), snd p)"
+        , etaCase False "the same projection twice" "(fst p, fst p)" "p"
+        , etaCase False "split is not η" "split p as (x, y) in (x, y)" "p"
+        ]
     , testGroup "properties"
         [ testProperty "nf agrees with nfSubst" propAgrees
         , testProperty "a term is convertible with its normal form" propConvNf
-        , testProperty "conversion agrees with α-equivalence of normal forms" propConvPairs
+        , testProperty "α-equal normal forms are convertible" propConvPairs
         ]
     ]
 
 alphaEq :: Distinct n => Scope n -> Pairs n -> Pairs n -> Assertion
 alphaEq scope a b = alphaEquiv scope a b @?= True
+
+-- | Two terms over the free variable @p@ are, or are not, convertible.
+etaCase :: Bool -> TestName -> String -> String -> TestTree
+etaCase expected name t u =
+  testCase name $
+    withFreeVars emptyScope Map.empty ["p"] $ \scope env ->
+      case (,) <$> parseOpen scope env t <*> parseOpen scope env u of
+        Left err     -> assertFailure ("parse failed: " ++ err)
+        Right (a, b) -> convertible scope a b @?= expected
 
 -- Properties on random open terms
 
@@ -62,7 +78,8 @@ propConvNf (OpenTerm raw) =
   withOpen raw $ \scope t ->
     property (convertible scope t (nfSubst scope t))
 
--- | Most random pairs differ, so this mainly checks the negative answers.
+-- | α-equal normal forms are convertible. The converse fails with η:
+-- @(fst p, snd p)@ and @p@ are convertible and their normal forms differ.
 propConvPairs :: OpenTerm -> OpenTerm -> Property
 propConvPairs (OpenTerm rawT) (OpenTerm rawU) =
   withFreeVars emptyScope Map.empty freeVars $ \scope env ->
@@ -70,7 +87,7 @@ propConvPairs (OpenTerm rawT) (OpenTerm rawU) =
         u = resolve scope env rawU
     in property $
          convertible scope t u
-           == alphaEquiv scope (nfSubst scope t) (nfSubst scope u)
+           || not (alphaEquiv scope (nfSubst scope t) (nfSubst scope u))
 
 -- | Resolve a raw term over 'freeVars' and continue in its scope.
 withOpen :: Term -> (forall n. Distinct n => Scope n -> Pairs n -> r) -> r
