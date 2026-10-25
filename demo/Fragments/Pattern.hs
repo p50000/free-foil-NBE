@@ -27,10 +27,6 @@ data Pat (n :: S) (l :: S) where
 
 deriveGenericK ''Pat
 
--- In the form that free-foil's @mkFreeFoil@ generates for a binding type.
--- The generic defaults go through the kind-generic representation of the
--- pattern at every binder, which conversion checking and evaluation do at
--- every lambda and every @split@.
 deriveCoSinkable ''Pat
 
 instance SinkableK Pat
