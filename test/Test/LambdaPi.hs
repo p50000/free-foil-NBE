@@ -213,14 +213,19 @@ conversionTests =
         [ testProperty "a term is convertible with its normal form" propConvNf
         , testProperty "a term is convertible with its βη-normal form" propConvEtaNf
         , testProperty "agrees with α-equivalence of βη-normal forms" propConvPairs
+        , testProperty "agrees with the monomorphic conversion" propConvMono
         ]
     ]
   where
     omega = "(\\w. w w) (\\w. w w)"
 
+-- | Both the generic and the monomorphic conversion check give the expected
+-- answer.
 convertibleAs :: Bool -> TestName -> String -> String -> TestTree
 convertibleAs expected name t u =
-  testCase name (convertible emptyScope (parseClosed t) (parseClosed u) @?= expected)
+  testCase name $ do
+    convertible emptyScope (parseClosed t) (parseClosed u) @?= expected
+    Mono.convertible emptyScope (parseClosed t) (parseClosed u) @?= expected
   where
     parseClosed = either error id . parseLambdaPi
 
@@ -251,6 +256,14 @@ propConvPairs (Closed t) (Closed u) =
   ioProperty $
     agreesWithin "convertible" (==)
       (alphaEquiv emptyScope (betaEtaNormal t) (betaEtaNormal u))
+      (convertible emptyScope t u)
+
+-- | The generic and the monomorphic conversion check agree.
+propConvMono :: Closed -> Closed -> Property
+propConvMono (Closed t) (Closed u) =
+  ioProperty $
+    agreesWithin "convertible" (==)
+      (Mono.convertible emptyScope t u)
       (convertible emptyScope t u)
 
 -- | The βη-normal form of a closed term: its reference normal form with every
