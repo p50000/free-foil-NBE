@@ -159,9 +159,10 @@ class (Bifunctor sig, Bifoldable sig) => Eval binder sig where
   -- A constructor with an η law combines each of its positions with the
   -- position's observer, a t'EtaScoped' or a t'EtaTerm'. Any other
   -- constructor answers 'Nothing', the default. Whether the answer is a
-  -- 'Just' depends only on the constructor. A lambda observes its body by
-  -- applying the other value to the bound name (Coquand 1996), a pair
-  -- observes its components by the projections (Abel and Coquand 2007).
+  -- 'Just' depends only on the node, not on its subterms. A lambda observes
+  -- its body by applying the other value to the bound name (Coquand 1996),
+  -- a pair observes its components by the projections (Abel and Coquand
+  -- 2007).
   etaMatchWith ::
     (a -> EtaScoped binder sig n -> c) ->
     (b -> EtaTerm binder sig n -> d) ->
