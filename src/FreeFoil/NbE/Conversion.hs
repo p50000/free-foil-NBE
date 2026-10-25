@@ -18,7 +18,7 @@
 -- minus readback.
 --
 -- Two values of different shapes are compared by one-step η when either is
--- an introduction form with an η law ('FreeFoil.NbE.etaMatch'): each
+-- an introduction form with an η law ('FreeFoil.NbE.etaMatchWith'): each
 -- position of that form against the other value observed at that position.
 -- So @λx. f x@ against @f@ compares, under a fresh @x'@, the body @f x'@
 -- with @f@ applied to @x'@, and @(fst p, snd p)@ against @p@ compares the
@@ -38,9 +38,9 @@ module FreeFoil.NbE.Conversion
 import qualified Control.Monad.Foil          as Foil
 import qualified Control.Monad.Foil.Internal as Foil (unsafeUnifiablePatterns)
 import           Control.Monad.Free.Foil     (AST, ScopedAST (..))
-import           Data.Bifoldable             (biall)
+import           Data.Bifoldable             (biall, biand)
 import           Data.Bitraversable          (Bitraversable)
-import           Data.Maybe                  (fromMaybe, isJust)
+import           Data.Maybe                  (isJust)
 import           Data.Void                   (absurd)
 import           Data.ZipMatchK              (ZipMatchK, zipMatch2, zipMatchWith2)
 
@@ -82,24 +82,13 @@ convEta ::
   Bool
 {-# INLINABLE convEta #-}
 convEta scope intro other = case intro of
-  VNode node
-    | Just observers <- etaMatch node ->
-        biall (absurd . fst) observedTerm (observed node observers)
-  VSuspended env node
-    | Just observers <- etaMatch node ->
-        biall (convObserved scope env other) observedTerm (observed node observers)
-  _ -> False
+  VNode node ->
+    maybe False (biall absurd id) (etaMatchWith (\v _ -> absurd v) observedTerm node)
+  VSuspended env node ->
+    maybe False biand (etaMatchWith (convObserved scope env other) observedTerm node)
+  VVar _ -> False
   where
-    observedTerm (v, EtaTerm observe) = conv scope v (observe scope other)
-
--- | The positions of an introduction form, each paired with its observer.
--- An 'etaMatch' that answers with a node of another constructor is a bug in
--- the language, not a property of the terms.
-observed :: (Bitraversable sig, ZipMatchK sig) => sig a b -> sig s t -> sig (a, s) (b, t)
-observed node observers =
-  fromMaybe
-    (error "FreeFoil.NbE.Conversion: etaMatch answered with a node of another constructor")
-    (zipMatch2 node observers)
+    observedTerm v (EtaTerm observe) = conv scope v (observe scope other)
 
 -- | A scoped position of an introduction form against the other value
 -- observed under the position's refreshed binder.
@@ -108,10 +97,11 @@ convObserved ::
   Foil.Scope n ->
   Foil.Substitution (Value binder sig) i n ->
   Value binder sig n ->
-  (ScopedAST binder sig i, EtaScoped binder sig n) ->
+  ScopedAST binder sig i ->
+  EtaScoped binder sig n ->
   Bool
 {-# INLINABLE convObserved #-}
-convObserved scope env other (ScopedAST binder body, EtaScoped observe) =
+convObserved scope env other (ScopedAST binder body) (EtaScoped observe) =
   Foil.withRefreshedPattern scope binder $ \extendEnv binder' scope' ->
     case Foil.assertDistinct binder of
       Foil.Distinct ->

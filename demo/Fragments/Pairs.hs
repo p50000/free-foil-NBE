@@ -60,8 +60,8 @@ instance CoSinkable binder => EvalF binder PairF where
         p' -> VSuspended env (inj pos (SplitF p' (ScopedAST binder body)))
     node -> evalNode scope env (inj pos node)
 
-  etaMatchF pos = \case
-    PairF _ _ -> Just (PairF (EtaTerm (const (fstValue pos))) (EtaTerm (const (sndValue pos))))
+  etaMatchWithF pos _ term = \case
+    PairF a b -> Just (PairF (term a (EtaTerm (const (fstValue pos)))) (term b (EtaTerm (const (sndValue pos)))))
     _ -> Nothing
 
 -- | The first component of a pair value of the fragment; stuck on anything

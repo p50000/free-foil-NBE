@@ -17,7 +17,7 @@
 -- own reductions, not η, and it keeps one signature for terms and values, so
 -- neutral and normal values are not told apart by type (see 'Value').
 -- Conversion checking adds one-step η for the introduction forms a language
--- describes with 'etaMatch'.
+-- describes with 'etaMatchWith'.
 --
 -- A language's signature must be a 'Bifunctor' and a 'Bifoldable', both
 -- derivable, and representational in both parameters (see 'evalNode'). Its
@@ -149,15 +149,25 @@ class (Bifunctor sig, Bifoldable sig) => Eval binder sig where
     Value binder sig o
   evalSig = evalNode
 
-  -- | The η law of an introduction form, for conversion checking: the same
-  -- constructor with each position replaced by its observer, a t'EtaTerm' or
-  -- a t'EtaScoped'; 'Nothing', the default, for a constructor without an η
-  -- law. Only the constructor of the argument is inspected. A lambda answers
-  -- with its body observed by application to the bound name (Coquand 1996),
-  -- a pair with its components observed by the projections (Abel and
-  -- Coquand 2007).
-  etaMatch :: sig a b -> Maybe (sig (EtaScoped binder sig n) (EtaTerm binder sig n))
-  etaMatch _ = Nothing
+  -- | The η law of an introduction form, for conversion checking, in the
+  -- style of 'Data.ZipMatchK.zipMatchWith2':
+  --
+  -- > etaMatchWith _ term = \case
+  -- >   PairSig a b -> Just (PairSig (term a (EtaTerm (const fstValue))) (term b (EtaTerm (const sndValue))))
+  -- >   _ -> Nothing
+  --
+  -- A constructor with an η law combines each of its positions with the
+  -- position's observer, a t'EtaScoped' or a t'EtaTerm'. Any other
+  -- constructor answers 'Nothing', the default. Whether the answer is a
+  -- 'Just' depends only on the constructor. A lambda observes its body by
+  -- applying the other value to the bound name (Coquand 1996), a pair
+  -- observes its components by the projections (Abel and Coquand 2007).
+  etaMatchWith ::
+    (a -> EtaScoped binder sig n -> c) ->
+    (b -> EtaTerm binder sig n -> d) ->
+    sig a b ->
+    Maybe (sig c d)
+  etaMatchWith _ _ _ = Nothing
 
 -- | Evaluate a term under an environment: look variables up, hand nodes to
 -- 'evalSig'. A variable that the environment does not map is a neutral.

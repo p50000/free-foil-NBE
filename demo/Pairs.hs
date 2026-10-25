@@ -103,8 +103,8 @@ instance Eval FFPattern TermSig where
         p' -> NbE.VSuspended env (SplitSig p' (ScopedAST (FFPatternPair x y) body))
     node -> NbE.evalNode scope env node
 
-  etaMatch = \case
-    PairSig _ _ -> Just (PairSig (NbE.EtaTerm (const fstValue)) (NbE.EtaTerm (const sndValue)))
+  etaMatchWith _ term = \case
+    PairSig a b -> Just (PairSig (term a (NbE.EtaTerm (const fstValue))) (term b (NbE.EtaTerm (const sndValue))))
     _ -> Nothing
 
 -- | The first component of a pair value; stuck on anything else.

@@ -85,9 +85,9 @@ instance Eval FFPattern TermSig where
     AppSig fun arg -> appValue scope (eval scope env fun) (eval scope env arg)
     node -> NbE.evalNode scope env node
 
-  etaMatch = \case
-    LamSig _ -> Just (LamSig (NbE.EtaScoped (\scope (FFPatternVar x) other ->
-      appValue scope other (NbE.VVar (nameOf x)))))
+  etaMatchWith scoped _ = \case
+    LamSig body -> Just (LamSig (scoped body (NbE.EtaScoped (\scope (FFPatternVar x) other ->
+      appValue scope other (NbE.VVar (nameOf x))))))
     _ -> Nothing
 
 -- | Apply a function value to an argument value: a suspended lambda is

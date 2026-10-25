@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Conversion checking decides one-step η for lambdas and pairs by shape,
-  through a language's `etaMatch`, after Coquand (1996) and Abel and
+  through a language's `etaMatchWith`, after Coquand (1996) and Abel and
   Coquand (2007).
 - The generic core: the semantic domain `Value`, the `Eval` class, generic
   evaluation and readback, `nf` and `whnf`.

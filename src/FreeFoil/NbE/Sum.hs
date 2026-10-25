@@ -87,13 +87,15 @@ class (Bifunctor f, Bifoldable f) => EvalF binder f where
   evalF pos scope env node = evalNode scope env (inj pos node)
 
   -- | The η laws of the fragment's introduction forms at a position, as
-  -- 'etaMatch'; by default none.
-  etaMatchF ::
+  -- 'etaMatchWith'. By default there are none.
+  etaMatchWithF ::
     Eval binder sig =>
     Inj f sig ->
+    (a -> EtaScoped binder sig n -> c) ->
+    (b -> EtaTerm binder sig n -> d) ->
     f a b ->
-    Maybe (f (EtaScoped binder sig n) (EtaTerm binder sig n))
-  etaMatchF _ _ = Nothing
+    Maybe (f c d)
+  etaMatchWithF _ _ _ _ = Nothing
 
 -- | The rules of a sum are the rules of its summands.
 instance (EvalF binder f, EvalF binder g) => EvalF binder (Sum f g) where
@@ -101,13 +103,13 @@ instance (EvalF binder f, EvalF binder g) => EvalF binder (Sum f g) where
   evalF pos scope env = \case
     L2 node -> evalF (inL pos) scope env node
     R2 node -> evalF (inR pos) scope env node
-  etaMatchF pos = \case
-    L2 node -> L2 <$> etaMatchF (inL pos) node
-    R2 node -> R2 <$> etaMatchF (inR pos) node
+  etaMatchWithF pos scoped term = \case
+    L2 node -> L2 <$> etaMatchWithF (inL pos) scoped term node
+    R2 node -> R2 <$> etaMatchWithF (inR pos) scoped term node
 
 -- | A sum of fragments is a language: its rules are those of the sum at the
 -- root position.
 instance (EvalF binder f, EvalF binder g) => Eval binder (Sum f g) where
   {-# INLINE evalSig #-}
   evalSig = evalF root
-  etaMatch = etaMatchF root
+  etaMatchWith = etaMatchWithF root

@@ -33,8 +33,8 @@ is documented in the haddocks of `FreeFoil.NbE`.
   need.
 - Conversion checking (`FreeFoil.NbE.Conversion`) compares values without
   reading them back and decides one-step η for the introduction forms a
-  language marks with `etaMatch`, lambdas and pairs in the demos; readback
-  does not.
+  language marks with `etaMatchWith`, lambdas and pairs in the demos;
+  readback does not.
 - Top-level definitions (`FreeFoil.NbE.Definitions`) are non-recursive and
   always unfolded: no readback keeps the defined names.
 - The core works with any free-foil pattern. The demo languages bind one
