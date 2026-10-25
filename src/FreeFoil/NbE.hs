@@ -262,6 +262,20 @@ quoteScoped scope env (ScopedAST binder body) =
       Foil.Distinct -> ScopedAST binder' (quote scope' (eval scope' (extendEnv env) body))
 
 -- | Normal form: evaluate, then read back fully.
+--
+-- > nf (λf. (λg. λx. g x) f)  =  λf. λx. f x
+--
+-- The normal form is β-normal but not η-short. For example, @nf@ does not
+-- contract @λx. f x@ to @f@, although 'FreeFoil.NbE.Conversion.conv'
+-- identifies the two. Contraction can change the type of a term. In Rocq
+-- the type of @f@ need not be convertible to the type of @λx. f x@, which is
+-- why Rocq defines η-expansion but no η-reduction
+-- (<https://rocq-prover.org/doc/master/refman/language/core/conversion.html#expansion Rocq reference manual, η-expansion>).
+-- In Rzk an η-expanded witness of an extension type type-checks where the
+-- contracted one does not (Kudasov, Sim and Ahrens,
+-- /Rzk: a Proof Assistant for Synthetic ∞-Categories/, 2026, Remark 4.5,
+-- <https://arxiv.org/abs/2607.12207>). So readback keeps the η-shape of the
+-- term.
 nf ::
   (Eval binder sig, Foil.Distinct n, Foil.CoSinkable binder) =>
   Foil.Scope n ->
