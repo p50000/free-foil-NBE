@@ -18,7 +18,7 @@ module Test.Fragments
   ) where
 
 import           Control.DeepSeq           (NFData, rnf)
-import           Control.Exception         (evaluate)
+import           Control.Exception         (ErrorCall (..), evaluate, try)
 import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
 import           System.Timeout            (timeout)
@@ -75,6 +75,11 @@ tests = testGroup "fragments"
       , etaCase True  "both laws, one inside the other" "\\f. \\x. (fst (f x), snd (f x))" "\\f. f"
       , etaCase False "the same projection twice" "\\p. (fst p, fst p)" "\\p. p"
       , etaCase False "no η for naturals" "\\n. natrec n { zero -> zero ; suc (k, r) -> suc r }" "\\n. n"
+      , testCase "a lambda that binds two names fails, as β does" $ do
+          result <- try (evaluate (convertible emptyScope "\\f. \\(x, y). f x y" ("\\f. f" :: Combined VoidS)))
+          case result of
+            Left (ErrorCall _) -> pure ()
+            Right answer       -> assertFailure ("answered " ++ show answer)
       ]
   , testGroup "binders of different shapes"
       [ testCase "are not convertible" $ do
