@@ -80,7 +80,7 @@ convEta ::
   Value binder sig n ->
   Value binder sig n ->
   Bool
-{-# INLINABLE convEta #-}
+{-# INLINE convEta #-}
 convEta scope intro other = case intro of
   VNode node ->
     maybe False (biall absurd id) (etaMatchWith (\v _ -> absurd v) observedTerm node)
@@ -100,7 +100,7 @@ convObserved ::
   ScopedAST binder sig i ->
   EtaScoped binder sig n ->
   Bool
-{-# INLINABLE convObserved #-}
+{-# INLINE convObserved #-}
 convObserved scope env other (ScopedAST binder body) (EtaScoped observe) =
   Foil.withRefreshedPattern scope binder $ \extendEnv binder' scope' ->
     case Foil.assertDistinct binder of
@@ -123,7 +123,7 @@ convScoped ::
   ScopedAST binder sig i1 ->
   ScopedAST binder sig i2 ->
   Bool
-{-# INLINABLE convScoped #-}
+{-# INLINE convScoped #-}
 convScoped scope envL envR (ScopedAST binderL bodyL) (ScopedAST binderR bodyR)
   | not (Foil.unsafeUnifiablePatterns binderL binderR) = False
   | otherwise =
