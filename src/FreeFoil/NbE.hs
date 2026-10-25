@@ -167,6 +167,7 @@ class (Bifunctor sig, Bifoldable sig) => Eval binder sig where
     (b -> EtaTerm binder sig n -> d) ->
     sig a b ->
     Maybe (sig c d)
+  {-# INLINE etaMatchWith #-}
   etaMatchWith _ _ _ = Nothing
 
 -- | Evaluate a term under an environment: look variables up, hand nodes to

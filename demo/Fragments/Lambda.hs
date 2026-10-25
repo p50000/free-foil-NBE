@@ -51,6 +51,7 @@ instance CoSinkable binder => EvalF binder LamF where
     AppF fun arg -> appValue pos scope (eval scope env fun) (eval scope env arg)
     node -> evalNode scope env (inj pos node)
 
+  {-# INLINE etaMatchWithF #-}
   etaMatchWithF pos scoped _ = \case
     LamF body -> Just (LamF (scoped body (EtaScoped (\scope binder other ->
       case namesOfPattern binder of

@@ -60,6 +60,7 @@ instance CoSinkable binder => EvalF binder PairF where
         p' -> VSuspended env (inj pos (SplitF p' (ScopedAST binder body)))
     node -> evalNode scope env (inj pos node)
 
+  {-# INLINE etaMatchWithF #-}
   etaMatchWithF pos _ term = \case
     PairF a b -> Just (PairF (term a (EtaTerm (const (fstValue pos)))) (term b (EtaTerm (const (sndValue pos)))))
     _ -> Nothing

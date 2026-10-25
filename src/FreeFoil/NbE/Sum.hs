@@ -95,6 +95,7 @@ class (Bifunctor f, Bifoldable f) => EvalF binder f where
     (b -> EtaTerm binder sig n -> d) ->
     f a b ->
     Maybe (f c d)
+  {-# INLINE etaMatchWithF #-}
   etaMatchWithF _ _ _ _ = Nothing
 
 -- | The rules of a sum are the rules of its summands.
@@ -103,6 +104,7 @@ instance (EvalF binder f, EvalF binder g) => EvalF binder (Sum f g) where
   evalF pos scope env = \case
     L2 node -> evalF (inL pos) scope env node
     R2 node -> evalF (inR pos) scope env node
+  {-# INLINE etaMatchWithF #-}
   etaMatchWithF pos scoped term = \case
     L2 node -> L2 <$> etaMatchWithF (inL pos) scoped term node
     R2 node -> R2 <$> etaMatchWithF (inR pos) scoped term node
@@ -112,4 +114,5 @@ instance (EvalF binder f, EvalF binder g) => EvalF binder (Sum f g) where
 instance (EvalF binder f, EvalF binder g) => Eval binder (Sum f g) where
   {-# INLINE evalSig #-}
   evalSig = evalF root
-  etaMatchWith = etaMatchWithF root
+  {-# INLINE etaMatchWith #-}
+  etaMatchWith scoped term = etaMatchWithF root scoped term
