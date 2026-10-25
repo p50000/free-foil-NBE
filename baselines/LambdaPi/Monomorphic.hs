@@ -9,12 +9,15 @@
 -- serves as a baseline for the cost of the generic value domain. Evaluation
 -- is call-by-need, a binder node captures its environment and keeps its body
 -- as syntax, and readback evaluates each body once, so nested @Pi@ types
--- read back in linear time.
+-- read back in linear time. Conversion checking compares values as
+-- "FreeFoil.NbE.Conversion" does, with η for lambdas.
 module LambdaPi.Monomorphic
   ( Val (..)
   , eval
   , quote
   , nf
+  , conv
+  , convertible
   ) where
 
 import Control.Monad.Foil
@@ -100,3 +103,52 @@ quoteScoped scope env binder body =
 -- | Normal form by the monomorphic NbE.
 nf :: Distinct n => Scope n -> FFTerm n -> FFTerm n
 nf scope = quote scope . eval identitySubst
+
+-- | Two values are convertible: their normal forms are equal up to renaming
+-- of bound variables and η. This is the algorithm of
+-- 'FreeFoil.NbE.Conversion.conv' for lambda-pi: closures are compared under
+-- one fresh name (Coquand 1996), and a lambda against any other value
+-- compares its body with that value applied to the fresh name.
+conv :: Distinct n => Scope n -> Val n -> Val n -> Bool
+conv scope = \cases
+  (VVar x) (VVar y) -> x == y
+  (VApp f a) (VApp g b) -> conv scope f g && conv scope a b
+  (VLam envL binderL bodyL) (VLam envR binderR bodyR) ->
+    convClosures scope envL binderL bodyL envR binderR bodyR
+  (VPi domL envL binderL bodyL) (VPi domR envR binderR bodyR) ->
+    conv scope domL domR && convClosures scope envL binderL bodyL envR binderR bodyR
+  (VLam env binder body) other -> convEta scope env binder body other
+  other (VLam env binder body) -> convEta scope env binder body other
+  _ _ -> False
+
+-- | Compare two closure bodies under one fresh name.
+convClosures ::
+  Distinct n =>
+  Scope n ->
+  Substitution Val i1 n -> NameBinder i1 l1 -> FFTerm l1 ->
+  Substitution Val i2 n -> NameBinder i2 l2 -> FFTerm l2 ->
+  Bool
+convClosures scope envL binderL bodyL envR binderR bodyR =
+  withRefreshed scope (nameOf binderL) $ \binder' ->
+    let scope' = extendScope binder' scope
+        x = nameOf binder'
+     in conv scope'
+          (eval (addRename (sink envL) binderL x) bodyL)
+          (eval (addRename (sink envR) binderR x) bodyR)
+
+-- | η: a lambda's body against the other value applied to a fresh name. The
+-- other value is not a lambda, so the application is stuck.
+convEta ::
+  Distinct n =>
+  Scope n -> Substitution Val i n -> NameBinder i l -> FFTerm l -> Val n -> Bool
+convEta scope env binder body other =
+  withRefreshed scope (nameOf binder) $ \binder' ->
+    let scope' = extendScope binder' scope
+        x = nameOf binder'
+     in conv scope'
+          (eval (addRename (sink env) binder x) body)
+          (VApp (sink other) (VVar x))
+
+-- | Conversion of two terms by the monomorphic NbE.
+convertible :: Distinct n => Scope n -> FFTerm n -> FFTerm n -> Bool
+convertible scope t u = conv scope (eval identitySubst t) (eval identitySubst u)
