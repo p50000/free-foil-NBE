@@ -34,7 +34,28 @@ instance NFData (Pat n l) where
   rnf (PatVar x)    = rnf x
   rnf (PatPair x y) = rnf x `seq` rnf y
 
--- | The generic defaults, listing the binders through the kind-generic
--- representation as free-foil recommends.
+-- | Written out, in the form that free-foil's @mkFreeFoil@ generates for a
+-- binding type. The generic defaults go through the kind-generic
+-- representation of the pattern at every binder, which conversion checking
+-- and evaluation do at every lambda and every @split@.
 instance CoSinkable Pat where
-  nameBinderListOf = gnameBinderListOf
+  coSinkabilityProof rename (PatVar x) cont =
+    coSinkabilityProof rename x $ \rename' x' -> cont rename' (PatVar x')
+  coSinkabilityProof rename (PatPair x y) cont =
+    coSinkabilityProof rename x $ \rename' x' ->
+      coSinkabilityProof rename' y $ \rename'' y' -> cont rename'' (PatPair x' y')
+
+  withPattern withBinder _unit _comp scope (PatVar x) cont =
+    withBinder scope x $ \f x' ->
+      let scope' = extendScope x' scope
+      in cont f (PatVar x') scope'
+  withPattern withBinder _unit comp scope (PatPair x y) cont =
+    withBinder scope x $ \f x' ->
+      let scope' = extendScope x' scope
+      in withBinder scope' y $ \g y' ->
+           let scope'' = extendScope y' scope'
+           in cont (comp f g) (PatPair x' y') scope''
+  {-# INLINE withPattern #-}
+
+  nameBinderListOf (PatVar x)    = NameBinderListCons x NameBinderListEmpty
+  nameBinderListOf (PatPair x y) = NameBinderListCons x (NameBinderListCons y NameBinderListEmpty)
