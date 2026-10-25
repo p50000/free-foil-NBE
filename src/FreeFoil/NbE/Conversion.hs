@@ -9,7 +9,7 @@
 -- untyped η for surjective pairs of Abel and Coquand, "Untyped algorithmic
 -- equality for Martin-Löf's logical framework with surjective pairs" (2007).
 --
--- The check walks both values together and matches nodes with 'zipMatchFoldK'
+-- The check walks both values together and matches nodes with 'zipMatchFold2'
 -- from free-foil, as free-foil's 'Control.Monad.Free.Foil.alphaEquiv' does
 -- for terms. Under a binder it evaluates both bodies with the same fresh
 -- names, but only when the comparison gets there, and it stops at the first
@@ -43,7 +43,7 @@ import           Control.Monad.Free.Foil     (AST, ScopedAST (..))
 import           Data.Bifoldable             (biall, biand)
 import           Data.Void                   (absurd)
 import           Data.Monoid                 (All (..))
-import           Data.ZipMatchK              (Folds (..), ZipMatchFoldK (..))
+import           Data.ZipMatchK              (ZipMatchFoldK, zipMatchFold2)
 
 import           FreeFoil.NbE                (EtaScoped (..), EtaTerm (..), Eval (..), Value (..), eval)
 
@@ -60,10 +60,10 @@ conv ::
 conv scope l r = case (l, r) of
   (VVar x, VVar y) -> x == y
   (VNode a, VNode b)
-    | Just same <- zipMatchFoldK ((\v _ -> absurd v) :%: compared (conv scope) :%: F0) a b ->
+    | Just same <- zipMatchFold2 (\v _ -> absurd v) (compared (conv scope)) a b ->
         getAll same
   (VSuspended envL a, VSuspended envR b)
-    | Just same <- zipMatchFoldK (compared (convScoped scope envL envR) :%: compared (conv scope) :%: F0) a b ->
+    | Just same <- zipMatchFold2 (compared (convScoped scope envL envR)) (compared (conv scope)) a b ->
         getAll same
   -- Nodes of different constructors are compared by η. A node goes to
   -- 'VNode' exactly when it has no scoped subterms, so a 'VNode' and a
