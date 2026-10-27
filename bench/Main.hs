@@ -12,6 +12,7 @@ module Main (main) where
 import Test.Tasty.Bench hiding (nf)
 
 import Control.Monad.Foil
+import FreeFoil.NbE.Conversion (convertible)
 import LambdaPi hiding (whnf)
 import qualified LambdaPi.Monomorphic as Mono
 import LambdaPi.Parser ()  -- IsString instance for writing terms as strings
@@ -140,6 +141,52 @@ compareComposed name tm =
     , bench "composed" $ whnf (sizeOf . Composed.nf emptyScope) (Composed.fromMonolith tm)
     ]
 
+-- | @\\f. \\x1. ... \\xk. f x1 ... xk@, the function variable η-expanded
+-- @k@ times. It is convertible with @\\f. f@ by @k@ steps of η.
+etaFunction :: Int -> String
+etaFunction k =
+  "\\f. " ++ concat [ "\\x" ++ show i ++ ". " | i <- [1 .. k] ]
+    ++ unwords ("f" : [ "x" ++ show i | i <- [1 .. k] ])
+
+-- | @\\p. t@ where @t@ is the pair @p@ η-expanded to depth @d@:
+-- @(fst p, snd p)@ at depth 1, with each projection expanded again below.
+-- It is convertible with @\\p. p@ by @2^d - 1@ steps of η.
+etaPair :: Int -> String
+etaPair d = "\\p. " ++ go "p" d
+  where
+    go e 0 = e
+    go e k = "(" ++ go ("fst (" ++ e ++ ")") (k - 1) ++ ", " ++ go ("snd (" ++ e ++ ")") (k - 1) ++ ")"
+
+-- | Check @t ≡ u@ by the generic conversion of lambda-pi and by the
+-- monomorphic one.
+compareConvertible :: String -> LambdaPi VoidS -> LambdaPi VoidS -> Benchmark
+compareConvertible name t u =
+  bgroup name
+    [ bench "generic" $ whnf (uncurry (convertible emptyScope)) (t, u)
+    , bench "mono"    $ whnf (uncurry (Mono.convertible emptyScope)) (t, u)
+    ]
+
+-- | Check @t ≡ u@ in lambda-pi, in the monolithic language and in the
+-- composed one.
+compareComposedConversion :: String -> LambdaPi VoidS -> LambdaPi VoidS -> Benchmark
+compareComposedConversion name t u =
+  bgroup name
+    [ bench "lambda-pi" $ whnf (uncurry (convertible emptyScope)) (t, u)
+    , bench "monolith"  $ whnf (uncurry (convertible emptyScope)) (tm, um)
+    , bench "composed"  $ whnf (uncurry (convertible emptyScope)) (Composed.fromMonolith tm, Composed.fromMonolith um)
+    ]
+  where
+    tm = monolithic t
+    um = monolithic u
+
+-- | Check @t ≡ u@ in the full language, monolithic and composed.
+compareFullConversion :: String -> Monolith.Monolith VoidS -> Monolith.Monolith VoidS -> Benchmark
+compareFullConversion name t u =
+  bgroup name
+    [ bench "monolith" $ whnf (uncurry (convertible emptyScope)) (t, u)
+    , bench "composed" $ whnf (uncurry (convertible emptyScope)) (Composed.fromMonolith t, Composed.fromMonolith u)
+    ]
+
 -- | Normalise @t@ three ways and force each result fully.
 compareNormalisers :: String -> LambdaPi VoidS -> Benchmark
 compareNormalisers name t =
@@ -184,5 +231,27 @@ main =
         , compareComposition "Church 2^10 = 1024"      (power 10 2)
         , compareComposed    "natrec mult 16 16 = 256" (natMul 16 16)
         , compareComposed    "natrec mult 32 32 = 1024" (natMul 32 32)
+        ]
+    , bgroup "Conversion"
+        [ compareConvertible "mult 16 16 = 256"       (churchMul 16 16) (churchN 256)
+        , compareConvertible "2^10 = 1024"            (power 10 2) (churchN 1024)
+        , compareConvertible "mult 16 16 /= 255"      (churchMul 16 16) (churchN 255)
+        , compareConvertible "mult 16 16 /= 0"        (churchMul 16 16) (churchN 0)
+        , compareConvertible "eta, 100 arguments"     (fromString (etaFunction 100)) "\\f. f"
+        , compareConvertible "eta, 1000 arguments"    (fromString (etaFunction 1000)) "\\f. f"
+        ]
+    , bgroup "Conversion: composed vs monolith"
+        [ compareComposedConversion "Church mult 16 16 = 256"  (churchMul 16 16) (churchN 256)
+        , compareComposedConversion "Church mult 16 16 /= 255" (churchMul 16 16) (churchN 255)
+        , compareFullConversion     "natrec mult 16 16 = 256"  (natMul 16 16) (fromString (natural 256))
+        , compareFullConversion     "natrec mult 16 16 /= 255" (natMul 16 16) (fromString (natural 255))
+        ]
+    , bgroup "Conversion: η, lambda-pi vs composed"
+        [ bgroup "eta, 1000 arguments"
+            [ bench "lambda-pi" $ whnf (uncurry (convertible emptyScope)) (fromString (etaFunction 1000) :: LambdaPi VoidS, "\\f. f")
+            , bench "composed"  $ whnf (uncurry (convertible emptyScope)) (Composed.fromMonolith (fromString (etaFunction 1000)), Composed.fromMonolith "\\f. f")
+            ]
+        , bench "pair eta, depth 10 (composed)" $
+            whnf (uncurry (convertible emptyScope)) (Composed.fromMonolith (fromString (etaPair 10)), Composed.fromMonolith "\\p. p")
         ]
     ]

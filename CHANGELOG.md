@@ -21,10 +21,10 @@
   `foldAST`. The languages share scope resolution and parsing in
   `Demo.Parsing`.
 - free-foil is pinned at its `main` after
-  [its #118](https://github.com/fizruk/free-foil/pull/118). `mkFreeFoil`
-  generates the bifunctor, `ZipMatchK` and `NFData` instances of every
-  generated signature, with `INLINE` pragmas, and the `NFData` instance of
-  every generated pattern type. The generated modules carry no derive lines
+  [its #123](https://github.com/fizruk/free-foil/pull/123). `mkFreeFoil`
+  generates the bifunctor, `ZipMatchK`, `ZipMatchFoldK` and `NFData`
+  instances of every generated signature, with `INLINE` pragmas, and the
+  `NFData` instance of every generated pattern type. The generated modules carry no derive lines
   and no hand-written instances.
 - The hand-written signatures, the fragments and Booleans, derive `ZipMatchK`
   with `deriveZipMatchK`, since the kind-generics default converts every node

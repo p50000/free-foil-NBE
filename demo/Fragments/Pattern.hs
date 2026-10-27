@@ -15,9 +15,10 @@ module Fragments.Pattern
   ( Pat (..)
   ) where
 
-import Control.DeepSeq    (NFData (rnf))
+import Control.DeepSeq       (NFData (rnf))
 import Control.Monad.Foil
-import Generics.Kind.TH   (deriveGenericK)
+import Control.Monad.Foil.TH (deriveCoSinkable)
+import Generics.Kind.TH      (deriveGenericK)
 
 -- | A pattern that binds one or two names.
 data Pat (n :: S) (l :: S) where
@@ -26,6 +27,8 @@ data Pat (n :: S) (l :: S) where
 
 deriveGenericK ''Pat
 
+deriveCoSinkable ''Pat
+
 instance SinkableK Pat
 instance HasNameBinders Pat
 instance UnifiablePattern Pat
@@ -33,8 +36,3 @@ instance UnifiablePattern Pat
 instance NFData (Pat n l) where
   rnf (PatVar x)    = rnf x
   rnf (PatPair x y) = rnf x `seq` rnf y
-
--- | The generic defaults, listing the binders through the kind-generic
--- representation as free-foil recommends.
-instance CoSinkable Pat where
-  nameBinderListOf = gnameBinderListOf
