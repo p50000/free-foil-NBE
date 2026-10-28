@@ -272,6 +272,7 @@ test-suite free-foil-nbe-test
     hs-source-dirs:   test
     main-is:          Main.hs
     other-modules:    Test.Agree
+                    , Test.Annotated
                     , Test.Booleans
                     , Test.Definitions
                     , Test.Fragments
