@@ -8,7 +8,7 @@
 -- | Evaluation of annotated terms: the composed language with a position at
 -- every node, which evaluation ignores. Normal forms, weak-head normal forms
 -- and conversion agree with the unannotated language on examples and on
--- random mixed terms; two annotations of one term are convertible; a normal
+-- random mixed terms. Two annotations of one term are convertible. A normal
 -- form is annotated blank, and a body that @whnf@ freezes keeps its
 -- annotations.
 module Test.Annotated (tests) where
@@ -33,7 +33,7 @@ import FreeFoil.NbE.Annotated
 import FreeFoil.NbE.Conversion (convertible)
 import Test.Fragments (Mixed (..), budgeted, parseIn, resolve, withFree)
 
--- | A position, which ignores the term; matching ignores the position.
+-- | A position, which ignores the term. Matching ignores positions.
 newtype Loc term = Loc (Maybe Int)
   deriving (Show, Functor, Foldable, Traversable)
 
