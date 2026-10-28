@@ -13,9 +13,8 @@
 -- its type, since evaluation builds values, not source nodes. So the normal
 -- form of an annotated term is annotated blank throughout, while the bodies
 -- that 'FreeFoil.NbE.whnf' freezes keep their annotations, since they stay
--- syntax. Conversion checking is as blind to annotations as the annotation's
--- 'Data.ZipMatchK.ZipMatchK' and 'Data.ZipMatchK.ZipMatchFoldK' instances,
--- see "Control.Monad.Free.Foil.Annotated".
+-- syntax. Conversion checking compares values, whose annotations are all
+-- blank, so it ignores the annotations of the terms.
 module FreeFoil.NbE.Annotated
   ( Annotation (..)
   , ignoring

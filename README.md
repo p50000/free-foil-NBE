@@ -38,10 +38,9 @@ is documented in the haddocks of `FreeFoil.NbE`.
 - Top-level definitions (`FreeFoil.NbE.Definitions`) are non-recursive and
   always unfolded: no readback keeps the defined names.
 - Annotated terms (free-foil's `AnnSig`) evaluate through the rules of a
-  language of fragments, ignoring the annotations; values and normal forms
-  carry the annotation's blank, and conversion is as blind to annotations
-  as the annotation's matching instances. A language with a monolithic
-  `Eval` instance has no annotated form.
+  language of fragments, ignoring the annotations. Values and normal forms
+  carry the annotation's blank, so conversion ignores the annotations too.
+  A language with a monolithic `Eval` instance has no annotated form.
 - The core works with any free-foil pattern. The demo languages bind one
   variable at a time, except `split` in pairs and the `suc` branch of
   `natrec` in naturals, which bind two; the composed language has both
