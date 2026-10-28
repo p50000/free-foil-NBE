@@ -15,6 +15,12 @@
 -- that 'FreeFoil.NbE.whnf' freezes keep their annotations, since they stay
 -- syntax. Conversion checking compares values, whose annotations are all
 -- blank, so it ignores the annotations of the terms.
+--
+-- The rules never see an annotation, so this suits languages whose
+-- reduction does not depend on types or other information in the
+-- annotations. A language with type-directed rules gives its own 'Eval'
+-- instance for its annotated signature, which takes precedence over the
+-- one here.
 module FreeFoil.NbE.Annotated
   ( Annotation (..)
   , ignoring
@@ -39,7 +45,7 @@ ignoring :: Annotation ann => Inj sig (AnnSig ann sig)
 ignoring = Inj (AnnSig blank) (\(AnnSig _ node) -> Just node)
 
 -- | The rules of a language, ignoring the annotations of its terms.
-instance (EvalF binder sig, Annotation ann, Functor ann) => Eval binder (AnnSig ann sig) where
+instance {-# OVERLAPPABLE #-} (EvalF binder sig, Annotation ann, Functor ann) => Eval binder (AnnSig ann sig) where
   {-# INLINE evalSig #-}
   evalSig scope env (AnnSig _ node) = evalF ignoring scope env node
   {-# INLINE etaMatchWith #-}
