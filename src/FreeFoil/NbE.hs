@@ -43,6 +43,8 @@
 module FreeFoil.NbE
   ( -- * Semantic domain
     Value (..)
+    -- * Context
+  , Context (..)
     -- * Evaluation
   , Eval (..)
   , eval
@@ -110,6 +112,30 @@ instance Bifunctor sig => Foil.Sinkable (Value binder sig) where
     VNode (bimap id (Foil.sinkabilityProof rename) node)
   sinkabilityProof rename (VSuspended env node) =
     VSuspended (Foil.sinkabilityProof rename env) (bimap id (Foil.sinkabilityProof rename) node)
+
+-- * Context
+
+-- | What evaluation, readback and conversion carry besides the environment:
+-- the client's context, indexed by the scope. The library asks two things
+-- of it, its scope and how a binder extends it. 'Foil.Scope' is the instance
+-- the library uses; a client's type may hold more, the values of free names,
+-- types, topes, and the type stays the client's, so that a later design may
+-- index it further.
+class Context ctx where
+  -- | The scope of the context.
+  contextScope :: ctx n -> Foil.Scope n
+  -- | The context under a binder: given the binder, refreshed for the
+  -- context's scope, and the scope under it, which free-foil computes when
+  -- it refreshes the binder.
+  extendContext ::
+    (Foil.CoSinkable binder, Foil.Distinct n, Foil.DExt n l) =>
+    binder n l -> Foil.Scope l -> ctx n -> ctx l
+
+instance Context Foil.Scope where
+  {-# INLINE contextScope #-}
+  contextScope = id
+  {-# INLINE extendContext #-}
+  extendContext _ scope _ = scope
 
 -- * η
 
