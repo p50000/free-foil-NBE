@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
@@ -40,7 +41,7 @@ module Monolith
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Eval (..), eval, nf, whnf)
+import FreeFoil.NbE (Context, Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
 import qualified FreeFoil.NbE.Conversion as Conv
 
@@ -67,41 +68,41 @@ numeral k = iterate Suc Zero !! k
 -- | The three elimination rules, side by side, each as in its standalone
 -- language: β, the projections and @split@, and primitive recursion. A
 -- binder of the wrong shape is an error.
-instance Eval Pattern TermSig where
-  evalSig scope env = \case
+instance Context ctx => Eval ctx Pattern TermSig where
+  evalSig ctx env = \case
     AppSig fun arg ->
-      case eval scope env fun of
+      case eval ctx env fun of
         NbE.VSuspended env' (LamSig (ScopedAST (PatternVar binder) body)) ->
           case assertDistinct binder of
-            Distinct -> eval scope (addSubst env' binder (eval scope env arg)) body
+            Distinct -> eval ctx (addSubst env' binder (eval ctx env arg)) body
         NbE.VSuspended _ (LamSig (ScopedAST PatternPair {} _)) ->
           error "Monolith: a lambda binds one name"
-        fun' -> NbE.VNode (AppSig fun' (eval scope env arg))
+        fun' -> NbE.VNode (AppSig fun' (eval ctx env arg))
     FstSig p ->
-      case eval scope env p of
+      case eval ctx env p of
         NbE.VNode (PairSig a _) -> a
         p'                     -> NbE.VNode (FstSig p')
     SndSig p ->
-      case eval scope env p of
+      case eval ctx env p of
         NbE.VNode (PairSig _ b) -> b
         p'                     -> NbE.VNode (SndSig p')
     SplitSig p (ScopedAST (PatternPair x y) body) ->
-      case eval scope env p of
+      case eval ctx env p of
         NbE.VNode (PairSig a b) ->
           case assertDistinct (PatternPair x y) of
-            Distinct -> eval scope (addSubst (addSubst env x a) y b) body
+            Distinct -> eval ctx (addSubst (addSubst env x a) y b) body
         p' -> NbE.VSuspended env (SplitSig p' (ScopedAST (PatternPair x y) body))
     SplitSig _ (ScopedAST PatternVar {} _) ->
       error "Monolith: split binds two names"
     NatRecSig n z (ScopedAST (PatternPair k r) s) ->
       case assertDistinct (PatternPair k r) of
         Distinct ->
-          let zeroCase = eval scope env z
+          let zeroCase = eval ctx env z
               recurse m = case m of
                 NbE.VNode ZeroSig    -> zeroCase
-                NbE.VNode (SucSig p) -> eval scope (addSubst (addSubst env k p) r (recurse p)) s
+                NbE.VNode (SucSig p) -> eval ctx (addSubst (addSubst env k p) r (recurse p)) s
                 m' -> NbE.VSuspended env (NatRecSig m' zeroCase (ScopedAST (PatternPair k r) s))
-          in recurse (eval scope env n)
+          in recurse (eval ctx env n)
     NatRecSig _ _ (ScopedAST PatternVar {} _) ->
       error "Monolith: the suc branch of natrec binds two names"
-    node -> NbE.evalNode scope env node
+    node -> NbE.evalNode ctx env node

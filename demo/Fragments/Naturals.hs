@@ -27,7 +27,7 @@ import Data.Bifunctor.TH       (deriveBifoldable, deriveBifunctor, deriveBitrave
 import Data.ZipMatchK.TH       (deriveZipMatchK)
 import GHC.Generics            (Generic)
 
-import FreeFoil.NbE            (Value (..), eval, evalNode)
+import FreeFoil.NbE            (Context, Value (..), eval, evalNode)
 import FreeFoil.NbE.Sum
 
 -- | Naturals: @zero@, @suc t@ and @natrec n { zero -> z ; suc k, r -> s }@.
@@ -44,18 +44,18 @@ deriveBitraversable ''NatF
 deriveZipMatchK ''NatF
 instance (NFData scope, NFData term) => NFData (NatF scope term)
 
-instance CoSinkable binder => EvalF binder NatF where
+instance (Context ctx, CoSinkable binder) => EvalF ctx binder NatF where
   {-# INLINE evalF #-}
-  evalF pos scope env = \case
+  evalF pos ctx env = \case
     NatRecF n z (ScopedAST binder s) ->
       case assertDistinct binder of
         Distinct ->
-          let zeroCase = eval scope env z
+          let zeroCase = eval ctx env z
               recurse m = case m of
                 VNode node
                   | Just ZeroF <- prj pos node -> zeroCase
                   | Just (SucF p) <- prj pos node ->
-                      eval scope (addSubstPattern env binder [p, recurse p]) s
+                      eval ctx (addSubstPattern env binder [p, recurse p]) s
                 m' -> VSuspended env (inj pos (NatRecF m' zeroCase (ScopedAST binder s)))
-          in recurse (eval scope env n)
-    node -> evalNode scope env (inj pos node)
+          in recurse (eval ctx env n)
+    node -> evalNode ctx env (inj pos node)

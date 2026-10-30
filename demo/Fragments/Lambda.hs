@@ -28,7 +28,7 @@ import Data.Bifunctor.TH       (deriveBifoldable, deriveBifunctor, deriveBitrave
 import Data.ZipMatchK.TH       (deriveZipMatchK)
 import GHC.Generics            (Generic)
 
-import FreeFoil.NbE            (EtaScoped (..), Eval, Value (..), eval, evalNode)
+import FreeFoil.NbE            (Context, EtaScoped (..), Eval, Value (..), eval, evalNode)
 import FreeFoil.NbE.Sum
 
 -- | Functions: @λx. t@, @t u@ and @Π (x : a). b@.
@@ -45,17 +45,17 @@ deriveBitraversable ''LamF
 deriveZipMatchK ''LamF
 instance (NFData scope, NFData term) => NFData (LamF scope term)
 
-instance CoSinkable binder => EvalF binder LamF where
+instance (Context ctx, CoSinkable binder) => EvalF ctx binder LamF where
   {-# INLINE evalF #-}
-  evalF pos scope env = \case
-    AppF fun arg -> appValue pos scope (eval scope env fun) (eval scope env arg)
-    node -> evalNode scope env (inj pos node)
+  evalF pos ctx env = \case
+    AppF fun arg -> appValue pos ctx (eval ctx env fun) (eval ctx env arg)
+    node -> evalNode ctx env (inj pos node)
 
   {-# INLINE etaMatchWithF #-}
   etaMatchWithF pos scoped _ = \case
-    LamF body -> Just (LamF (scoped body (EtaScoped (\scope binder other ->
+    LamF body -> Just (LamF (scoped body (EtaScoped (\ctx binder other ->
       case namesOfPattern binder of
-        [x] -> appValue pos scope other (VVar x)
+        [x] -> appValue pos ctx other (VVar x)
         _   -> error "Fragments.Lambda: the η law of a lambda needs a pattern that binds one name"))))
     _ -> Nothing
 
@@ -64,8 +64,8 @@ instance CoSinkable binder => EvalF binder LamF where
 -- environment extended with the argument, any other function is a stuck
 -- application.
 appValue ::
-  (Eval binder sig, CoSinkable binder, Distinct n) =>
-  Inj LamF sig -> Scope n -> Value binder sig n -> Value binder sig n -> Value binder sig n
+  (Eval ctx binder sig, CoSinkable binder, Distinct n) =>
+  Inj LamF sig -> ctx n -> Value binder sig n -> Value binder sig n -> Value binder sig n
 {-# INLINE appValue #-}
 appValue pos scope fun arg = case fun of
   VSuspended env' node

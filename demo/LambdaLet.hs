@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -28,7 +29,7 @@ module LambdaLet
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Eval (..), eval, nf, whnf)
+import FreeFoil.NbE (Context, Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
 
 import LambdaLet.Generated
@@ -78,18 +79,18 @@ type Value = NbE.Value FFPattern TermSig
 -- thunk in the environment: evaluated at most once, shared by every use, and
 -- never if unused. The reference 'nfSubst' substitutes it unevaluated into every
 -- occurrence instead.
-instance Eval FFPattern TermSig where
-  evalSig scope env = \case
+instance Context ctx => Eval ctx FFPattern TermSig where
+  evalSig ctx env = \case
     AppSig fun arg ->
-      case eval scope env fun of
+      case eval ctx env fun of
         NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
           case assertDistinct binder of
-            Distinct -> eval scope (addSubst env' binder (eval scope env arg)) body
-        fun' -> NbE.VNode (AppSig fun' (eval scope env arg))
+            Distinct -> eval ctx (addSubst env' binder (eval ctx env arg)) body
+        fun' -> NbE.VNode (AppSig fun' (eval ctx env arg))
     LetSig e (ScopedAST (FFPatternVar binder) body) ->
       case assertDistinct binder of
-        Distinct -> eval scope (addSubst env binder (eval scope env e)) body
-    node -> NbE.evalNode scope env node
+        Distinct -> eval ctx (addSubst env binder (eval ctx env e)) body
+    node -> NbE.evalNode ctx env node
 
 -- | Weak-head normal form by substitution; @let@ substitutes its bound
 -- expression unevaluated.

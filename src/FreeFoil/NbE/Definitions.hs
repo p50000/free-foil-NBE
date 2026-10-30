@@ -37,33 +37,33 @@ data Definitions binder sig n l where
 -- | The environment of a telescope: each defined name maps to the value of
 -- its body, and the names of @n@ map to themselves.
 definitionsEnv ::
-  (Eval binder sig, Foil.Distinct n) =>
-  Foil.Scope n ->
+  (Eval ctx binder sig, Foil.Distinct n) =>
+  ctx n ->
   Definitions binder sig n l ->
   Foil.Substitution (Value binder sig) l n
 {-# INLINABLE definitionsEnv #-}
 definitionsEnv _ NoDefinitions = Foil.identitySubst
-definitionsEnv scope (Define defs x body) =
-  let env = definitionsEnv scope defs
-  in Foil.addSubst env x (eval scope env body)
+definitionsEnv ctx (Define defs x body) =
+  let env = definitionsEnv ctx defs
+  in Foil.addSubst env x (eval ctx env body)
 
 -- | Evaluate a term in the scope of a telescope, unfolding every definition.
 evalUnfolded ::
-  (Eval binder sig, Foil.Distinct n, Foil.Distinct l) =>
-  Foil.Scope n ->
+  (Eval ctx binder sig, Foil.Distinct n, Foil.Distinct l) =>
+  ctx n ->
   Definitions binder sig n l ->
   AST binder sig l ->
   Value binder sig n
 {-# INLINABLE evalUnfolded #-}
-evalUnfolded scope defs = eval scope (definitionsEnv scope defs)
+evalUnfolded ctx defs = eval ctx (definitionsEnv ctx defs)
 
 -- | The normal form of a term with every definition unfolded: the normal form
 -- of the term with each defined name replaced by its body.
 nfUnfolded ::
-  (Eval binder sig, Foil.Distinct n, Foil.Distinct l, Foil.CoSinkable binder) =>
-  Foil.Scope n ->
+  (Eval ctx binder sig, Foil.Distinct n, Foil.Distinct l, Foil.CoSinkable binder) =>
+  ctx n ->
   Definitions binder sig n l ->
   AST binder sig l ->
   AST binder sig n
 {-# INLINABLE nfUnfolded #-}
-nfUnfolded scope defs = quote scope . evalUnfolded scope defs
+nfUnfolded ctx defs = quote ctx . evalUnfolded ctx defs
