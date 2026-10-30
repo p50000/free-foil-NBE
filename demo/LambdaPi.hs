@@ -100,6 +100,10 @@ instance Context ctx => Eval ctx FFPattern TermSig where
 -- entered under its environment extended with the argument, any other
 -- function is a stuck application.
 appValue :: (Context ctx, Distinct n) => ctx n -> Value n -> Value n -> Value n
+-- The helper takes the context, so it needs the pragma as 'eval' does; a
+-- call with the context's dictionary and a bound 'Distinct' one is not
+-- specialised on its own, and the β path would pass dictionaries.
+{-# SPECIALIZE appValue :: Distinct n => Scope n -> Value n -> Value n -> Value n #-}
 appValue ctx fun arg = case fun of
   NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
     case assertDistinct binder of
