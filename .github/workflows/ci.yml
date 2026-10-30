@@ -31,18 +31,21 @@ jobs:
 
       # dist-newstyle/src holds cabal's git checkout of free-foil. It is left
       # out of the cache: restoring a checkout made at one pin over a fresh
-      # clone at another corrupts the repository. The key carries a version
-      # so that caches saved before this exclusion are not restored.
+      # clone at another corrupts the repository. actions/cache archives a
+      # matched directory whole, so the paths list the children of
+      # dist-newstyle and the exclusion applies to one of them. The key
+      # carries a version so that caches saved with the checkout are not
+      # restored.
       - name: Cache cabal store and build artifacts
         uses: actions/cache@v4
         with:
           path: |
             ${{ steps.setup.outputs.cabal-store }}
-            dist-newstyle
+            dist-newstyle/*
             !dist-newstyle/src
-          key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-v2-${{ hashFiles('**/plan.json') }}
+          key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-v3-${{ hashFiles('**/plan.json') }}
           restore-keys: |
-            ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-v2-
+            ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-v3-
 
       - name: Build dependencies
         run: cabal build all --only-dependencies

@@ -3,6 +3,7 @@ module Main (main) where
 import Test.Tasty
 import Test.Tasty.QuickCheck
 
+import qualified Test.Annotated
 import qualified Test.Booleans
 import qualified Test.Definitions
 import qualified Test.Fragments
@@ -27,4 +28,5 @@ main =
         , Test.Monolith.tests
         , Test.Naturals.tests
         , Test.Pairs.tests
+        , Test.Annotated.tests
         ]

@@ -37,6 +37,12 @@ is documented in the haddocks of `FreeFoil.NbE`.
   not.
 - Top-level definitions (`FreeFoil.NbE.Definitions`) are non-recursive and
   always unfolded: no readback keeps the defined names.
+- Annotated terms (free-foil's `AnnSig`) evaluate through the rules of a
+  language of fragments, ignoring the annotations. Values and normal forms
+  carry the annotation's blank, so conversion ignores the annotations too.
+  The rules never see an annotation. A language whose rules depend on
+  them, on types say, gives its own `Eval` instance for its annotated
+  signature.
 - The core works with any free-foil pattern. The demo languages bind one
   variable at a time, except `split` in pairs and the `suc` branch of
   `natrec` in naturals, which bind two; the composed language has both
@@ -53,7 +59,7 @@ BNFC-generated parsers are committed, so nothing else is needed.
 
 ```sh
 cabal build all
-cabal test            # 223 tests; --test-show-details=direct lists them
+cabal test            # 238 tests; --test-show-details=direct lists them
 cabal bench nbe-bench
 ```
 
@@ -69,6 +75,7 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 |------|-----------|
 | `src/FreeFoil/NbE.hs` | The core: `Value`, the `Eval` class, generic `eval` and `quote`, `nf` and `whnf`. |
 | `src/FreeFoil/NbE/Conversion.hs` | Conversion checking on values: `conv`, `convertible` and `convertibleUnder`. |
+| `src/FreeFoil/NbE/Annotated.hs` | Evaluation of annotated terms, ignoring the annotations: the `Eval` instance of `AnnSig` over a language of fragments. |
 | `src/FreeFoil/NbE/Definitions.hs` | Top-level definitions: a telescope and the environment it gives to `eval`. |
 | `src/FreeFoil/NbE/Sum.hs` | Elimination rules à la carte: `EvalF` for a fragment, the `Eval` instance of a `Sum` of fragments. |
 | `demo/grammar/<Lang>/Syntax.cf`, `gen/<Lang>/` | The LBNF grammar of each demo language and the committed BNFC output. |
