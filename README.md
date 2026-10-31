@@ -22,7 +22,9 @@ of functions, pairs and naturals, whose rules the library combines
 its baseline and lends it a parser. A hand-written monomorphic NbE is the
 baseline of the generic normaliser, which runs within 1.25× of it on the
 lambda-n-ways factorial term and 1.4× on its random corpora. The interface
-is documented in the haddocks of `FreeFoil.NbE`.
+is documented in the haddocks of `FreeFoil.NbE`. Evaluation, readback and
+conversion carry a context the client supplies. The demonstration
+languages use a free-foil `Scope`.
 
 ## Limitations
 
@@ -73,7 +75,7 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 
 | Path | What it is |
 |------|-----------|
-| `src/FreeFoil/NbE.hs` | The core: `Value`, the `Eval` class, generic `eval` and `quote`, `nf` and `whnf`. |
+| `src/FreeFoil/NbE.hs` | The core: `Value`, the `Eval` class, the client's `Context`, generic `eval` and `quote`, `nf` and `whnf`. |
 | `src/FreeFoil/NbE/Conversion.hs` | Conversion checking on values: `conv`, `convertible` and `convertibleUnder`. |
 | `src/FreeFoil/NbE/Annotated.hs` | Evaluation of annotated terms, ignoring the annotations: the `Eval` instance of `AnnSig` over a language of fragments. |
 | `src/FreeFoil/NbE/Definitions.hs` | Top-level definitions: a telescope and the environment it gives to `eval`. |

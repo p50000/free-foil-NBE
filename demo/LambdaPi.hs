@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -30,7 +31,7 @@ module LambdaPi
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Eval (..), eval, nf, whnf)
+import FreeFoil.NbE (Context, Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
 import qualified FreeFoil.NbE.Conversion as Conv
 
@@ -85,24 +86,28 @@ type Value = NbE.Value FFPattern TermSig
 -- under its captured environment extended with the argument; a neutral head
 -- rebuilds the application. @Lam@ and @Pi@ fall through to the default, so a
 -- @Pi@ keeps its domain as a value and its codomain suspended.
-instance Eval FFPattern TermSig where
-  evalSig scope env = \case
-    AppSig fun arg -> appValue scope (eval scope env fun) (eval scope env arg)
-    node -> NbE.evalNode scope env node
+instance Context ctx => Eval ctx FFPattern TermSig where
+  evalSig ctx env = \case
+    AppSig fun arg -> appValue ctx (eval ctx env fun) (eval ctx env arg)
+    node -> NbE.evalNode ctx env node
 
   etaMatchWith scoped _ = \case
-    LamSig body -> Just (LamSig (scoped body (NbE.EtaScoped (\scope (FFPatternVar x) other ->
-      appValue scope other (NbE.VVar (nameOf x))))))
+    LamSig body -> Just (LamSig (scoped body (NbE.EtaScoped (\ctx (FFPatternVar x) other ->
+      appValue ctx other (NbE.VVar (nameOf x))))))
     _ -> Nothing
 
 -- | Apply a function value to an argument value: a suspended lambda is
 -- entered under its environment extended with the argument, any other
 -- function is a stuck application.
-appValue :: Distinct n => Scope n -> Value n -> Value n -> Value n
-appValue scope fun arg = case fun of
+appValue :: (Context ctx, Distinct n) => ctx n -> Value n -> Value n -> Value n
+-- The helper takes the context, so it needs the pragma as 'eval' does; a
+-- call with the context's dictionary and a bound 'Distinct' one is not
+-- specialised on its own, and the β path would pass dictionaries.
+{-# SPECIALIZE appValue :: Distinct n => Scope n -> Value n -> Value n -> Value n #-}
+appValue ctx fun arg = case fun of
   NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
     case assertDistinct binder of
-      Distinct -> eval scope (addSubst env' binder arg) body
+      Distinct -> eval ctx (addSubst env' binder arg) body
   _ -> NbE.VNode (AppSig fun arg)
 
 -- | Weak-head normal form by substitution, the reference for the tests.

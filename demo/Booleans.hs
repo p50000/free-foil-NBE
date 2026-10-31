@@ -26,7 +26,7 @@ import Control.Monad.Free.Foil
 import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor, deriveBitraversable)
 import Data.ZipMatchK.TH (deriveZipMatchK)
 
-import FreeFoil.NbE (Eval (evalSig), Value (VNode), eval, evalNode)
+import FreeFoil.NbE (Context, Eval (evalSig), Value (VNode), eval, evalNode)
 import qualified FreeFoil.NbE as NbE
 
 -- | Two introduction forms and one eliminator; no scoped positions.
@@ -60,13 +60,13 @@ pattern If c t f = Node (IfSig c t f)
 
 -- | The one elimination rule: a canonical condition selects a branch, a
 -- neutral condition leaves the @if@ stuck.
-instance Eval NameBinder BoolSig where
-  evalSig scope env = \case
-    IfSig cond t f -> case eval scope env cond of
-      VNode TrueSig  -> eval scope env t
-      VNode FalseSig -> eval scope env f
-      cond'          -> VNode (IfSig cond' (eval scope env t) (eval scope env f))
-    node -> evalNode scope env node
+instance Context ctx => Eval ctx NameBinder BoolSig where
+  evalSig ctx env = \case
+    IfSig cond t f -> case eval ctx env cond of
+      VNode TrueSig  -> eval ctx env t
+      VNode FalseSig -> eval ctx env f
+      cond'          -> VNode (IfSig cond' (eval ctx env t) (eval ctx env f))
+    node -> evalNode ctx env node
 
 -- | Normal form, inherited from the generic 'NbE.nf'.
 nf :: Distinct n => Scope n -> BoolTm n -> BoolTm n

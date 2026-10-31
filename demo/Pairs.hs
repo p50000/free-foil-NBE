@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -36,7 +37,7 @@ module Pairs
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Eval (..), eval, nf, whnf)
+import FreeFoil.NbE (Context, Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
 
 import Pairs.Generated
@@ -91,17 +92,17 @@ type Value = NbE.Value FFPattern TermSig
 -- evaluated, so readback normalises under its two names. A pair falls
 -- through to the default and becomes a 'NbE.VNode' whose components are
 -- lazy values.
-instance Eval FFPattern TermSig where
-  evalSig scope env = \case
-    FstSig p -> fstValue (eval scope env p)
-    SndSig p -> sndValue (eval scope env p)
+instance Context ctx => Eval ctx FFPattern TermSig where
+  evalSig ctx env = \case
+    FstSig p -> fstValue (eval ctx env p)
+    SndSig p -> sndValue (eval ctx env p)
     SplitSig p (ScopedAST (FFPatternPair x y) body) ->
-      case eval scope env p of
+      case eval ctx env p of
         NbE.VNode (PairSig a b) ->
           case assertDistinct (FFPatternPair x y) of
-            Distinct -> eval scope (addSubst (addSubst env x a) y b) body
+            Distinct -> eval ctx (addSubst (addSubst env x a) y b) body
         p' -> NbE.VSuspended env (SplitSig p' (ScopedAST (FFPatternPair x y) body))
-    node -> NbE.evalNode scope env node
+    node -> NbE.evalNode ctx env node
 
   etaMatchWith _ term = \case
     PairSig a b -> Just (PairSig (term a (NbE.EtaTerm (const fstValue))) (term b (NbE.EtaTerm (const sndValue))))

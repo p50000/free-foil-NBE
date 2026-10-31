@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -37,7 +38,7 @@ module Naturals
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Eval (..), eval, nf, whnf)
+import FreeFoil.NbE (Context, Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
 
 import Naturals.Generated
@@ -99,18 +100,18 @@ type Value = NbE.Value FFPattern TermSig
 -- normalises under the two names of the @suc@ branch. The zero branch is
 -- evaluated at most once across the whole recursion. @zero@ and @suc@ fall
 -- through to the default.
-instance Eval FFPattern TermSig where
-  evalSig scope env = \case
+instance Context ctx => Eval ctx FFPattern TermSig where
+  evalSig ctx env = \case
     NatRecSig n z (ScopedAST (FFPatternRec k r) s) ->
       case assertDistinct (FFPatternRec k r) of
         Distinct ->
-          let zeroCase = eval scope env z
+          let zeroCase = eval ctx env z
               recurse m = case m of
                 NbE.VNode ZeroSig    -> zeroCase
-                NbE.VNode (SucSig p) -> eval scope (addSubst (addSubst env k p) r (recurse p)) s
+                NbE.VNode (SucSig p) -> eval ctx (addSubst (addSubst env k p) r (recurse p)) s
                 m' -> NbE.VSuspended env (NatRecSig m' zeroCase (ScopedAST (FFPatternRec k r) s))
-          in recurse (eval scope env n)
-    node -> NbE.evalNode scope env node
+          in recurse (eval ctx env n)
+    node -> NbE.evalNode ctx env node
 
 -- | Weak-head normal form by substitution, for 'nfSubst'. The recursive
 -- result is substituted as the unevaluated recursion on the predecessor. It
