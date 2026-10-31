@@ -40,7 +40,8 @@ instance Bifunctor sig => Definitions (Defined binder sig) binder sig where
 -- | A substitution over a scope, under a binder of that scope. The names the
 -- binder adds are not in the map, so they map to themselves, and the map is
 -- reused at the larger input scope. 'Foil.addRename' would do the same with
--- public functions, at the cost of a deletion per name at every binder.
+-- public functions, at the cost of a deletion per name at every binder. The
+-- function belongs in free-foil.
 underBinder :: (Foil.Sinkable e, Foil.DExt n l) => Foil.Substitution e n n -> Foil.Substitution e l l
 {-# INLINE underBinder #-}
 underBinder subst = case Foil.sink subst of
