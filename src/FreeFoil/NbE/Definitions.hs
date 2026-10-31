@@ -49,10 +49,12 @@ instance Bifunctor sig => Definitions (Defined binder sig) binder sig where
   definition (Defined _ subst) = Foil.lookupSubst subst
 
 -- | A substitution over a scope, under a binder of that scope. 'Foil.sink'
--- moves the values; the names the binder adds map to themselves, as they
--- are not in the map, which is how free-foil records an identity rename
+-- moves the values. The names the binder adds are not in the map, so they
+-- map to themselves, which is how free-foil records an identity rename
 -- ('Foil.addRename' stores none). So the map is rewrapped at the larger
--- input scope; free-foil has no public function for this.
+-- input scope as it is. 'Foil.addRename' of each name to itself would do
+-- the same with public functions, at the cost of a deletion per name at
+-- every binder.
 underBinder :: (Foil.Sinkable e, Foil.DExt n l) => Foil.Substitution e n n -> Foil.Substitution e l l
 {-# INLINE underBinder #-}
 underBinder subst = case Foil.sink subst of
