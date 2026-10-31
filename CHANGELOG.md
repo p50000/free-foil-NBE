@@ -27,12 +27,11 @@
 - The composed language converts to and from the monolith with free-foil's
   `foldAST`. The languages share scope resolution and parsing in
   `Demo.Parsing`.
-- free-foil is pinned at its `main` after
-  [its #123](https://github.com/fizruk/free-foil/pull/123). `mkFreeFoil`
+- The library depends on free-foil 0.6.1 from Hackage. Its `mkFreeFoil`
   generates the bifunctor, `ZipMatchK`, `ZipMatchFoldK` and `NFData`
   instances of every generated signature, with `INLINE` pragmas, and the
-  `NFData` instance of every generated pattern type. The generated modules carry no derive lines
-  and no hand-written instances.
+  `NFData` instance of every generated pattern type. The generated modules
+  carry no derive lines and no hand-written instances.
 - The hand-written signatures, the fragments and Booleans, derive `ZipMatchK`
   with `deriveZipMatchK`, since the kind-generics default converts every node
   on comparison. With free-foil's written-out `ZipMatchK` instances for `Sum`
