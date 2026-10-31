@@ -25,8 +25,9 @@
 -- 'Foil.SinkableK' for 'whnf', which has a generic default.
 --
 -- Evaluation, readback and conversion carry a context the client supplies
--- ('Context'); 'Foil.Scope' is the instance the library uses, and a language
--- states in its 'Eval' instance what it needs of the context.
+-- ('Context'). The core is polymorphic in the context, and a language states
+-- in its 'Eval' instance what it needs of it. The demonstration languages
+-- use a free-foil 'Foil.Scope'.
 --
 -- A language specialises 'nf', 'eval' and 'quote' to its types, next to
 -- its 'Eval' instance, keeping the scope polymorphic and fixing the context

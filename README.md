@@ -23,8 +23,8 @@ its baseline and lends it a parser. A hand-written monomorphic NbE is the
 baseline of the generic normaliser, which runs within 1.25× of it on the
 lambda-n-ways factorial term and 1.4× on its random corpora. The interface
 is documented in the haddocks of `FreeFoil.NbE`. Evaluation, readback and
-conversion carry a context the client supplies, of which a free-foil
-`Scope` is the instance the library uses.
+conversion carry a context the client supplies. The demonstration
+languages use a free-foil `Scope`.
 
 ## Limitations
 
