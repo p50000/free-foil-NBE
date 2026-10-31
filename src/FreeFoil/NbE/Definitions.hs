@@ -16,9 +16,8 @@
 -- type-checking dependent types", 1996, §3), with the values of the defined
 -- names in the context rather than in the environment. The environment maps
 -- the variables a term binds, and the context the names free in it.
--- t'Defined' is the instance of
--- 'FreeFoil.NbE.Definitions' that holds them, as a free-foil substitution
--- over the context's scope.
+-- t'Defined' is the instance of 'FreeFoil.NbE.Definitions' that holds them,
+-- as a free-foil substitution over the context's scope.
 module FreeFoil.NbE.Definitions
   ( Defined
   , noDefinitions
