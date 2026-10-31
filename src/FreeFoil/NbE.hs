@@ -44,10 +44,10 @@
 -- and likewise 'FreeFoil.NbE.Conversion.conv' and
 -- 'FreeFoil.NbE.Conversion.convertible', and a helper of its own that takes
 -- the context, such as an application of values shared by β and the η
--- observer. Without the pragmas the monolithic
--- demonstration language is 1.25× to 1.4× slower: GHC's own specialisation
--- at a call site fixes the scope too, so it ends at the first binder, and it
--- never specialises the calls to 'eval' inside the instance.
+-- observer. Without the pragmas the monolithic demonstration language is
+-- 1.25× to 1.4× slower: GHC's own specialisation at a call site fixes the
+-- scope too, so it ends at the first binder, and it never specialises the
+-- calls to 'eval' inside the instance.
 module FreeFoil.NbE
   ( -- * Semantic domain
     Value (..)
