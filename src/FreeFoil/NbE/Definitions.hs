@@ -15,7 +15,7 @@
 -- its name is used. This is how Coquand evaluates @let@ ("An algorithm for
 -- type-checking dependent types", 1996, §3), with the values of the defined
 -- names in the context rather than in the environment: the environment maps
--- the variables a term binds, the context the names free in it, as rzk's
+-- the variables a term binds, the context the names free in it, as Rzk's
 -- context does for its variables. t'Defined' is the instance of
 -- 'FreeFoil.NbE.Definitions' that holds them, as a free-foil substitution
 -- over the context's scope.
