@@ -4,8 +4,7 @@
 -- | Tests of top-level definitions. On lambda-pi, normalising in a context
 -- of definitions agrees with normalising the program with every definition
 -- inlined, and with evaluating it under an environment that maps each
--- defined name to the value of its body, which is how the library unfolded
--- definitions before the context. The composed language unfolds its
+-- defined name to the value of its body. The composed language unfolds its
 -- definitions through the rules of its fragments.
 module Test.Definitions (tests) where
 

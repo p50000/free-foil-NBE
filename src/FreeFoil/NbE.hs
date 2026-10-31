@@ -52,9 +52,8 @@
 -- A client with a context of its own gives the same pragmas at its context.
 -- For them to reach the rules, the instance marks 'evalSig' and
 -- 'etaMatchWith' @INLINABLE@, and a helper of the language that takes the
--- context, such as an application of values shared by β and the η observer,
--- is @INLINE@. Otherwise every node runs the unspecialised evaluator, which
--- makes lambda-pi 1.7× slower on Church numerals.
+-- context, such as lambda-pi's @appValue@, is @INLINE@. Otherwise every node
+-- runs the unspecialised evaluator.
 module FreeFoil.NbE
   ( -- * Semantic domain
     Value (..)
@@ -151,19 +150,13 @@ instance Context Foil.Scope where
   {-# INLINE extendContext #-}
   extendContext _ scope _ = scope
 
--- | The values a context gives to the free names of a language: its
--- definitions. 'eval' asks for one whenever a variable evaluates to a free
--- name, so a defined name unfolds lazily, and a name without a definition is
--- a neutral. A 'Foil.Scope' defines nothing.
---
--- A language requires it of the context in its 'Eval' instance,
--- @instance Definitions ctx Pattern TermSig => Eval ctx Pattern TermSig@,
--- which needs @UndecidableInstances@: the constraint is as large as the head.
+-- | The values a context gives to free names. A 'Foil.Scope' defines
+-- nothing. A language's 'Eval' instance requires this class of its context,
+-- which needs @UndecidableInstances@.
 class Context ctx => Definitions ctx binder sig where
-  -- | The value of a free name, the name itself when the context does not
-  -- define it, as 'Foil.lookupSubst' answers. Every defined name is in
-  -- 'contextScope', so a refreshed binder never names a definition, and the
-  -- value is used as it is, not unfolded further.
+  -- | The value of a free name, or the name itself if the context does not
+  -- define it. Every defined name is in 'contextScope', so that a refreshed
+  -- binder never shadows a definition.
   definition :: ctx n -> Foil.Name n -> Value binder sig n
 
 instance Definitions Foil.Scope binder sig where
@@ -231,9 +224,9 @@ class (Definitions ctx binder sig, Bifunctor sig, Bifoldable sig) => Eval ctx bi
   etaMatchWith _ _ _ = Nothing
 
 -- | Evaluate a term under an environment: look variables up, hand nodes to
--- 'evalSig'. A variable that the environment does not map stands for itself,
--- a free name. A free name the context defines unfolds to its value, any
--- other is a neutral.
+-- 'evalSig'. A variable that the environment does not map is a free name,
+-- which unfolds to its value if the context defines it and is a neutral
+-- otherwise.
 eval ::
   (Eval ctx binder sig, Foil.Distinct o, Foil.Distinct i) =>
   ctx o ->
