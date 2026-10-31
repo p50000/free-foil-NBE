@@ -102,6 +102,7 @@ type Value = NbE.Value FFPattern TermSig
 -- evaluated at most once across the whole recursion. @zero@ and @suc@ fall
 -- through to the default.
 instance Definitions ctx FFPattern TermSig => Eval ctx FFPattern TermSig where
+  {-# INLINABLE evalSig #-}
   evalSig ctx env = \case
     NatRecSig n z (ScopedAST (FFPatternRec k r) s) ->
       case assertDistinct (FFPatternRec k r) of

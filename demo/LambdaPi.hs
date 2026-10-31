@@ -88,10 +88,12 @@ type Value = NbE.Value FFPattern TermSig
 -- rebuilds the application. @Lam@ and @Pi@ fall through to the default, so a
 -- @Pi@ keeps its domain as a value and its codomain suspended.
 instance Definitions ctx FFPattern TermSig => Eval ctx FFPattern TermSig where
+  {-# INLINABLE evalSig #-}
   evalSig ctx env = \case
     AppSig fun arg -> appValue ctx (eval ctx env fun) (eval ctx env arg)
     node -> NbE.evalNode ctx env node
 
+  {-# INLINABLE etaMatchWith #-}
   etaMatchWith scoped _ = \case
     LamSig body -> Just (LamSig (scoped body (NbE.EtaScoped (\ctx (FFPatternVar x) other ->
       appValue ctx other (NbE.VVar (nameOf x))))))
@@ -101,10 +103,9 @@ instance Definitions ctx FFPattern TermSig => Eval ctx FFPattern TermSig where
 -- entered under its environment extended with the argument, any other
 -- function is a stuck application.
 appValue :: (Definitions ctx FFPattern TermSig, Distinct n) => ctx n -> Value n -> Value n -> Value n
--- The helper takes the context, so it needs the pragma as 'eval' does; a
--- call with the context's dictionary and a bound 'Distinct' one is not
--- specialised on its own, and the β path would pass dictionaries.
-{-# SPECIALIZE appValue :: Distinct n => Scope n -> Value n -> Value n -> Value n #-}
+-- Inlined, so that the β path is specialised wherever the rules are: a call
+-- with a bound 'Distinct' dictionary is not specialised on its own.
+{-# INLINE appValue #-}
 appValue ctx fun arg = case fun of
   NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
     case assertDistinct binder of

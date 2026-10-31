@@ -70,6 +70,7 @@ numeral k = iterate Suc Zero !! k
 -- language: β, the projections and @split@, and primitive recursion. A
 -- binder of the wrong shape is an error.
 instance Definitions ctx Pattern TermSig => Eval ctx Pattern TermSig where
+  {-# INLINABLE evalSig #-}
   evalSig ctx env = \case
     AppSig fun arg ->
       case eval ctx env fun of

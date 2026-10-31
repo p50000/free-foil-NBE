@@ -62,6 +62,7 @@ pattern If c t f = Node (IfSig c t f)
 -- | The one elimination rule: a canonical condition selects a branch, a
 -- neutral condition leaves the @if@ stuck.
 instance Definitions ctx NameBinder BoolSig => Eval ctx NameBinder BoolSig where
+  {-# INLINABLE evalSig #-}
   evalSig ctx env = \case
     IfSig cond t f -> case eval ctx env cond of
       VNode TrueSig  -> eval ctx env t

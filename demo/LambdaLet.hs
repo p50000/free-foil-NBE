@@ -81,6 +81,7 @@ type Value = NbE.Value FFPattern TermSig
 -- never if unused. The reference 'nfSubst' substitutes it unevaluated into every
 -- occurrence instead.
 instance Definitions ctx FFPattern TermSig => Eval ctx FFPattern TermSig where
+  {-# INLINABLE evalSig #-}
   evalSig ctx env = \case
     AppSig fun arg ->
       case eval ctx env fun of

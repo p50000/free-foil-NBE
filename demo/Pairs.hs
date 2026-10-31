@@ -94,6 +94,7 @@ type Value = NbE.Value FFPattern TermSig
 -- through to the default and becomes a 'NbE.VNode' whose components are
 -- lazy values.
 instance Definitions ctx FFPattern TermSig => Eval ctx FFPattern TermSig where
+  {-# INLINABLE evalSig #-}
   evalSig ctx env = \case
     FstSig p -> fstValue (eval ctx env p)
     SndSig p -> sndValue (eval ctx env p)
@@ -105,6 +106,7 @@ instance Definitions ctx FFPattern TermSig => Eval ctx FFPattern TermSig where
         p' -> NbE.VSuspended env (SplitSig p' (ScopedAST (FFPatternPair x y) body))
     node -> NbE.evalNode ctx env node
 
+  {-# INLINABLE etaMatchWith #-}
   etaMatchWith _ term = \case
     PairSig a b -> Just (PairSig (term a (NbE.EtaTerm (const fstValue))) (term b (NbE.EtaTerm (const sndValue))))
     _ -> Nothing
