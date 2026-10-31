@@ -31,6 +31,7 @@ import Fragments.Combined (Combined, Pat, Sig, nf, whnf)
 import qualified FreeFoil.NbE as NbE
 import FreeFoil.NbE.Annotated
 import FreeFoil.NbE.Conversion (convertible)
+import FreeFoil.NbE.Definitions (Defined, define, noDefinitions)
 import Test.Fragments (Mixed (..), budgeted, parseIn, resolve, withFree)
 
 -- | A position, which ignores the term. Matching ignores positions.
@@ -65,6 +66,13 @@ nfAnnotated = NbE.nf
 whnfAnnotated :: Distinct n => Scope n -> Annotated n -> Annotated n
 whnfAnnotated = NbE.whnf
 
+-- | Contexts of definitions over the annotated and the plain signature.
+noAnnotatedDefinitions :: Scope n -> Defined Pat (AnnSig Loc Sig) n
+noAnnotatedDefinitions = noDefinitions
+
+noPlainDefinitions :: Scope n -> Defined Pat Sig n
+noPlainDefinitions = noDefinitions
+
 tests :: TestTree
 tests =
   testGroup "annotations"
@@ -89,6 +97,17 @@ tests =
             in case annotations (whnfAnnotated emptyScope (annotatedAt 7 term)) of
                  Nothing : rest -> any isJust rest @?= True
                  other          -> assertFailure ("the lambda is not blank: " ++ show other)
+        ]
+    , testGroup "definitions"
+        [ testCase "a definition unfolds through annotations" $ withFree $ \scope env ->
+            withFresh scope $ \d ->
+              let body = parseIn scope env "\\x. (x, x)"
+                  scope' = extendScope d scope
+                  env' = Map.insert "d" (nameOf d) (Map.map sink env)
+                  term = parseIn scope' env' "d a"
+                  annotated = define d (annotatedAt 1 body) (noAnnotatedDefinitions scope)
+                  plain = define d body (noPlainDefinitions scope)
+              in alphaEquiv scope' (unannotated (NbE.nf annotated (annotatedAt 2 term))) (NbE.nf plain term) @?= True
         ]
     , testGroup "conversion"
         [ testCase "η through an annotation" $

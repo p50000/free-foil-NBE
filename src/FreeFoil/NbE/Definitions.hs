@@ -1,69 +1,84 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs            #-}
--- | Top-level definitions: a program is a telescope of definitions
--- @x₁ = t₁; …; xₖ = tₖ@ followed by a term, where each body may use the
--- names defined before it. The definitions are non-recursive.
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+-- With let-generalisation, GHC reports free-foil's 'Foil.DExt' in a
+-- signature as a constraint it could simplify by its instance.
+{-# LANGUAGE MonoLocalBinds        #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+-- | Top-level definitions, as a context: a free name may have a value, which
+-- 'FreeFoil.NbE.eval' unfolds wherever the name is used (δ-reduction). A
+-- program @x₁ = t₁; …; xₖ = tₖ; t@ is the context that defines @x₁ … xₖ@
+-- in turn, each body in the context of the names before it, and @t@
+-- normalised in that context with 'FreeFoil.NbE.nf'. The definitions are
+-- non-recursive.
 --
--- Definitions need nothing new from the core. The values of the bodies form
--- the initial environment of 'eval', which maps each defined name to the
--- value of its body (δ-reduction). The environment is lazy, so a body is
--- evaluated at most once, and only when its name is used. This is how
--- Coquand evaluates @let@ ("An algorithm for type-checking dependent types",
--- 1996, §3), and how Renata Shakirova's "LambdaLet" demo evaluates its local
--- @let@.
+-- The values are lazy, so a body is evaluated at most once, and only when
+-- its name is used. This is how Coquand evaluates @let@ ("An algorithm for
+-- type-checking dependent types", 1996, §3), with the values of the defined
+-- names in the context rather than in the environment: the environment maps
+-- the variables a term binds, the context the names free in it, as rzk's
+-- context does for its variables. t'Defined' is the instance of
+-- 'FreeFoil.NbE.Definitions' that holds them, as a free-foil substitution
+-- over the context's scope.
 module FreeFoil.NbE.Definitions
-  ( Definitions (..)
-  , definitionsEnv
-  , evalUnfolded
-  , nfUnfolded
+  ( Defined
+  , noDefinitions
+  , define
+  , defineValue
   ) where
 
-import qualified Control.Monad.Foil      as Foil
-import           Control.Monad.Free.Foil (AST)
+import qualified Control.Monad.Foil          as Foil
+import qualified Control.Monad.Foil.Internal as Foil (Substitution (..))
+import           Control.Monad.Free.Foil     (AST)
+import           Data.Bifunctor              (Bifunctor)
 
-import           FreeFoil.NbE            (Eval, Value, eval, quote)
+import           FreeFoil.NbE                (Context (..), Definitions (..), Eval, Value, eval)
 
--- | A telescope of definitions that extends scope @n@ to scope @l@. The body
--- of each definition is in the scope of the names defined before it.
-data Definitions binder sig n l where
-  NoDefinitions :: Definitions binder sig n n
-  Define ::
-    (Foil.Distinct m, Foil.DExt m l) =>
-    Definitions binder sig n m ->
-    Foil.NameBinder m l ->
-    AST binder sig m ->
-    Definitions binder sig n l
+-- | A context of definitions: a scope and the values of the names it
+-- defines, a substitution over the scope that maps every other name to
+-- itself.
+data Defined binder sig n = Defined (Foil.Scope n) (Foil.Substitution (Value binder sig) n n)
 
--- | The environment of a telescope: each defined name maps to the value of
--- its body, and the names of @n@ map to themselves.
-definitionsEnv ::
-  (Eval ctx binder sig, Foil.Distinct n) =>
-  ctx n ->
-  Definitions binder sig n l ->
-  Foil.Substitution (Value binder sig) l n
-{-# INLINABLE definitionsEnv #-}
-definitionsEnv _ NoDefinitions = Foil.identitySubst
-definitionsEnv ctx (Define defs x body) =
-  let env = definitionsEnv ctx defs
-  in Foil.addSubst env x (eval ctx env body)
+instance Bifunctor sig => Context (Defined binder sig) where
+  {-# INLINE contextScope #-}
+  contextScope (Defined scope _) = scope
+  {-# INLINE extendContext #-}
+  extendContext _ scope (Defined _ subst) = Defined scope (underBinder subst)
 
--- | Evaluate a term in the scope of a telescope, unfolding every definition.
-evalUnfolded ::
-  (Eval ctx binder sig, Foil.Distinct n, Foil.Distinct l) =>
-  ctx n ->
-  Definitions binder sig n l ->
-  AST binder sig l ->
-  Value binder sig n
-{-# INLINABLE evalUnfolded #-}
-evalUnfolded ctx defs = eval ctx (definitionsEnv ctx defs)
+instance Bifunctor sig => Definitions (Defined binder sig) binder sig where
+  {-# INLINE definition #-}
+  definition (Defined _ subst) = Foil.lookupSubst subst
 
--- | The normal form of a term with every definition unfolded: the normal form
--- of the term with each defined name replaced by its body.
-nfUnfolded ::
-  (Eval ctx binder sig, Foil.Distinct n, Foil.Distinct l, Foil.CoSinkable binder) =>
-  ctx n ->
-  Definitions binder sig n l ->
-  AST binder sig l ->
-  AST binder sig n
-{-# INLINABLE nfUnfolded #-}
-nfUnfolded ctx defs = quote ctx . evalUnfolded ctx defs
+-- | A substitution over a scope, under a binder of that scope. 'Foil.sink'
+-- moves the values; the names the binder adds map to themselves, as they
+-- are not in the map, which is how free-foil records an identity rename
+-- ('Foil.addRename' stores none). So the map is rewrapped at the larger
+-- input scope; free-foil has no public function for this.
+underBinder :: (Foil.Sinkable e, Foil.DExt n l) => Foil.Substitution e n n -> Foil.Substitution e l l
+{-# INLINE underBinder #-}
+underBinder subst = case Foil.sink subst of
+  Foil.UnsafeSubstitution values -> Foil.UnsafeSubstitution values
+
+-- | The context over a scope that defines none of its names.
+noDefinitions :: Foil.Scope n -> Defined binder sig n
+noDefinitions scope = Defined scope Foil.identitySubst
+
+-- | The context under a binder whose name has a value.
+defineValue ::
+  (Bifunctor sig, Foil.DExt n l) =>
+  Foil.NameBinder n l ->
+  Value binder sig n ->
+  Defined binder sig n ->
+  Defined binder sig l
+defineValue x value (Defined scope subst) =
+  Defined (Foil.extendScope x scope) (Foil.addSubst (Foil.sink subst) x (Foil.sink value))
+
+-- | The context under a binder whose name has the value of a body. The body
+-- is in the scope of the context, so it may use the names defined before,
+-- and it is evaluated in the context, when the name is first used.
+define ::
+  (Eval (Defined binder sig) binder sig, Foil.Distinct n, Foil.DExt n l) =>
+  Foil.NameBinder n l ->
+  AST binder sig n ->
+  Defined binder sig n ->
+  Defined binder sig l
+define x body ctx = defineValue x (eval ctx Foil.identitySubst body) ctx
