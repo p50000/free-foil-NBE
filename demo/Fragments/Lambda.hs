@@ -67,9 +67,9 @@ appValue ::
   (Eval ctx binder sig, CoSinkable binder, Distinct n) =>
   Inj LamF sig -> ctx n -> Value binder sig n -> Value binder sig n -> Value binder sig n
 {-# INLINE appValue #-}
-appValue pos scope fun arg = case fun of
+appValue pos ctx fun arg = case fun of
   VSuspended env' node
     | Just (LamF (ScopedAST binder body)) <- prj pos node ->
         case assertDistinct binder of
-          Distinct -> eval scope (addSubstPattern env' binder [arg]) body
+          Distinct -> eval ctx (addSubstPattern env' binder [arg]) body
   _ -> VNode (inj pos (AppF fun arg))
