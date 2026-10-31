@@ -6,6 +6,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE UndecidableInstances  #-}
 -- The Eval instance is an orphan on purpose: it belongs with the language's
 -- dynamics, next to the reference normaliser.
 {-# OPTIONS_GHC -Wno-orphans #-}
@@ -38,7 +39,7 @@ module Naturals
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Context, Eval (..), eval, nf, whnf)
+import FreeFoil.NbE (Definitions, Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
 
 import Naturals.Generated
@@ -100,7 +101,7 @@ type Value = NbE.Value FFPattern TermSig
 -- normalises under the two names of the @suc@ branch. The zero branch is
 -- evaluated at most once across the whole recursion. @zero@ and @suc@ fall
 -- through to the default.
-instance Context ctx => Eval ctx FFPattern TermSig where
+instance Definitions ctx FFPattern TermSig => Eval ctx FFPattern TermSig where
   evalSig ctx env = \case
     NatRecSig n z (ScopedAST (FFPatternRec k r) s) ->
       case assertDistinct (FFPatternRec k r) of

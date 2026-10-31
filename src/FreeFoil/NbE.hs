@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE InstanceSigs          #-}
 {-# LANGUAGE LambdaCase            #-}
@@ -26,8 +27,9 @@
 --
 -- Evaluation, readback and conversion carry a context the client supplies
 -- ('Context'). The core is polymorphic in the context, and a language states
--- in its 'Eval' instance what it needs of it. The demonstration languages
--- use a free-foil 'Foil.Scope'.
+-- in its 'Eval' instance what it needs of it; a context may give the free
+-- names of a language values ('Definitions'). The demonstration languages
+-- use a free-foil 'Foil.Scope', which defines nothing.
 --
 -- A language specialises 'nf', 'eval' and 'quote' to its types, next to
 -- its 'Eval' instance, keeping the scope polymorphic and fixing the context
@@ -53,6 +55,7 @@ module FreeFoil.NbE
     Value (..)
     -- * Context
   , Context (..)
+  , Definitions (..)
     -- * Evaluation
   , Eval (..)
   , eval
@@ -143,6 +146,25 @@ instance Context Foil.Scope where
   {-# INLINE extendContext #-}
   extendContext _ scope _ = scope
 
+-- | The values a context gives to the free names of a language: its
+-- definitions. 'eval' asks for one whenever a variable evaluates to a free
+-- name, so a defined name unfolds lazily, and a name without a definition is
+-- a neutral. A 'Foil.Scope' defines nothing.
+--
+-- A language requires it of the context in its 'Eval' instance,
+-- @instance Definitions ctx Pattern TermSig => Eval ctx Pattern TermSig@,
+-- which needs @UndecidableInstances@: the constraint is as large as the head.
+class Context ctx => Definitions ctx binder sig where
+  -- | The value of a free name, the name itself when the context does not
+  -- define it, as 'Foil.lookupSubst' answers. Every defined name is in
+  -- 'contextScope', so a refreshed binder never names a definition, and the
+  -- value is used as it is, not unfolded further.
+  definition :: ctx n -> Foil.Name n -> Value binder sig n
+
+instance Definitions Foil.Scope binder sig where
+  {-# INLINE definition #-}
+  definition _ = VVar
+
 -- * η
 
 -- | The observer of a term position of an introduction form: the eliminator
@@ -172,7 +194,7 @@ newtype EtaScoped ctx binder sig n =
 -- interpreted node it would discard. The instance upholds the 'Value'
 -- invariant; "LambdaPi" is a one-rule example. An instance comes with the
 -- @SPECIALIZE@ pragmas shown in the module header.
-class (Context ctx, Bifunctor sig, Bifoldable sig) => Eval ctx binder sig where
+class (Definitions ctx binder sig, Bifunctor sig, Bifoldable sig) => Eval ctx binder sig where
   evalSig ::
     (Foil.Distinct o, Foil.Distinct i) =>
     ctx o ->
@@ -204,7 +226,9 @@ class (Context ctx, Bifunctor sig, Bifoldable sig) => Eval ctx binder sig where
   etaMatchWith _ _ _ = Nothing
 
 -- | Evaluate a term under an environment: look variables up, hand nodes to
--- 'evalSig'. A variable that the environment does not map is a neutral.
+-- 'evalSig'. A variable that the environment does not map stands for itself,
+-- a free name; a free name the context defines unfolds to its value, any
+-- other is a neutral.
 eval ::
   (Eval ctx binder sig, Foil.Distinct o, Foil.Distinct i) =>
   ctx o ->
@@ -213,7 +237,9 @@ eval ::
   Value binder sig o
 {-# INLINABLE eval #-}
 eval ctx !env = \case
-  Var x -> Foil.lookupSubst env x
+  Var x -> case Foil.lookupSubst env x of
+    VVar y -> definition ctx y
+    v -> v
   Node node -> evalSig ctx env node
 
 -- | Evaluate a node that has no elimination rule: suspend it whole under the

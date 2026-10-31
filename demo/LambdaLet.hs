@@ -6,6 +6,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE UndecidableInstances  #-}
 -- The Eval instance is an orphan on purpose: it belongs with the language's
 -- dynamics, next to the reference normaliser.
 {-# OPTIONS_GHC -Wno-orphans #-}
@@ -29,7 +30,7 @@ module LambdaLet
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Context, Eval (..), eval, nf, whnf)
+import FreeFoil.NbE (Definitions, Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
 
 import LambdaLet.Generated
@@ -79,7 +80,7 @@ type Value = NbE.Value FFPattern TermSig
 -- thunk in the environment: evaluated at most once, shared by every use, and
 -- never if unused. The reference 'nfSubst' substitutes it unevaluated into every
 -- occurrence instead.
-instance Context ctx => Eval ctx FFPattern TermSig where
+instance Definitions ctx FFPattern TermSig => Eval ctx FFPattern TermSig where
   evalSig ctx env = \case
     AppSig fun arg ->
       case eval ctx env fun of

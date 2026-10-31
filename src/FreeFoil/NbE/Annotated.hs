@@ -31,7 +31,7 @@ import           Control.Monad.Free.Foil           (AST, hoistAST)
 import           Control.Monad.Free.Foil.Annotated (AnnSig (..))
 import           Data.Bifunctor                    (Bifunctor)
 
-import           FreeFoil.NbE                      (Eval (..))
+import           FreeFoil.NbE                      (Definitions, Eval (..))
 import           FreeFoil.NbE.Sum                  (EvalF (..), Inj (..))
 
 -- | An annotation with a blank, for the nodes that evaluation builds.
@@ -45,7 +45,7 @@ ignoring :: Annotation ann => Inj sig (AnnSig ann sig)
 ignoring = Inj (AnnSig blank) (\(AnnSig _ node) -> Just node)
 
 -- | The rules of a language, ignoring the annotations of its terms.
-instance {-# OVERLAPPABLE #-} (EvalF ctx binder sig, Annotation ann, Functor ann) => Eval ctx binder (AnnSig ann sig) where
+instance {-# OVERLAPPABLE #-} (Definitions ctx binder (AnnSig ann sig), EvalF ctx binder sig, Annotation ann, Functor ann) => Eval ctx binder (AnnSig ann sig) where
   {-# INLINE evalSig #-}
   evalSig ctx env (AnnSig _ node) = evalF ignoring ctx env node
   {-# INLINE etaMatchWith #-}

@@ -3,6 +3,7 @@
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE UndecidableInstances  #-}
 -- The Eval instance for a sum of fragments is an orphan on purpose: it
 -- belongs with 'EvalF', which the core does not know.
 {-# OPTIONS_GHC -Wno-orphans #-}
@@ -35,7 +36,7 @@ import           Data.Bifoldable         (Bifoldable)
 import           Data.Bifunctor          (Bifunctor)
 import           Data.Bifunctor.Sum      (Sum (..))
 
-import           FreeFoil.NbE            (Context, EtaScoped, EtaTerm, Eval (..), Value, evalNode)
+import           FreeFoil.NbE            (Context, Definitions, EtaScoped, EtaTerm, Eval (..), Value, evalNode)
 
 -- | The position of a fragment @f@ in a language @sig@: how to build one of
 -- its nodes in the language and how to recognise one. This is Swierstra's
@@ -111,7 +112,7 @@ instance (EvalF ctx binder f, EvalF ctx binder g) => EvalF ctx binder (Sum f g) 
 
 -- | A sum of fragments is a language: its rules are those of the sum at the
 -- root position.
-instance (EvalF ctx binder f, EvalF ctx binder g) => Eval ctx binder (Sum f g) where
+instance (Definitions ctx binder (Sum f g), EvalF ctx binder f, EvalF ctx binder g) => Eval ctx binder (Sum f g) where
   {-# INLINE evalSig #-}
   evalSig = evalF root
   {-# INLINE etaMatchWith #-}

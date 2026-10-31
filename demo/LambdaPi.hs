@@ -6,6 +6,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE UndecidableInstances  #-}
 -- The Eval instance is an orphan on purpose: it belongs with the language's
 -- dynamics, next to the reference normaliser.
 {-# OPTIONS_GHC -Wno-orphans #-}
@@ -31,7 +32,7 @@ module LambdaPi
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Context, Eval (..), eval, nf, whnf)
+import FreeFoil.NbE (Definitions, Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
 import qualified FreeFoil.NbE.Conversion as Conv
 
@@ -86,7 +87,7 @@ type Value = NbE.Value FFPattern TermSig
 -- under its captured environment extended with the argument; a neutral head
 -- rebuilds the application. @Lam@ and @Pi@ fall through to the default, so a
 -- @Pi@ keeps its domain as a value and its codomain suspended.
-instance Context ctx => Eval ctx FFPattern TermSig where
+instance Definitions ctx FFPattern TermSig => Eval ctx FFPattern TermSig where
   evalSig ctx env = \case
     AppSig fun arg -> appValue ctx (eval ctx env fun) (eval ctx env arg)
     node -> NbE.evalNode ctx env node
@@ -99,7 +100,7 @@ instance Context ctx => Eval ctx FFPattern TermSig where
 -- | Apply a function value to an argument value: a suspended lambda is
 -- entered under its environment extended with the argument, any other
 -- function is a stuck application.
-appValue :: (Context ctx, Distinct n) => ctx n -> Value n -> Value n -> Value n
+appValue :: (Definitions ctx FFPattern TermSig, Distinct n) => ctx n -> Value n -> Value n -> Value n
 -- The helper takes the context, so it needs the pragma as 'eval' does; a
 -- call with the context's dictionary and a bound 'Distinct' one is not
 -- specialised on its own, and the β path would pass dictionaries.

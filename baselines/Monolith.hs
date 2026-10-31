@@ -5,6 +5,7 @@
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE UndecidableInstances  #-}
 {-# OPTIONS_GHC -Wno-orphans #-}  -- the Eval instance belongs with the rules
 -- | The monolithic demonstration language: functions, pairs and natural
 -- numbers in one signature, written the way a language is written without
@@ -41,7 +42,7 @@ module Monolith
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Context, Eval (..), eval, nf, whnf)
+import FreeFoil.NbE (Definitions, Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
 import qualified FreeFoil.NbE.Conversion as Conv
 
@@ -68,7 +69,7 @@ numeral k = iterate Suc Zero !! k
 -- | The three elimination rules, side by side, each as in its standalone
 -- language: β, the projections and @split@, and primitive recursion. A
 -- binder of the wrong shape is an error.
-instance Context ctx => Eval ctx Pattern TermSig where
+instance Definitions ctx Pattern TermSig => Eval ctx Pattern TermSig where
   evalSig ctx env = \case
     AppSig fun arg ->
       case eval ctx env fun of

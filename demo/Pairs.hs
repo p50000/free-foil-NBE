@@ -6,6 +6,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE UndecidableInstances  #-}
 -- The Eval instance is an orphan on purpose: it belongs with the language's
 -- dynamics, next to the reference normaliser.
 {-# OPTIONS_GHC -Wno-orphans #-}
@@ -37,7 +38,7 @@ module Pairs
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Context, Eval (..), eval, nf, whnf)
+import FreeFoil.NbE (Definitions, Eval (..), eval, nf, whnf)
 import qualified FreeFoil.NbE as NbE
 
 import Pairs.Generated
@@ -92,7 +93,7 @@ type Value = NbE.Value FFPattern TermSig
 -- evaluated, so readback normalises under its two names. A pair falls
 -- through to the default and becomes a 'NbE.VNode' whose components are
 -- lazy values.
-instance Context ctx => Eval ctx FFPattern TermSig where
+instance Definitions ctx FFPattern TermSig => Eval ctx FFPattern TermSig where
   evalSig ctx env = \case
     FstSig p -> fstValue (eval ctx env p)
     SndSig p -> sndValue (eval ctx env p)
