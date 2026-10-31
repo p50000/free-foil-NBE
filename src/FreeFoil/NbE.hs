@@ -44,12 +44,17 @@
 -- > {-# SPECIALIZE NbE.quote :: Distinct n => Scope n -> Value n -> Term n #-}
 --
 -- and likewise 'FreeFoil.NbE.Conversion.conv' and
--- 'FreeFoil.NbE.Conversion.convertible', and a helper of its own that takes
--- the context, such as an application of values shared by β and the η
--- observer. Without the pragmas the monolithic demonstration language is
--- 1.25× to 1.4× slower: GHC's own specialisation at a call site fixes the
--- scope too, so it ends at the first binder, and it never specialises the
--- calls to 'eval' inside the instance.
+-- 'FreeFoil.NbE.Conversion.convertible'. Without the pragmas the monolithic
+-- demonstration language is 1.25× to 1.4× slower: GHC's own specialisation
+-- at a call site fixes the scope too, so it ends at the first binder, and it
+-- never specialises the calls to 'eval' inside the instance.
+--
+-- A client with a context of its own gives the same pragmas at its context.
+-- For them to reach the rules, the instance marks 'evalSig' and
+-- 'etaMatchWith' @INLINABLE@, and a helper of the language that takes the
+-- context, such as an application of values shared by β and the η observer,
+-- is @INLINE@. Otherwise every node runs the unspecialised evaluator, which
+-- makes lambda-pi 1.7× slower on Church numerals.
 module FreeFoil.NbE
   ( -- * Semantic domain
     Value (..)
@@ -193,7 +198,7 @@ newtype EtaScoped ctx binder sig n =
 -- 'evalNode'. The node arrives raw so that a redex never builds the
 -- interpreted node it would discard. The instance upholds the 'Value'
 -- invariant; "LambdaPi" is a one-rule example. An instance comes with the
--- @SPECIALIZE@ pragmas shown in the module header.
+-- pragmas described in the module header.
 class (Definitions ctx binder sig, Bifunctor sig, Bifoldable sig) => Eval ctx binder sig where
   evalSig ::
     (Foil.Distinct o, Foil.Distinct i) =>
