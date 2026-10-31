@@ -122,12 +122,10 @@ instance Bifunctor sig => Foil.Sinkable (Value binder sig) where
 
 -- * Context
 
--- | What evaluation, readback and conversion carry besides the environment:
--- the client's context, indexed by the scope. The library asks two things
--- of it, its scope and how a binder extends it. 'Foil.Scope' is the instance
--- the library uses; a client's type may hold more, the values of free names,
--- types, topes, and the type stays the client's, so that a later design may
--- index it further.
+-- | The context that evaluation, readback and conversion carry, indexed by
+-- the scope. Under a binder the core extends it with 'extendContext',
+-- passing the scope under the binder, and relies on 'contextScope' of the
+-- result being that scope. 'Foil.Scope' is the simplest instance.
 class Context ctx where
   -- | The scope of the context.
   contextScope :: ctx n -> Foil.Scope n
