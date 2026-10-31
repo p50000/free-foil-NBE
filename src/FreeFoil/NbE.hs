@@ -27,7 +27,7 @@
 --
 -- Evaluation, readback and conversion carry a context the client supplies
 -- ('Context'). The core is polymorphic in the context, and a language states
--- in its 'Eval' instance what it needs of it; a context may give the free
+-- in its 'Eval' instance what it needs of it. A context may give the free
 -- names of a language values ('Definitions'). The demonstration languages
 -- use a free-foil 'Foil.Scope', which defines nothing.
 --
@@ -227,7 +227,7 @@ class (Definitions ctx binder sig, Bifunctor sig, Bifoldable sig) => Eval ctx bi
 
 -- | Evaluate a term under an environment: look variables up, hand nodes to
 -- 'evalSig'. A variable that the environment does not map stands for itself,
--- a free name; a free name the context defines unfolds to its value, any
+-- a free name. A free name the context defines unfolds to its value, any
 -- other is a neutral.
 eval ::
   (Eval ctx binder sig, Foil.Distinct o, Foil.Distinct i) =>
