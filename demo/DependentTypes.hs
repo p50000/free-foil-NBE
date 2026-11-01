@@ -263,19 +263,19 @@ firstOf :: HasTypes ctx => Scope n -> ctx n -> Value n -> Value n
 {-# INLINE firstOf #-}
 firstOf _ ctx p = case typeOfValue ctx p of
   NbE.VSuspended _ (AnnSig _ (SigmaSig a _)) -> firstValue (HasType a) p
-  _ -> notOfPairType
+  _ -> impossibleNonSigmaType
 
 secondOf :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> Value n -> Value n
 {-# INLINE secondOf #-}
 secondOf scope ctx p = case typeOfValue ctx p of
   NbE.VSuspended env (AnnSig _ (SigmaSig _ cod)) ->
     secondValue (HasType (codomainAt scope ctx env cod (firstOf scope ctx p))) p
-  _ -> notOfPairType
+  _ -> impossibleNonSigmaType
 
 -- | Impossible: conversion compares two values of one type, so the value
 -- that η compares with a pair has the pair's type, which is a Σ.
-notOfPairType :: a
-notOfPairType = error "DependentTypes: impossible: η for a pair against a value whose type is not a Σ"
+impossibleNonSigmaType :: a
+impossibleNonSigmaType = error "DependentTypes: impossible: η for a pair against a value whose type is not a Σ"
 
 -- | The type of a value: of a variable from the context, of a node from its
 -- annotation.
