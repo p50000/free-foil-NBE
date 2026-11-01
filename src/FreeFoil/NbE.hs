@@ -447,17 +447,19 @@ quote ::
   Value binder sig n ->
   AST binder sig n
 {-# INLINABLE quote #-}
-quote scope ctx value = readHead (refine scope ctx value)
+quote scope ctx value = readHead scope ctx (refine scope ctx value)
   where
     -- A value read back without refining it: a head ('headsWith'), or a
     -- value refined already. Its heads are read back the same way, every
     -- other position with 'quote'. The function is local, so that a
-    -- specialisation of 'quote' covers it.
-    readHead = \case
+    -- specialisation of 'quote' covers it. It closes over nothing, so that it
+    -- is not allocated at every call.
+    readHead :: Foil.Distinct l => Foil.Scope l -> ctx l -> Value binder sig l -> AST binder sig l
+    readHead s c = \case
       VVar x -> Var x
-      VNode node -> Node $! bimap absurd id (headsWith readHead (quote scope ctx) node)
+      VNode node -> Node $! bimap absurd id (headsWith (readHead s c) (quote s c) node)
       VSuspended env node ->
-        Node $! headsWith readHead (quote scope ctx) (extendScopedWith (quoteScoped scope ctx env) id node)
+        Node $! headsWith (readHead s c) (quote s c) (extendScopedWith (quoteScoped s c env) id node)
 
 -- | Read back one scoped subterm of a suspended node: refresh the binder,
 -- extend the context with the position's 'Extend' and the captured
@@ -516,16 +518,17 @@ quoteWhnf ::
   AST binder sig n
 quoteWhnf scope ctx value = case refine scope ctx value of
   VVar x -> Var x
-  VNode node -> Node $ bimap absurd id (headsWith readHead (quote scope ctx) node)
+  VNode node -> Node $ bimap absurd id (headsWith (readHead scope ctx) (quote scope ctx) node)
   VSuspended env node ->
-    Node $ bimap (freezeScoped scope ctx env) id (headsWith readHead (quote scope ctx) node)
+    Node $ bimap (freezeScoped scope ctx env) id (headsWith (readHead scope ctx) (quote scope ctx) node)
   where
     -- A head, read back fully but not refined (see 'quote').
-    readHead = \case
+    readHead :: Foil.Distinct l => Foil.Scope l -> ctx l -> Value binder sig l -> AST binder sig l
+    readHead s c = \case
       VVar x -> Var x
-      VNode node -> Node $! bimap absurd id (headsWith readHead (quote scope ctx) node)
+      VNode node -> Node $! bimap absurd id (headsWith (readHead s c) (quote s c) node)
       VSuspended env node ->
-        Node $! headsWith readHead (quote scope ctx) (extendScopedWith (quoteScoped scope ctx env) id node)
+        Node $! headsWith (readHead s c) (quote s c) (extendScopedWith (quoteScoped s c env) id node)
 
 -- | Freeze one scoped subterm of a suspended node without evaluating under
 -- its binder: refresh the binder and substitute the captured environment,

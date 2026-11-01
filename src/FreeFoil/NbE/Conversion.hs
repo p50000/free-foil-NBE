@@ -60,27 +60,29 @@ conv ::
   Value binder sig n ->
   Bool
 {-# INLINABLE conv #-}
-conv scope ctx l0 r0 = sameHead (refine scope ctx l0) (refine scope ctx r0)
+conv scope ctx l0 r0 = sameHead scope ctx (refine scope ctx l0) (refine scope ctx r0)
   where
     -- Two values compared without refining them: heads ('headsWith'), or
     -- values refined already. Their heads are compared the same way, every
     -- other position with 'conv'. The function is local, so that a
-    -- specialisation of 'conv' covers it.
-    sameHead l r = case (l, r) of
+    -- specialisation of 'conv' covers it. It closes over nothing, so that it
+    -- is not allocated at every call.
+    sameHead :: Foil.Distinct l => Foil.Scope l -> ctx l -> Value binder sig l -> Value binder sig l -> Bool
+    sameHead scope' ctx' l r = case (l, r) of
       (VVar x, VVar y) -> x == y
       (VNode a, VNode b)
-        | Just same <- zipMatchAll2 (\v _ -> absurd v) ($) (headsWith sameHead (conv scope ctx) a) b -> same
+        | Just same <- zipMatchAll2 (\v _ -> absurd v) ($) (headsWith (sameHead scope' ctx') (conv scope' ctx') a) b -> same
       -- The left node gives each scoped position its extension of the
       -- context and each term position its comparison, as functions of the
       -- right position. When the methods inline, the intermediate node does
       -- not survive.
       (VSuspended envL a, VSuspended envR b)
         | Just same <- zipMatchAll2 ($) ($)
-            (headsWith sameHead (conv scope ctx) (extendScopedWith (convScoped scope ctx envL envR) id a)) b -> same
+            (headsWith (sameHead scope' ctx') (conv scope' ctx') (extendScopedWith (convScoped scope' ctx' envL envR) id a)) b -> same
       -- Nodes of different constructors are compared by η. A node goes to
       -- 'VNode' exactly when it has no scoped subterms, so a 'VNode' and a
       -- 'VSuspended' never have the same constructor.
-      _ -> convEta scope ctx l r || convEta scope ctx r l
+      _ -> convEta scope' ctx' l r || convEta scope' ctx' r l
 
 -- | One step of η: each position of an introduction form with an η law
 -- against the other value observed at that position. 'False' for any other
