@@ -7,9 +7,8 @@
 -- elaboration compares them with the language's own conversion, in the
 -- context of the types of the names in scope.
 --
--- The universe has itself as its type, and @split@ is checked against the
--- type of its result, not inferred. A pair is checked against a Σ type and
--- a λ against a Π type. Every other term is inferred, then compared with
+-- The universe has itself as its type. A pair is checked against a Σ type
+-- and a λ against a Π type. Every other term is inferred, then compared with
 -- the type it is checked against.
 --
 -- The algorithm is the standard bidirectional one (see the survey of
@@ -42,21 +41,6 @@ check scope typing term ty = case term of
       b' <- check scope typing b (codomainAt scope typing ty (evalIn scope typing a'))
       pure (node (PairSig a' b'))
     _ -> Left ("a pair against a type that is not a Σ: " ++ show (quoteIn scope typing ty))
-  Node (SplitSig p pTy (ScopedAST pat body)) -> case pat of
-    FFPatternPair x y -> case (assertDistinct x, assertExt x, assertDistinct pat, assertExt pat, assertExt y) of
-      (Distinct, Ext, Distinct, Ext, Ext) -> do
-        pTy' <- check scope typing pTy universe
-        let pTyV = evalIn scope typing pTy'
-        a <- case pTyV of
-          NbE.VSuspended _ (AnnSig _ (SigmaSig a _)) -> Right a
-          _ -> Left ("split of a value whose type is not a Σ: " ++ show pTy')
-        p' <- check scope typing p pTyV
-        let scopeX = extendScope x scope
-            typingX = assume x a typing
-            typingY = assume y (codomainAt scopeX typingX (sink pTyV) (NbE.VVar (nameOf x))) typingX
-        body' <- check (extendScope y scopeX) typingY body (sink ty)
-        pure (annotated (quoteIn scope typing ty) (SplitSig p' pTy' (ScopedAST pat body')))
-    FFPatternVar _ -> Left "split binds two names"
   Node (LamSig dom (ScopedAST pat body))
     | NbE.VSuspended _ (AnnSig _ (PiSig piDom _)) <- ty -> case pat of
         FFPatternVar x -> case (assertDistinct x, assertExt x) of
@@ -70,7 +54,6 @@ check scope typing term ty = case term of
                 body' <- check scope' typing' body (codomainAt scope' typing' (sink ty) (NbE.VVar (nameOf x)))
                 pure (node (LamSig dom' (ScopedAST pat body')))
               else Left ("the domain " ++ show dom' ++ " is not " ++ show (quoteIn scope typing piDom))
-        FFPatternPair _ _ -> Left "a λ binds one name"
   _ -> do
     (term', ty') <- infer scope typing term
     if Conv.conv scope typing ty' ty
@@ -102,11 +85,25 @@ infer scope typing = \case
         (body', bodyTy) <- infer scope' typing' body
         let piTy = node (PiSig dom' (ScopedAST pat (quoteIn scope' typing' bodyTy)))
         pure (node (LamSig dom' (ScopedAST pat body')), evalIn scope typing piTy)
-    FFPatternPair _ _ -> Left "a λ binds one name"
   Node (PiSig dom (ScopedAST pat cod)) -> typeFormer PiSig scope typing dom pat cod
   Node (SigmaSig dom (ScopedAST pat cod)) -> typeFormer SigmaSig scope typing dom pat cod
+  Node (FirstSig p) -> do
+    (p', _, a) <- inferPair scope typing p
+    pure (annotated (quoteIn scope typing a) (FirstSig p'), a)
+  Node (SecondSig p) -> do
+    (p', ty, a) <- inferPair scope typing p
+    let first = evalIn scope typing (annotated (quoteIn scope typing a) (FirstSig p'))
+        b = codomainAt scope typing ty first
+    pure (annotated (quoteIn scope typing b) (SecondSig p'), b)
   Node (PairSig _ _) -> Left "the type of a pair is not inferred; check it against a Σ type"
-  Node (SplitSig {}) -> Left "the type of a split is not inferred; check it against a type"
+
+-- | Infer the type of a term that is projected: a Σ type, and its domain.
+inferPair :: Distinct n => Scope n -> Typing n -> Raw n -> Either String (Elaborated n, Value n, Value n)
+inferPair scope typing p = do
+  (p', ty) <- infer scope typing p
+  case ty of
+    NbE.VSuspended _ (AnnSig _ (SigmaSig a _)) -> pure (p', ty, a)
+    _ -> Left ("not a pair: " ++ show p')
 
 -- | A Π or Σ type: its domain is a type, and so is its codomain under the
 -- bound name.
@@ -120,7 +117,6 @@ typeFormer former scope typing dom pat cod = case pat of
       dom' <- check scope typing dom universe
       cod' <- check (extendScope x scope) (assume x (evalIn scope typing dom') typing) cod universe
       pure (node (former dom' (ScopedAST pat cod')), universe)
-  FFPatternPair _ _ -> Left "a Π or Σ binds one name"
 
 -- | Elaborate a closed term against a closed type, both parsed from strings.
 -- The result is the elaborated term and its type.

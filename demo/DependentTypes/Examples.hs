@@ -8,8 +8,8 @@ module DependentTypes.Examples
   , unitResult
   , functionEta
   , unitFunctionEta
-  , splitComponents
-  , splitOfPair
+  , secondComponent
+  , firstOfPair
   , redexInDomain
   , examples
   , Conversion (..)
@@ -48,20 +48,20 @@ unitFunctionEta =
     "(f : (x : Unit) -> Unit) -> (x : Unit) -> Unit"
     "\\(f : (x : Unit) -> Unit). \\(x : Unit). tt"
 
--- | Under a stuck @split@, the second component has the type of the
--- codomain at the first, here @(\\(z : A). Unit) x@, which is @Unit@.
-splitComponents :: Example
-splitComponents =
+-- | The second component of a neutral pair has the type of the codomain at
+-- the first, here @(\\(z : A). Unit) (first p)@, which is @Unit@.
+secondComponent :: Example
+secondComponent =
   Example
-    "\\(A : U). \\(p : (a : A) * ((\\(z : A). Unit) a)). split p : (a : A) * ((\\(z : A). Unit) a) as (x, y) in (y, y)"
-    "(A : U) -> (p : (a : A) * ((\\(z : A). Unit) a)) -> (u : Unit) * Unit"
-    "\\(A : U). \\(p : (a : A) * Unit). split p : (a : A) * Unit as (x, y) in (tt, tt)"
+    "\\(A : U). \\(p : (a : A) * ((\\(z : A). Unit) a)). second p"
+    "(A : U) -> (p : (a : A) * ((\\(z : A). Unit) a)) -> Unit"
+    "\\(A : U). \\(p : (a : A) * Unit). tt"
 
--- | A @split@ of a pair reduces.
-splitOfPair :: Example
-splitOfPair =
+-- | A projection of a pair reduces.
+firstOfPair :: Example
+firstOfPair =
   Example
-    "\\(A : U). \\(a : A). split (a, tt) : (x : A) * Unit as (x, y) in x"
+    "\\(A : U). \\(a : A). (\\(p : (x : A) * Unit). first p) (a, tt)"
     "(A : U) -> (a : A) -> A"
     "\\(A : U). \\(a : A). a"
 
@@ -81,8 +81,8 @@ examples =
   , ("unitResult",      unitResult)
   , ("functionEta",     functionEta)
   , ("unitFunctionEta", unitFunctionEta)
-  , ("splitComponents", splitComponents)
-  , ("splitOfPair",     splitOfPair)
+  , ("secondComponent", secondComponent)
+  , ("firstOfPair",     firstOfPair)
   , ("redexInDomain",   redexInDomain)
   ]
 
@@ -103,10 +103,22 @@ conversions =
     , Conversion "(x : Unit) -> (y : Unit) -> Unit" "\\(x : Unit). \\(y : Unit). x" "\\(x : Unit). \\(y : Unit). y" True )
   , ( "two variables of a type variable"
     , Conversion "(A : U) -> (x : A) -> (y : A) -> A" "\\(A : U). \\(x : A). \\(y : A). x" "\\(A : U). \\(x : A). \\(y : A). y" False )
-  , ( "the components of a stuck split of a unit pair"
+  , ( "a pair variable and the pair of its projections"
+    , Conversion
+        "(A : U) -> (B : (x : A) -> U) -> (p : (x : A) * B x) -> (x : A) * B x"
+        "\\(A : U). \\(B : (x : A) -> U). \\(p : (x : A) * B x). p"
+        "\\(A : U). \\(B : (x : A) -> U). \\(p : (x : A) * B x). (first p, second p)"
+        True )
+  , ( "a pair variable of unit components and the pair of units"
     , Conversion
         "(p : (u : Unit) * Unit) -> (u : Unit) * Unit"
-        "\\(p : (u : Unit) * Unit). split p : (u : Unit) * Unit as (x, y) in (x, y)"
-        "\\(p : (u : Unit) * Unit). split p : (u : Unit) * Unit as (x, y) in (y, x)"
+        "\\(p : (u : Unit) * Unit). p"
+        "\\(p : (u : Unit) * Unit). (tt, tt)"
         True )
+  , ( "a pair variable and its components swapped"
+    , Conversion
+        "(A : U) -> (p : (x : A) * A) -> (x : A) * A"
+        "\\(A : U). \\(p : (x : A) * A). p"
+        "\\(A : U). \\(p : (x : A) * A). (second p, first p)"
+        False )
   ]

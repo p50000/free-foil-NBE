@@ -1,10 +1,10 @@
 {-# LANGUAGE DataKinds #-}
--- | Parsing terms of the dependent types language from strings: the BNFC-generated lexer and
--- parser plus free-foil's generated scope resolution, through
--- "Demo.Parsing". @\\(x : A). t@ is a lambda, @(x : A) -> B@ a function type,
--- @(x : A) * B@ a pair type, @(a, b)@ a pair,
--- @split p : (x : A) * B as (x, y) in t@ takes a pair apart, @U@ is the
--- universe, @Unit@ the unit type and @tt@ its value. The terms are raw:
+-- | Parsing terms of the dependent types language from strings: the
+-- BNFC-generated lexer and parser plus free-foil's generated scope
+-- resolution, through "Demo.Parsing". @\\(x : A). t@ is a lambda,
+-- @(x : A) -> B@ a function type, @(x : A) * B@ a pair type, @(a, b)@ a
+-- pair, @first p@ and @second p@ its components, @U@ is the universe, @Unit@
+-- the unit type and @tt@ its value. The terms are raw:
 -- "DependentTypes.Elaborate" elaborates them.
 module DependentTypes.Parser
   ( parseOpen

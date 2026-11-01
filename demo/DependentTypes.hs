@@ -12,24 +12,23 @@
 -- | Dependent functions and pairs over a universe, with a unit type: a
 -- language whose context holds types. Its terms are elaborated (see
 -- "DependentTypes.Elaborate"): every binder carries its type, and an
--- eliminator, an application or a @split@, carries the type of its result
--- as free-foil's annotation. Every other node is annotated 'Nothing'.
+-- eliminator, an application or a projection, carries the type of its
+-- result as free-foil's annotation. Every other node is annotated 'Nothing'.
+-- Under a binder the language gives the bound name its type, the domain of
+-- the @λ@, @Π@ or @Σ@ ('NbE.extendScopedWith').
 --
--- Under a binder the language gives its names their types
--- ('NbE.extendScopedWith'): the domain under @λ@, @Π@ and @Σ@, and under
--- @split p : (a : A) * B as (x, y) in t@ the type @A@ for @x@ and @B@ at @x@
--- for @y@, evaluated in the context that already has @x@.
---
--- The types decide η ('NbE.refineVar', 'NbE.refineSig'). A neutral of type
+-- The language uses both sides of η. The types decide η for functions and
+-- the unit type ('NbE.refineVar', 'NbE.refineSig'): a neutral of type
 -- @Unit@ is @tt@, and a neutral @f@ of type @(x : A) -> B@ is
 -- @\\(x : A). f x@. A variable finds its type in the context, an eliminator
--- in its annotation. So in a context of
--- types ('Typing') @\\(x : Unit). x@ normalises to @\\(x : Unit). tt@, while
--- with 'NbE.NoContext' variables have no types. Pairs have no η, since the
--- language has no projections.
+-- in its annotation. So in a context of types ('Typing') @\\(x : Unit). x@
+-- normalises to @\\(x : Unit). tt@, while with 'NbE.NoContext' variables
+-- have no types. Pairs have η by shape ('NbE.etaMatchWith'): conversion
+-- compares a pair with another value through the projections, so @p@ and
+-- @(first p, second p)@ are convertible, and @p@ is a normal form.
 --
--- The grammar follows the monolithic language's, and the modules follow
--- Renata Shakirova's pairs language.
+-- The grammar follows the monolithic language's, with the projections
+-- named as in Rzk, and the modules follow Renata Shakirova's pairs language.
 module DependentTypes
   ( -- * Terms
     Sig
@@ -132,55 +131,56 @@ instance HasDefinitions Typing FFPattern Sig where
 {-# SPECIALIZE NbE.quote :: Distinct n => Scope n -> Typing n -> Value n -> Elaborated n #-}
 {-# SPECIALIZE Conv.conv :: Distinct n => Scope n -> Typing n -> Value n -> Value n -> Bool #-}
 
--- | The heads are the function of an application and the scrutinee of
--- @split@, which η-expansion leaves alone.
+-- | The heads are the function of an application and the pair of a
+-- projection, which refinement leaves alone.
 instance HasHeads TermSig where
   {-# INLINE headsWith #-}
   headsWith hd other = \case
-    AppSig fun arg     -> AppSig (hd fun) (other arg)
-    SplitSig p ty body -> SplitSig (hd p) (other ty) body
-    node               -> bimap id other node
+    AppSig fun arg -> AppSig (hd fun) (other arg)
+    FirstSig p     -> FirstSig (hd p)
+    SecondSig p    -> SecondSig (hd p)
+    node           -> bimap id other node
 
--- | β for functions and for @split@ of a pair, the types of bound names,
--- and η at the types of introduction forms.
+-- | β for functions and for projections of a pair, the types of bound
+-- names, η at the types of functions and of the unit type, and η of pairs
+-- by shape.
 instance (HasTypes ctx, HasDefinitions ctx FFPattern Sig) => Eval ctx FFPattern Sig where
   {-# INLINABLE evalSig #-}
   evalSig scope ctx env (AnnSig ann node) = case node of
     AppSig fun arg ->
       appValue (fmap (NbE.eval scope ctx env) ann) scope ctx (NbE.eval scope ctx env fun) (NbE.eval scope ctx env arg)
-    SplitSig p ty (ScopedAST pat body) ->
-      case NbE.eval scope ctx env p of
-        NbE.VNode (AnnSig _ (PairSig a b)) -> case pat of
-          FFPatternPair x y -> case assertDistinct (FFPatternPair x y) of
-            Distinct -> NbE.eval scope ctx (addSubst (addSubst env x a) y b) body
-          FFPatternVar _ -> error "DependentTypes: split binds two names"
-        p' -> NbE.VSuspended env
-                (AnnSig (fmap (NbE.eval scope ctx env) ann)
-                  (SplitSig p' (NbE.eval scope ctx env ty) (ScopedAST pat body)))
+    FirstSig p  -> firstValue (fmap (NbE.eval scope ctx env) ann) (NbE.eval scope ctx env p)
+    SecondSig p -> secondValue (fmap (NbE.eval scope ctx env) ann) (NbE.eval scope ctx env p)
     _ -> NbE.evalNode scope ctx env (AnnSig ann node)
+
+  {-# INLINE etaMatchWith #-}
+  etaMatchWith _ term (AnnSig _ node) = case node of
+    PairSig a b -> Just (AnnSig Nothing (PairSig (term a (NbE.EtaTerm firstOf)) (term b (NbE.EtaTerm secondOf))))
+    _ -> Nothing
 
   {-# INLINE extendScopedWith #-}
   extendScopedWith scoped term (AnnSig ann node) = AnnSig (fmap term ann) $ case node of
-    LamSig dom body    -> LamSig (term dom) (scoped body (assumeVar dom))
-    PiSig dom body     -> PiSig (term dom) (scoped body (assumeVar dom))
-    SigmaSig dom body  -> SigmaSig (term dom) (scoped body (assumeVar dom))
-    SplitSig p ty body -> SplitSig (term p) (term ty) (scoped body (assumeComponents ty))
-    AppSig fun arg     -> AppSig (term fun) (term arg)
-    PairSig a b        -> PairSig (term a) (term b)
-    UniverseSig        -> UniverseSig
-    UnitSig            -> UnitSig
-    TTSig              -> TTSig
+    LamSig dom body   -> LamSig (term dom) (scoped body (assumeVar dom))
+    PiSig dom body    -> PiSig (term dom) (scoped body (assumeVar dom))
+    SigmaSig dom body -> SigmaSig (term dom) (scoped body (assumeVar dom))
+    AppSig fun arg    -> AppSig (term fun) (term arg)
+    FirstSig p        -> FirstSig (term p)
+    SecondSig p       -> SecondSig (term p)
+    PairSig a b       -> PairSig (term a) (term b)
+    UniverseSig       -> UniverseSig
+    UnitSig           -> UnitSig
+    TTSig             -> TTSig
 
   {-# INLINABLE refineVar #-}
   refineVar scope ctx x = case typeOfName ctx x of
     Just ty -> expandAt scope ctx (NbE.VVar x) ty
     Nothing -> NbE.VVar x
 
+  -- Only an eliminator has an annotation.
   {-# INLINABLE refineSig #-}
-  refineSig scope ctx value (AnnSig ann node) = case (ann, node) of
-    (Just ty, AppSig {})   -> expandAt scope ctx value ty
-    (Just ty, SplitSig {}) -> expandAt scope ctx value ty
-    _                      -> value
+  refineSig scope ctx value (AnnSig ann _) = case ann of
+    Just ty -> expandAt scope ctx value ty
+    Nothing -> value
 
 -- | Apply a function value to an argument value: a suspended lambda is
 -- entered under its environment extended with the argument, any other
@@ -195,25 +195,46 @@ appValue ann scope ctx fun arg = case fun of
       Distinct -> NbE.eval scope ctx (addSubst env x arg) body
   _ -> NbE.VNode (AnnSig ann (AppSig fun arg))
 
+-- | The first component of a pair value. Any other value gives a stuck
+-- projection of the type in the annotation.
+firstValue :: Maybe (Value n) -> Value n -> Value n
+firstValue ann p = case p of
+  NbE.VNode (AnnSig _ (PairSig a _)) -> a
+  _ -> NbE.VNode (AnnSig ann (FirstSig p))
+
+-- | The second component of a pair value, like 'firstValue'.
+secondValue :: Maybe (Value n) -> Value n -> Value n
+secondValue ann p = case p of
+  NbE.VNode (AnnSig _ (PairSig _ b)) -> b
+  _ -> NbE.VNode (AnnSig ann (SecondSig p))
+
+-- | The projections that compare a pair with another value by η. A
+-- projection of a neutral whose type is known is annotated with its type,
+-- so that it is refined as well.
+firstOf :: (HasTypes ctx, Distinct n) => Scope n -> ctx n -> Value n -> Value n
+firstOf _ ctx p = firstValue (typeOfNeutral ctx p >>= sigmaDomain) p
+
+secondOf :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> Value n -> Value n
+secondOf scope ctx p = secondValue (fmap (\ty -> codomainAt scope ctx ty (firstOf scope ctx p)) (typeOfNeutral ctx p)) p
+
+-- | The type of a neutral: of a variable from the context, of an eliminator
+-- from its annotation.
+typeOfNeutral :: HasTypes ctx => ctx n -> Value n -> Maybe (Value n)
+typeOfNeutral ctx = \case
+  NbE.VVar x -> typeOfName ctx x
+  NbE.VNode (AnnSig ty _) -> ty
+  NbE.VSuspended _ (AnnSig ty _) -> ty
+
+-- | The domain of a Σ type.
+sigmaDomain :: Value n -> Maybe (Value n)
+sigmaDomain = \case
+  NbE.VSuspended _ (AnnSig _ (SigmaSig a _)) -> Just a
+  _ -> Nothing
+
 -- | The binder of one name of a type.
 assumeVar :: HasTypes ctx => Value n -> Extend ctx FFPattern Sig n
 assumeVar ty = Extend $ \_ pat _ ctx -> case pat of
-  FFPatternVar x    -> assume x ty ctx
-  FFPatternPair _ _ -> error "DependentTypes: this binder binds one name"
-
--- | The binder of @split p : (a : A) * B as (x, y) in t@: @x : A@, then
--- @y : B@ at @x@.
-assumeComponents :: HasTypes ctx => Value n -> Extend ctx FFPattern Sig n
-assumeComponents ty = Extend $ \scope pat _ ctx -> case pat of
-  FFPatternPair x y -> case (assertDistinct x, assertExt x, assertExt y) of
-    (Distinct, Ext, Ext) ->
-      let ctxX = assume x (firstComponent ty) ctx
-      in assume y (codomainAt (extendScope x scope) ctxX (sink ty) (NbE.VVar (nameOf x))) ctxX
-  FFPatternVar _ -> error "DependentTypes: split binds two names"
-  where
-    firstComponent = \case
-      NbE.VSuspended _ (AnnSig _ (SigmaSig a _)) -> a
-      _ -> error "DependentTypes: split of a value whose type is not a Σ"
+  FFPatternVar x -> assume x ty ctx
 
 -- | The codomain of a Π or Σ type at a value.
 codomainAt :: forall ctx n. (Eval ctx FFPattern Sig, Distinct n) => Scope n -> ctx n -> Value n -> Value n -> Value n

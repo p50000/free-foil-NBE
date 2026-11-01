@@ -43,8 +43,8 @@ tests =
             rejects "\\(x : Unit). x" "(x : U) -> U"
         , testCase "an application of a non-function" $
             rejects "tt tt" "Unit"
-        , testCase "a split of a value that is not of a Σ type" $
-            rejects "\\(x : Unit). split x : Unit as (a, b) in a" "(x : Unit) -> Unit"
+        , testCase "a projection of a value that is not of a Σ type" $
+            rejects "\\(x : Unit). first x" "(x : Unit) -> Unit"
         ]
     ]
   where

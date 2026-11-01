@@ -17,16 +17,17 @@ data Term
     | TT
     | Pair Term Term
     | App Term Term
+    | First Term
+    | Second Term
     | Lam Pattern Term ScopedTerm
     | Pi Pattern Term ScopedTerm
     | Sigma Pattern Term ScopedTerm
-    | Split Term Term Pattern ScopedTerm
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
 data ScopedTerm = AScopedTerm Term
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
-data Pattern = PatternVar VarIdent | PatternPair VarIdent VarIdent
+data Pattern = PatternVar VarIdent
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
 newtype VarIdent = VarIdent String

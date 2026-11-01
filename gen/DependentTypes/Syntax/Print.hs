@@ -144,10 +144,11 @@ instance Print DependentTypes.Syntax.Abs.Term where
     DependentTypes.Syntax.Abs.TT -> prPrec i 2 (concatD [doc (showString "tt")])
     DependentTypes.Syntax.Abs.Pair term1 term2 -> prPrec i 2 (concatD [doc (showString "("), prt 0 term1, doc (showString ","), prt 0 term2, doc (showString ")")])
     DependentTypes.Syntax.Abs.App term1 term2 -> prPrec i 1 (concatD [prt 1 term1, prt 2 term2])
+    DependentTypes.Syntax.Abs.First term -> prPrec i 1 (concatD [doc (showString "first"), prt 2 term])
+    DependentTypes.Syntax.Abs.Second term -> prPrec i 1 (concatD [doc (showString "second"), prt 2 term])
     DependentTypes.Syntax.Abs.Lam pattern_ term scopedterm -> prPrec i 0 (concatD [doc (showString "\\"), doc (showString "("), prt 0 pattern_, doc (showString ":"), prt 0 term, doc (showString ")"), doc (showString "."), prt 0 scopedterm])
     DependentTypes.Syntax.Abs.Pi pattern_ term scopedterm -> prPrec i 0 (concatD [doc (showString "("), prt 0 pattern_, doc (showString ":"), prt 0 term, doc (showString ")"), doc (showString "->"), prt 0 scopedterm])
     DependentTypes.Syntax.Abs.Sigma pattern_ term scopedterm -> prPrec i 0 (concatD [doc (showString "("), prt 0 pattern_, doc (showString ":"), prt 0 term, doc (showString ")"), doc (showString "*"), prt 0 scopedterm])
-    DependentTypes.Syntax.Abs.Split term1 term2 pattern_ scopedterm -> prPrec i 0 (concatD [doc (showString "split"), prt 0 term1, doc (showString ":"), prt 0 term2, doc (showString "as"), prt 0 pattern_, doc (showString "in"), prt 0 scopedterm])
 
 instance Print DependentTypes.Syntax.Abs.ScopedTerm where
   prt i = \case
@@ -156,4 +157,3 @@ instance Print DependentTypes.Syntax.Abs.ScopedTerm where
 instance Print DependentTypes.Syntax.Abs.Pattern where
   prt i = \case
     DependentTypes.Syntax.Abs.PatternVar varident -> prPrec i 0 (concatD [prt 0 varident])
-    DependentTypes.Syntax.Abs.PatternPair varident1 varident2 -> prPrec i 0 (concatD [doc (showString "("), prt 0 varident1, doc (showString ","), prt 0 varident2, doc (showString ")")])
