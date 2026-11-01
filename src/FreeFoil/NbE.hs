@@ -213,9 +213,6 @@ newtype EtaScoped ctx binder sig n =
 -- eliminators has no heads, which is the default:
 --
 -- > instance HasHeads TermSig
---
--- The heads are the positions that the higher-order preunification of
--- Kudasov (2022, §4) marks with @HasHead@.
 class Bifunctor sig => HasHeads sig where
   -- | The first function goes to the heads of a node, the second to every
   -- other term position:
