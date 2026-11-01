@@ -10,8 +10,13 @@
 -- term is inferred, then compared with the type it is checked against. The
 -- universe has itself as its type.
 --
--- The algorithm is the standard bidirectional one (see the survey of
--- Dunfield and Krishnaswami, "Bidirectional Typing", 2021).
+-- The algorithm is Coquand's ("An algorithm for type-checking dependent
+-- types", 1996): checking and inference with types as values, a λ checked
+-- against a Π, and an inferred type compared with the expected one by
+-- conversion. Dunfield and Krishnaswami survey bidirectional typing
+-- ("Bidirectional Typing", 2021, §9.1 on this algorithm). The rules for Σ,
+-- pairs, projections and the unit type, and the annotations, are additions
+-- to it.
 module DependentTypes.Elaborate
   ( check
   , infer
