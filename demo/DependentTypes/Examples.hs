@@ -128,6 +128,24 @@ conversions =
         "\\(p : (u : Unit) * Unit). \\(q : (u : Unit) * Unit). p"
         "\\(p : (u : Unit) * Unit). \\(q : (u : Unit) * Unit). q"
         True )
+  , ( "two pair variables whose first components are not of a singleton type"
+    , Conversion
+        "(A : U) -> (p : (x : A) * Unit) -> (q : (x : A) * Unit) -> (x : A) * Unit"
+        "\\(A : U). \\(p : (x : A) * Unit). \\(q : (x : A) * Unit). p"
+        "\\(A : U). \\(p : (x : A) * Unit). \\(q : (x : A) * Unit). q"
+        False )
+  , ( "a pair variable and its first component paired with tt"
+    , Conversion
+        "(A : U) -> (p : (x : A) * Unit) -> (x : A) * Unit"
+        "\\(A : U). \\(p : (x : A) * Unit). p"
+        "\\(A : U). \\(p : (x : A) * Unit). (first p, tt)"
+        True )
+  , ( "two functions whose type becomes a singleton by β"
+    , Conversion
+        "(A : U) -> (f : (y : A) -> Unit) -> (g : (y : A) -> Unit) -> (y : A) -> Unit"
+        "\\(A : U). (\\(B : (x : A) -> U). \\(f : (y : A) -> B y). \\(g : (y : A) -> B y). f) (\\(x : A). Unit)"
+        "\\(A : U). (\\(B : (x : A) -> U). \\(f : (y : A) -> B y). \\(g : (y : A) -> B y). g) (\\(x : A). Unit)"
+        True )
   , ( "a pair variable and its components swapped"
     , Conversion
         "(A : U) -> (p : (x : A) * A) -> (x : A) * A"
