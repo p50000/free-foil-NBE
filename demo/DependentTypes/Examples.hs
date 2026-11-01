@@ -32,13 +32,14 @@ unitResult =
     "(f : (A : U) -> Unit) -> (A : U) -> Unit"
     "\\(f : (A : U) -> Unit). \\(A : U). tt"
 
--- | A variable of a function type is η-expanded.
+-- | A variable of a function type that is not a singleton stays as it is:
+-- η for functions goes by shape, in conversion.
 functionEta :: Example
 functionEta =
   Example
     "\\(A : U). \\(f : (x : A) -> A). f"
     "(A : U) -> (f : (x : A) -> A) -> (x : A) -> A"
-    "\\(A : U). \\(f : (x : A) -> A). \\(x : A). f x"
+    "\\(A : U). \\(f : (x : A) -> A). f"
 
 -- | The two η laws together: a function into the unit type is constant.
 unitFunctionEta :: Example

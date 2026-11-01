@@ -18,11 +18,15 @@
 -- "DependentTypes.Elaborate"). Every node carries its type as free-foil's
 -- annotation ('TypeAnn'), except the universe, whose type is itself.
 --
--- η for functions and the unit type goes by types. In a context of types
--- ('HasTypes'), readback turns a neutral @f : (x : A) -> B@ into
--- @\\(x : A). f x@, and a neutral of type @Unit@ into @tt@. η for pairs goes
--- by shape ('NbE.etaMatchWith'), so @p@ is a normal form, convertible with
--- @(first p, second p)@.
+-- η for functions and pairs goes by shape ('NbE.etaMatchWith'): conversion
+-- compares a λ or a pair with another value through application or the
+-- projections, so @f@ and @p@ are normal forms, convertible with
+-- @\\(x : A). f x@ and @(first p, second p)@. Shape cannot relate two
+-- different neutrals, which differ unless their type is a singleton: @Unit@,
+-- a Π into a singleton, or a Σ of two. A type value records whether it is a
+-- singleton ('IsSingletonType'), and in a context of types ('HasTypes')
+-- readback turns a neutral of a singleton type into that type's one value
+-- ('NbE.refineVar', 'NbE.refineSig'), such as @tt@ or @\\(x : A). tt@.
 --
 -- The grammar follows the monolithic language's, with the projections
 -- named as in Rzk, and the modules follow Renata Shakirova's pairs language.
@@ -38,6 +42,8 @@ module DependentTypes
   , fullyAnnotated
   , universe
   , unitType
+  , typeAnnotation
+  , isSingletonType
     -- * Contexts of types
   , HasTypes (..)
   , Typing
@@ -68,10 +74,15 @@ import qualified FreeFoil.NbE.Conversion as Conv
 
 import DependentTypes.Generated (FFPattern (..), FFTerm, TermSig (..))
 
--- | The annotation of an elaborated node: its type. Only the universe has
--- none, since its type is itself.
+-- | The annotation of an elaborated node: its type, and for a type whether it
+-- is a singleton. Only the universe has no type, since its type is itself.
 data TypeAnn ty
   = HasType ty
+    -- ^ The type of a term, or the universe as the type of a type that is
+    -- not a singleton.
+  | IsSingletonType
+    -- ^ A singleton type, whose type is the universe: @Unit@, a Π into a
+    -- singleton, or a Σ of two.
   | IsUniverse
   deriving (Functor, Foldable, Traversable)
 
@@ -85,6 +96,7 @@ deriveGenericK ''TypeAnn
 instance ZipMatchK TypeAnn where
   zipMatchWithK (f :^: M0) l r = Just $ case (l, r) of
     (HasType a, HasType b) | Just c <- f a b -> HasType c
+    (IsSingletonType, IsSingletonType) -> IsSingletonType
     (IsUniverse, IsUniverse) -> IsUniverse
     _ -> error "DependentTypes: impossible: the paired types of a match are never used"
 
@@ -118,10 +130,15 @@ fullyAnnotated = getAll . getConst . foldAST (\_ -> mempty) (\_ (Const body) -> 
     node :: forall (m :: S). AnnSig TypeAnn TermSig (Const All m) (Const All m) -> Const All m
     node (AnnSig ann t) = Const (All (fits ann t)) <> fold ann <> bifold t
     fits :: TypeAnn a -> TermSig b c -> Bool
-    fits IsUniverse UniverseSig = True
-    fits IsUniverse _           = False
-    fits (HasType _) UniverseSig = False
-    fits (HasType _) _           = True
+    fits IsUniverse UniverseSig      = True
+    fits IsUniverse _                = False
+    fits IsSingletonType UnitSig     = True
+    fits IsSingletonType PiSig {}    = True
+    fits IsSingletonType SigmaSig {} = True
+    fits IsSingletonType _           = False
+    fits (HasType _) UniverseSig     = False
+    fits (HasType _) UnitSig         = False
+    fits (HasType _) _               = True
 
 -- | Terms print without their annotations.
 instance Show (AST FFPattern Sig n) where
@@ -133,13 +150,30 @@ universe = NbE.VNode (AnnSig IsUniverse UniverseSig)
 
 -- | The unit type.
 unitType :: TypeValue n
-unitType = NbE.VNode (AnnSig (HasType universe) UnitSig)
+unitType = NbE.VNode (AnnSig IsSingletonType UnitSig)
+
+-- | The annotation of a type, given the universe and whether the type is a
+-- singleton.
+typeAnnotation :: ty -> Bool -> TypeAnn ty
+{-# INLINE typeAnnotation #-}
+typeAnnotation u singleton
+  | singleton = IsSingletonType
+  | otherwise = HasType u
+
+-- | Whether a type value is a singleton type.
+isSingletonType :: TypeValue n -> Bool
+{-# INLINE isSingletonType #-}
+isSingletonType = \case
+  NbE.VNode (AnnSig IsSingletonType _) -> True
+  NbE.VSuspended _ (AnnSig IsSingletonType _) -> True
+  _ -> False
 
 -- | The type in an annotation.
 annotatedType :: TypeAnn (TypeValue n) -> TypeValue n
 {-# INLINE annotatedType #-}
 annotatedType = \case
   HasType ty -> ty
+  IsSingletonType -> universe
   IsUniverse -> universe
 
 -- * Contexts of types
@@ -188,7 +222,8 @@ instance HasHeads TermSig where
     SecondSig p    -> SecondSig (hd p)
     node           -> bimap id other node
 
--- | β for functions and projections, the types of bound names, and η.
+-- | β for functions and projections, the types of bound names, singleton
+-- types, and η.
 instance (HasTypes ctx, HasDefinitions ctx FFPattern Sig) => Eval ctx FFPattern Sig where
   {-# INLINABLE evalSig #-}
   evalSig scope ctx env (AnnSig ann node) = case node of
@@ -196,10 +231,22 @@ instance (HasTypes ctx, HasDefinitions ctx FFPattern Sig) => Eval ctx FFPattern 
       appValue (fmap (NbE.eval scope ctx env) ann) scope ctx (NbE.eval scope ctx env fun) (NbE.eval scope ctx env arg)
     FirstSig p  -> firstValue (fmap (NbE.eval scope ctx env) ann) (NbE.eval scope ctx env p)
     SecondSig p -> secondValue (fmap (NbE.eval scope ctx env) ann) (NbE.eval scope ctx env p)
+    -- A singleton stays one under substitution, a type that is not one may
+    -- become one: its value decides again.
+    PiSig {} | not (isSingleton ann) -> singletonFlag scope ctx (NbE.evalNode scope ctx env (AnnSig ann node))
+    SigmaSig {} | not (isSingleton ann) -> singletonFlag scope ctx (NbE.evalNode scope ctx env (AnnSig ann node))
     _ -> NbE.evalNode scope ctx env (AnnSig ann node)
+    where
+      isSingleton IsSingletonType = True
+      isSingleton _               = False
 
+  -- The observers of a λ apply the other value to the bound name, those of a
+  -- pair project it. Each carries its type, so that it is refined as well.
   {-# INLINE etaMatchWith #-}
-  etaMatchWith _ term (AnnSig ann node) = case (ann, node) of
+  etaMatchWith scoped term (AnnSig ann node) = case (ann, node) of
+    (HasType ty, LamSig dom body) -> Just $ AnnSig
+      (HasType (term ty (NbE.EtaTerm (\_ c -> typeOfValue c))))
+      (LamSig (term dom (NbE.EtaTerm domainOf)) (scoped body (NbE.EtaScoped appliedTo)))
     (HasType ty, PairSig a b) -> Just $ AnnSig
       (HasType (term ty (NbE.EtaTerm (\_ c -> typeOfValue c))))
       (PairSig (term a (NbE.EtaTerm firstOf)) (term b (NbE.EtaTerm secondOf)))
@@ -219,14 +266,14 @@ instance (HasTypes ctx, HasDefinitions ctx FFPattern Sig) => Eval ctx FFPattern 
     TTSig             -> TTSig
 
   {-# INLINABLE refineVar #-}
-  refineVar scope ctx x = expandAt scope ctx (NbE.VVar x) (typeOfName ctx x)
+  refineVar scope ctx x = refineAt scope ctx (NbE.VVar x) (typeOfName ctx x)
 
   -- A node in a value is a neutral only if it is an eliminator.
   {-# INLINABLE refineSig #-}
   refineSig scope ctx value (AnnSig ann node) = case node of
-    AppSig {}    -> expandAt scope ctx value (annotatedType ann)
-    FirstSig {}  -> expandAt scope ctx value (annotatedType ann)
-    SecondSig {} -> expandAt scope ctx value (annotatedType ann)
+    AppSig {}    -> refineAt scope ctx value (annotatedType ann)
+    FirstSig {}  -> refineAt scope ctx value (annotatedType ann)
+    SecondSig {} -> refineAt scope ctx value (annotatedType ann)
     _            -> value
 
 -- | Apply a function value to an argument value: a suspended lambda is
@@ -277,6 +324,28 @@ secondOf scope ctx p = case typeOfValue ctx p of
 impossibleNonSigmaType :: a
 impossibleNonSigmaType = error "DependentTypes: impossible: η for a pair against a value whose type is not a Σ"
 
+-- | The observers of η for a λ: the domain of the other value's type, and the
+-- other value applied to the bound name.
+domainOf :: HasTypes ctx => Scope n -> ctx n -> Value n -> TypeValue n
+{-# INLINE domainOf #-}
+domainOf _ ctx f = case typeOfValue ctx f of
+  NbE.VSuspended _ (AnnSig _ (PiSig dom _)) -> dom
+  _ -> impossibleNonPiType
+
+appliedTo ::
+  (Eval ctx FFPattern Sig, HasTypes ctx, DExt n l) =>
+  Scope l -> ctx l -> FFPattern n l -> Value l -> Value l
+{-# INLINE appliedTo #-}
+appliedTo scope ctx (FFPatternVar x) f = case typeOfValue ctx f of
+  NbE.VSuspended env (AnnSig _ (PiSig _ cod)) ->
+    appValue (HasType (codomainAt scope ctx env cod (NbE.VVar (nameOf x)))) scope ctx f (NbE.VVar (nameOf x))
+  _ -> impossibleNonPiType
+
+-- | Impossible: conversion compares two values of one type, so the value
+-- that η compares with a λ has the λ's type, which is a Π.
+impossibleNonPiType :: a
+impossibleNonPiType = error "DependentTypes: impossible: η for a λ against a value whose type is not a Π"
+
 -- | The type of a value: of a variable from the context, of a node from its
 -- annotation.
 typeOfValue :: HasTypes ctx => ctx n -> Value n -> TypeValue n
@@ -301,34 +370,50 @@ codomainAt ::
 codomainAt scope ctx env (ScopedAST (FFPatternVar b) cod) arg = case assertDistinct b of
   Distinct -> NbE.eval scope ctx (addSubst env b arg) cod
 
--- | η-expand a neutral at its type.
-expandAt :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> Value n -> TypeValue n -> Value n
-{-# INLINE expandAt #-}
-expandAt scope ctx value ty = case ty of
-  NbE.VNode (AnnSig _ UnitSig) -> NbE.VNode (AnnSig (HasType unitType) TTSig)
-  NbE.VSuspended env (AnnSig _ (PiSig dom cod)) -> expandFunction scope ctx value ty dom env cod
-  _ -> value
+-- | A Π or Σ type value, annotated with whether it is a singleton. The flag
+-- is lazy and decided one level down, from the flags of the parts' values: a
+-- Π is a singleton if its codomain at a fresh name is, a Σ if its domain and
+-- codomain are.
+singletonFlag :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> TypeValue n -> TypeValue n
+{-# INLINE singletonFlag #-}
+singletonFlag scope ctx = \case
+  NbE.VSuspended env (AnnSig _ node@(PiSig dom cod)) ->
+    NbE.VSuspended env (AnnSig (typeAnnotation universe (singletonCodomain scope ctx dom env cod)) node)
+  NbE.VSuspended env (AnnSig _ node@(SigmaSig dom cod)) ->
+    NbE.VSuspended env (AnnSig (typeAnnotation universe (isSingletonType dom && singletonCodomain scope ctx dom env cod)) node)
+  value -> value
 
--- | A neutral @f : (x : A) -> B@ as the value of @\\(x : A). f x@, whose
--- application is annotated with @B@. The value of @f@ sits in the
--- environment under a fresh name @g@. The type comes whole and in parts:
--- its domain, and the environment and codomain of its value.
-expandFunction ::
+-- | Whether the codomain of a Π or Σ type is a singleton at a fresh name.
+singletonCodomain ::
   (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n, Distinct i) =>
-  Scope n -> ctx n -> Value n -> TypeValue n -> TypeValue n ->
-  Substitution Value i n -> ScopedAST FFPattern Sig i -> Value n
-{-# INLINE expandFunction #-}
-expandFunction scope ctx fun ty dom env codomain =
-  withFresh scope $ \g ->
-    let scopeG = extendScope g scope
-        ctxG = assume g ty ctx
-    in withFresh scopeG $ \x ->
-         let scopeX = extendScope x scopeG
-             ctxX = assume x (sink dom) ctxG
-             cod = NbE.quote scopeX ctxX (codomainAt scopeX ctxX (sink env) codomain (NbE.VVar (nameOf x)))
-             body = Node (AnnSig (HasType cod) (AppSig (Var (sink (nameOf g))) (Var (nameOf x))))
-         in NbE.VSuspended (addSubst identitySubst g fun)
-              (AnnSig (HasType ty) (LamSig dom (ScopedAST (FFPatternVar x) body)))
+  Scope n -> ctx n -> TypeValue n -> Substitution Value i n -> ScopedAST FFPattern Sig i -> Bool
+{-# INLINE singletonCodomain #-}
+singletonCodomain scope ctx dom env cod = withFresh scope $ \x ->
+  isSingletonType (codomainAt (extendScope x scope) (assume x dom ctx) (sink env) cod (NbE.VVar (nameOf x)))
+
+-- | A neutral of a singleton type is that type's one value. Any other stays.
+refineAt :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> Value n -> TypeValue n -> Value n
+{-# INLINE refineAt #-}
+refineAt scope ctx value ty
+  | isSingletonType ty = canonical scope ctx ty
+  | otherwise          = value
+
+-- | The one value of a singleton type: @tt@, a λ whose body is the one value
+-- of the codomain, or the pair of the one values.
+canonical :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> TypeValue n -> Value n
+{-# INLINABLE canonical #-}
+{-# SPECIALIZE canonical :: Distinct n => Scope n -> Typing n -> TypeValue n -> Value n #-}
+canonical scope ctx ty = case ty of
+  NbE.VNode (AnnSig _ UnitSig) -> NbE.VNode (AnnSig (HasType unitType) TTSig)
+  NbE.VSuspended env (AnnSig _ (PiSig dom cod)) -> withFresh scope $ \x ->
+    let scope' = extendScope x scope
+        ctx' = assume x dom ctx
+        body = NbE.quote scope' ctx' (canonical scope' ctx' (codomainAt scope' ctx' (sink env) cod (NbE.VVar (nameOf x))))
+    in NbE.VSuspended identitySubst (AnnSig (HasType ty) (LamSig dom (ScopedAST (FFPatternVar x) body)))
+  NbE.VSuspended env (AnnSig _ (SigmaSig dom cod)) ->
+    let a = canonical scope ctx dom
+    in NbE.VNode (AnnSig (HasType ty) (PairSig a (canonical scope ctx (codomainAt scope ctx env cod a))))
+  _ -> error "DependentTypes: impossible: the one value of a type that is not a singleton"
 
 -- * Normalisation
 

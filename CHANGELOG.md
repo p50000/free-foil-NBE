@@ -33,10 +33,11 @@
 - The generic core: the semantic domain `Value`, the `Eval` class, generic
   evaluation and readback, `nf` and `whnf`.
 - A demonstration language whose context holds types, `DependentTypes`,
-  with functions and pairs over a universe and a unit type. The types
-  decide η for functions and the unit type, and pairs have η by shape. Its
-  terms are elaborated bidirectionally, and every node but the universe
-  carries its type as an annotation.
+  with functions and pairs over a universe and a unit type. Functions and
+  pairs have η by shape, and readback turns a neutral of a singleton type
+  (`Unit`, a Π into one, a Σ of two) into its one value. Its terms are
+  elaborated bidirectionally, and every node but the universe carries its
+  type as an annotation, which for a type says whether it is a singleton.
 - Five demonstration languages, each with an `Eval` instance: lambda-pi,
   Booleans, lambda-let, pairs and naturals. All but Booleans also have a BNFC
   grammar, generated scope-safe syntax, a reference normaliser and a parser;

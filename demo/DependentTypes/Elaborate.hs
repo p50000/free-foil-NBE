@@ -86,7 +86,7 @@ infer scope typing = \case
         let scope' = extendScope x scope
             typing' = assume x (evalIn scope typing dom') typing
         (body', bodyTy) <- infer scope' typing' body
-        let piTy = annotated universeTerm (PiSig dom' (ScopedAST pat (quoteIn scope' typing' bodyTy)))
+        let piTy = typeNode scope typing (PiSig dom' (ScopedAST pat (quoteIn scope' typing' bodyTy)))
         pure (annotated piTy (LamSig dom' (ScopedAST pat body')), evalIn scope typing piTy)
   Node (PiSig dom (ScopedAST pat cod)) -> typeFormer PiSig scope typing dom pat cod
   Node (SigmaSig dom (ScopedAST pat cod)) -> typeFormer SigmaSig scope typing dom pat cod
@@ -122,7 +122,7 @@ typeFormer former scope typing dom pat cod = case pat of
     (Distinct, Ext) -> do
       dom' <- check scope typing dom universe
       cod' <- check (extendScope x scope) (assume x (evalIn scope typing dom') typing) cod universe
-      pure (annotated universeTerm (former dom' (ScopedAST pat cod')), universe)
+      pure (typeNode scope typing (former dom' (ScopedAST pat cod')), universe)
 
 -- | Elaborate a closed term against a closed type, both parsed from strings.
 -- The result is the elaborated term and its type.
@@ -138,9 +138,16 @@ elaborate term ty = do
 universeTerm :: Elaborated n
 universeTerm = Node (AnnSig IsUniverse UniverseSig)
 
--- | The unit type.
+-- | The unit type, a singleton.
 unitTerm :: Elaborated n
-unitTerm = annotated universeTerm UnitSig
+unitTerm = Node (AnnSig IsSingletonType UnitSig)
+
+-- | A Π or Σ type, annotated with whether it is a singleton, as its value
+-- decides.
+typeNode :: Distinct n => Scope n -> Typing n -> TermSig (ScopedAST FFPattern Sig n) (Elaborated n) -> Elaborated n
+typeNode scope typing node = Node (AnnSig (typeAnnotation universeTerm singleton) node)
+  where
+    singleton = isSingletonType (evalIn scope typing (annotated universeTerm node))
 
 -- | A node annotated with its type.
 annotated :: Elaborated n -> TermSig (ScopedAST FFPattern Sig n) (Elaborated n) -> Elaborated n
