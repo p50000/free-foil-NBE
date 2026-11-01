@@ -23,11 +23,12 @@ module Fragments.Naturals
 import Control.DeepSeq        (NFData)
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
+import Data.Bifunctor (bimap)
 import Data.Bifunctor.TH       (deriveBifoldable, deriveBifunctor, deriveBitraversable)
 import Data.ZipMatchK.TH       (deriveZipMatchK)
 import GHC.Generics            (Generic)
 
-import FreeFoil.NbE            (HasHeads, Value (..), eval, evalNode)
+import FreeFoil.NbE            (HasHeads (..), Value (..), eval, evalNode)
 import FreeFoil.NbE.Sum
 
 -- | Naturals: @zero@, @suc t@ and @natrec n { zero -> z ; suc k, r -> s }@.
@@ -44,8 +45,12 @@ deriveBitraversable ''NatF
 deriveZipMatchK ''NatF
 instance (NFData scope, NFData term) => NFData (NatF scope term)
 
--- | No heads: the fragment does not refine values.
-instance HasHeads NatF
+-- | The heads: the scrutinee of @natrec@.
+instance HasHeads NatF where
+  {-# INLINE headsWith #-}
+  headsWith hd other = \case
+    NatRecF n z s -> NatRecF (hd n) (other z) s
+    node          -> bimap id other node
 
 instance (Sinkable ctx, CoSinkable binder) => EvalF ctx binder NatF where
   {-# INLINE evalF #-}

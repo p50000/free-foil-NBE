@@ -42,7 +42,8 @@ module Monolith
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Eval (..), HasDefinitions, HasHeads)
+import Data.Bifunctor (bimap)
+import FreeFoil.NbE (Eval (..), HasDefinitions, HasHeads (..))
 import qualified FreeFoil.NbE as NbE
 import qualified FreeFoil.NbE.Conversion as Conv
 
@@ -81,8 +82,17 @@ whnf scope = NbE.whnf scope NbE.NoContext
 numeral :: Int -> Monolith n
 numeral k = iterate Suc Zero !! k
 
--- | No heads: the language does not refine values.
-instance HasHeads TermSig
+-- | The heads: the function of an application, the pair of a projection and
+-- of @split@, and the scrutinee of @natrec@.
+instance HasHeads TermSig where
+  {-# INLINE headsWith #-}
+  headsWith hd other = \case
+    AppSig fun arg  -> AppSig (hd fun) (other arg)
+    FstSig p        -> FstSig (hd p)
+    SndSig p        -> SndSig (hd p)
+    SplitSig p body -> SplitSig (hd p) body
+    NatRecSig n z s -> NatRecSig (hd n) (other z) s
+    node            -> bimap id other node
 
 -- | The three elimination rules, side by side, each as in its standalone
 -- language: β, the projections and @split@, and primitive recursion. A

@@ -39,7 +39,8 @@ module Naturals
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Eval (..), HasDefinitions, HasHeads)
+import Data.Bifunctor (bimap)
+import FreeFoil.NbE (Eval (..), HasDefinitions, HasHeads (..))
 import qualified FreeFoil.NbE as NbE
 
 import Naturals.Generated
@@ -89,8 +90,12 @@ numeral k = iterate Suc Zero !! k
 -- | Semantic values of naturals.
 type Value = NbE.Value FFPattern TermSig
 
--- | No heads: the language does not refine values.
-instance HasHeads TermSig
+-- | The heads: the scrutinee of @natrec@.
+instance HasHeads TermSig where
+  {-# INLINE headsWith #-}
+  headsWith hd other = \case
+    NatRecSig n z s -> NatRecSig (hd n) (other z) s
+    node            -> bimap id other node
 
 -- | One elimination rule. @natrec@ evaluates its scrutinee and recurses on
 -- the value: at @zero@ it evaluates the zero branch, at @suc p@ it enters

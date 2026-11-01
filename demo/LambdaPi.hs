@@ -32,7 +32,8 @@ module LambdaPi
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Eval (..), HasDefinitions, HasHeads)
+import Data.Bifunctor (bimap)
+import FreeFoil.NbE (Eval (..), HasDefinitions, HasHeads (..))
 import qualified FreeFoil.NbE as NbE
 import qualified FreeFoil.NbE.Conversion as Conv
 
@@ -84,8 +85,12 @@ pattern Pi dom binder body = FFPi dom (FFPatternVar binder) body
 -- | Semantic values of lambda-pi.
 type Value = NbE.Value FFPattern TermSig
 
--- | No heads: the language does not refine values.
-instance HasHeads TermSig
+-- | The heads: the function of an application.
+instance HasHeads TermSig where
+  {-# INLINE headsWith #-}
+  headsWith hd other = \case
+    AppSig fun arg -> AppSig (hd fun) (other arg)
+    node           -> bimap id other node
 
 -- | The one elimination rule, application. A suspended lambda is entered
 -- under its captured environment extended with the argument; a neutral head

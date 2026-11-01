@@ -209,8 +209,8 @@ newtype EtaScoped ctx binder sig n =
 -- | The heads of a signature's nodes: the term positions an elimination
 -- rule eliminates, such as the function of an application. Readback and
 -- conversion do not refine a head ('refine'), since η-expanding the
--- function of an application would make it a redex. A language that does
--- not refine values needs no heads, which is the default:
+-- function of an application would make it a redex. A signature without
+-- eliminators has no heads, which is the default:
 --
 -- > instance HasHeads TermSig
 --
