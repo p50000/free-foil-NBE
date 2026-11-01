@@ -6,7 +6,8 @@
   client supplies (`Context`). A language's `Eval` instance states what it
   needs of the context, and the demonstration languages use `NoContext`,
   which knows nothing beyond the scope.
-- A context may give the free names of a language values (`Definitions`),
+- A context may give the free names of a language values (`definition`,
+  by default from `HasDefinitions`),
   which `eval` unfolds where the names are used. `NoContext` gives none.
   Top-level definitions (`FreeFoil.NbE.Definitions`) are such a context,
   built one definition at a time, and a term is normalised in it with

@@ -21,7 +21,7 @@ import qualified Control.Monad.Foil.Internal as Foil (Substitution (..))
 import           Control.Monad.Free.Foil     (AST)
 import           Data.Bifunctor              (Bifunctor)
 
-import           FreeFoil.NbE                (Context (..), Definitions (..), Eval, Value, eval)
+import           FreeFoil.NbE                (Context (..), Eval, HasDefinitions (..), Value, eval)
 
 -- | A context of definitions: the values of the names it defines.
 newtype Defined binder sig n = Defined (Foil.Substitution (Value binder sig) n n)
@@ -30,9 +30,9 @@ instance Bifunctor sig => Context (Defined binder sig) where
   {-# INLINE extendContext #-}
   extendContext _ _ _ (Defined subst) = Defined (underBinder subst)
 
-instance Bifunctor sig => Definitions (Defined binder sig) binder sig where
-  {-# INLINE definition #-}
-  definition _ (Defined subst) = Foil.lookupSubst subst
+instance Bifunctor sig => HasDefinitions (Defined binder sig) binder sig where
+  {-# INLINE contextDefinition #-}
+  contextDefinition _ (Defined subst) = Foil.lookupSubst subst
 
 -- | A substitution over a scope, under a binder of that scope. The names the
 -- binder adds are not in the map, so they map to themselves, and the map is

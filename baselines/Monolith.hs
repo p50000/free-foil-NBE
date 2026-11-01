@@ -42,7 +42,7 @@ module Monolith
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Definitions, Eval (..))
+import FreeFoil.NbE (Context, Eval (..), HasDefinitions)
 import qualified FreeFoil.NbE as NbE
 import qualified FreeFoil.NbE.Conversion as Conv
 
@@ -84,7 +84,7 @@ numeral k = iterate Suc Zero !! k
 -- | The three elimination rules, side by side, each as in its standalone
 -- language: β, the projections and @split@, and primitive recursion. A
 -- binder of the wrong shape is an error.
-instance Definitions ctx Pattern TermSig => Eval ctx Pattern TermSig where
+instance (Context ctx, HasDefinitions ctx Pattern TermSig) => Eval ctx Pattern TermSig where
   {-# INLINABLE evalSig #-}
   evalSig scope ctx env = \case
     AppSig fun arg ->

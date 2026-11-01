@@ -30,7 +30,7 @@ module LambdaLet
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Definitions, Eval (..))
+import FreeFoil.NbE (Context, Eval (..), HasDefinitions)
 import qualified FreeFoil.NbE as NbE
 
 import LambdaLet.Generated
@@ -81,7 +81,7 @@ type Value = NbE.Value FFPattern TermSig
 -- thunk in the environment: evaluated at most once, shared by every use, and
 -- never if unused. The reference 'nfSubst' substitutes it unevaluated into every
 -- occurrence instead.
-instance Definitions ctx FFPattern TermSig => Eval ctx FFPattern TermSig where
+instance (Context ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPattern TermSig where
   {-# INLINABLE evalSig #-}
   evalSig scope ctx env = \case
     AppSig fun arg ->

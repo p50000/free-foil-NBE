@@ -32,7 +32,7 @@ module LambdaPi
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Definitions, Eval (..))
+import FreeFoil.NbE (Context, Eval (..), HasDefinitions)
 import qualified FreeFoil.NbE as NbE
 import qualified FreeFoil.NbE.Conversion as Conv
 
@@ -88,7 +88,7 @@ type Value = NbE.Value FFPattern TermSig
 -- under its captured environment extended with the argument; a neutral head
 -- rebuilds the application. @Lam@ and @Pi@ fall through to the default, so a
 -- @Pi@ keeps its domain as a value and its codomain suspended.
-instance Definitions ctx FFPattern TermSig => Eval ctx FFPattern TermSig where
+instance (Context ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPattern TermSig where
   {-# INLINABLE evalSig #-}
   evalSig scope ctx env = \case
     AppSig fun arg -> appValue scope ctx (NbE.eval scope ctx env fun) (NbE.eval scope ctx env arg)
@@ -103,7 +103,7 @@ instance Definitions ctx FFPattern TermSig => Eval ctx FFPattern TermSig where
 -- | Apply a function value to an argument value: a suspended lambda is
 -- entered under its environment extended with the argument, any other
 -- function is a stuck application.
-appValue :: (Definitions ctx FFPattern TermSig, Distinct n) => Scope n -> ctx n -> Value n -> Value n -> Value n
+appValue :: (Eval ctx FFPattern TermSig, Distinct n) => Scope n -> ctx n -> Value n -> Value n -> Value n
 -- The helper takes the context, so it needs the pragma as 'eval' does. A
 -- call with a bound 'Distinct' dictionary is not specialised on its own.
 {-# SPECIALIZE appValue :: Distinct n => Scope n -> NbE.NoContext n -> Value n -> Value n -> Value n #-}

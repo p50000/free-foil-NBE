@@ -4,6 +4,7 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE InstanceSigs          #-}
 {-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE DefaultSignatures     #-}
 {-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -30,7 +31,8 @@
 -- Evaluation, readback and conversion take the scope and, beside it, a
 -- context the client supplies ('Context'). The core is polymorphic in the
 -- context, and a language states in its 'Eval' instance what it needs of it.
--- A context may give the free names of a language values ('Definitions').
+-- A context may give the free names of a language values ('definition',
+-- by default from 'HasDefinitions').
 -- The demonstration languages use 'NoContext', which knows nothing beyond
 -- the scope.
 --
@@ -64,7 +66,7 @@ module FreeFoil.NbE
     -- * Context
   , Context (..)
   , NoContext (..)
-  , Definitions (..)
+  , HasDefinitions (..)
     -- * Evaluation
   , Eval (..)
   , eval
@@ -152,17 +154,18 @@ instance Context NoContext where
   {-# INLINE extendContext #-}
   extendContext _ _ _ _ = NoContext
 
--- | The values a context gives to free names. 'NoContext' defines
--- nothing. A language's 'Eval' instance requires this class of its context,
--- which needs @UndecidableInstances@.
-class Context ctx => Definitions ctx binder sig where
+-- | The values a context gives to free names, the default of 'definition'.
+-- 'NoContext' defines nothing. A language generic in the context requires
+-- this class of it in its 'Eval' instance, which needs
+-- @UndecidableInstances@.
+class HasDefinitions ctx binder sig where
   -- | The value of a free name, or the name itself if the context does not
   -- define it.
-  definition :: Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n
+  contextDefinition :: Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n
 
-instance Definitions NoContext binder sig where
-  {-# INLINE definition #-}
-  definition _ _ = VVar
+instance HasDefinitions NoContext binder sig where
+  {-# INLINE contextDefinition #-}
+  contextDefinition _ _ = VVar
 
 -- * η
 
@@ -193,7 +196,14 @@ newtype EtaScoped ctx binder sig n =
 -- interpreted node it would discard. The instance upholds the 'Value'
 -- invariant; "LambdaPi" is a one-rule example. An instance comes with the
 -- pragmas described in the module header.
-class (Definitions ctx binder sig, Bifunctor sig, Bifoldable sig) => Eval ctx binder sig where
+class (Context ctx, Bifunctor sig, Bifoldable sig) => Eval ctx binder sig where
+  -- | The value of a free name, or the name itself if it has none. By
+  -- default the context's 'contextDefinition'.
+  definition :: Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n
+  default definition :: HasDefinitions ctx binder sig => Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n
+  {-# INLINE definition #-}
+  definition = contextDefinition
+
   evalSig ::
     (Foil.Distinct o, Foil.Distinct i) =>
     Foil.Scope o ->

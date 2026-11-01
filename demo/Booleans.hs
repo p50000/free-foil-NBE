@@ -27,7 +27,7 @@ import Control.Monad.Free.Foil
 import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor, deriveBitraversable)
 import Data.ZipMatchK.TH (deriveZipMatchK)
 
-import FreeFoil.NbE (Definitions, Eval (evalSig), Value (VNode), eval, evalNode)
+import FreeFoil.NbE (Context, Eval (evalSig), HasDefinitions, Value (VNode), eval, evalNode)
 import qualified FreeFoil.NbE as NbE
 
 -- | Two introduction forms and one eliminator; no scoped positions.
@@ -61,7 +61,7 @@ pattern If c t f = Node (IfSig c t f)
 
 -- | The one elimination rule: a canonical condition selects a branch, a
 -- neutral condition leaves the @if@ stuck.
-instance Definitions ctx NameBinder BoolSig => Eval ctx NameBinder BoolSig where
+instance (Context ctx, HasDefinitions ctx NameBinder BoolSig) => Eval ctx NameBinder BoolSig where
   {-# INLINABLE evalSig #-}
   evalSig scope ctx env = \case
     IfSig cond t f -> case eval scope ctx env cond of
