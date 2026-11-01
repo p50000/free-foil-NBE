@@ -121,6 +121,12 @@ conversions =
         "\\(p : (u : Unit) * Unit). p"
         "\\(p : (u : Unit) * Unit). (tt, tt)"
         True )
+  , ( "two pair variables of unit components"
+    , Conversion
+        "(p : (u : Unit) * Unit) -> (q : (u : Unit) * Unit) -> (u : Unit) * Unit"
+        "\\(p : (u : Unit) * Unit). \\(q : (u : Unit) * Unit). p"
+        "\\(p : (u : Unit) * Unit). \\(q : (u : Unit) * Unit). q"
+        True )
   , ( "a pair variable and its components swapped"
     , Conversion
         "(A : U) -> (p : (x : A) * A) -> (x : A) * A"
