@@ -101,6 +101,12 @@ conversions =
         True )
   , ( "two variables of the unit type"
     , Conversion "(x : Unit) -> (y : Unit) -> Unit" "\\(x : Unit). \\(y : Unit). x" "\\(x : Unit). \\(y : Unit). y" True )
+  , ( "two functions into the unit type"
+    , Conversion
+        "(A : U) -> (f : (x : A) -> Unit) -> (g : (x : A) -> Unit) -> (x : A) -> Unit"
+        "\\(A : U). \\(f : (x : A) -> Unit). \\(g : (x : A) -> Unit). f"
+        "\\(A : U). \\(f : (x : A) -> Unit). \\(g : (x : A) -> Unit). g"
+        True )
   , ( "two variables of a type variable"
     , Conversion "(A : U) -> (x : A) -> (y : A) -> A" "\\(A : U). \\(x : A). \\(y : A). x" "\\(A : U). \\(x : A). \\(y : A). y" False )
   , ( "a pair variable and the pair of its projections"
