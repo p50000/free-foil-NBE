@@ -24,6 +24,7 @@ GRAMMARS=(
   "Pairs demo/grammar/Pairs/Syntax.cf"
   "Naturals demo/grammar/Naturals/Syntax.cf"
   "Monolith demo/grammar/Monolith/Syntax.cf"
+  "DependentPairs demo/grammar/DependentPairs/Syntax.cf"
 )
 
 for entry in "${GRAMMARS[@]}"; do

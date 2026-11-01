@@ -1,0 +1,29 @@
+-- LBNF grammar for the dependent pairs demonstration language: dependent
+-- functions and pairs over a universe, with a unit type. Every binder is
+-- annotated with its type, and split with the type of its scrutinee, as in
+-- the output of elaboration.
+-- Generated modules live under DependentPairs.Syntax.* (see ../../../grammar-regen.sh).
+
+comment "--" ;
+comment "{-" "-}" ;
+
+token VarIdent letter (letter | digit | '_' | '\'')* ;
+
+Var.      Term2 ::= VarIdent ;
+Universe. Term2 ::= "U" ;
+Unit.     Term2 ::= "Unit" ;
+TT.       Term2 ::= "tt" ;
+Pair.     Term2 ::= "(" Term "," Term ")" ;
+App.      Term1 ::= Term1 Term2 ;
+Lam.      Term  ::= "\\" "(" Pattern ":" Term ")" "." ScopedTerm ;
+Pi.       Term  ::= "(" Pattern ":" Term ")" "->" ScopedTerm ;
+Sigma.    Term  ::= "(" Pattern ":" Term ")" "*" ScopedTerm ;
+Split.    Term  ::= "split" Term ":" Term "as" Pattern "in" ScopedTerm ;
+coercions Term 2 ;
+
+AScopedTerm. ScopedTerm ::= Term ;
+
+PatternVar.  Pattern ::= VarIdent ;
+PatternPair. Pattern ::= "(" VarIdent "," VarIdent ")" ;
+
+entrypoints Term ;
