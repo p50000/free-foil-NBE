@@ -287,9 +287,16 @@ eval ::
   Value binder sig o
 {-# INLINABLE eval #-}
 eval scope ctx !env = \case
-  -- A name that the environment does not map is the same name in the output
-  -- scope, as 'Foil.lookupSubst' has it. The map is read directly, so that
-  -- 'definition' sees only those names.
+  -- A name that the environment does not map is a name of the scope where
+  -- the environment started as 'Foil.identitySubst', or a binder kept
+  -- because it is fresh for the output scope (the substitution invariant of
+  -- Maclaurin, Radul and Paszke 2022, Definition 4.1). Either way the output
+  -- scope has the same name, which is what 'Foil.lookupSubst' assumes too.
+  -- A name bound in the term never gets here unmapped: β maps it with
+  -- 'Foil.addSubst', and readback and conversion refresh it against the
+  -- output scope, so it cannot be mistaken for a defined name with the same
+  -- raw name. The map is read directly, so that 'definition' sees only the
+  -- names it does not map.
   Var x -> case env of
     Foil.UnsafeSubstitution values -> case IntMap.lookup (Foil.nameId x) values of
       Just v  -> v
