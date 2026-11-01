@@ -24,11 +24,12 @@ module Fragments.Lambda
 import Control.DeepSeq        (NFData)
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
+import Data.Bifunctor (bimap)
 import Data.Bifunctor.TH       (deriveBifoldable, deriveBifunctor, deriveBitraversable)
 import Data.ZipMatchK.TH       (deriveZipMatchK)
 import GHC.Generics            (Generic)
 
-import FreeFoil.NbE            (EtaScoped (..), Eval, Value (..), eval, evalNode)
+import FreeFoil.NbE            (EtaScoped (..), Eval, HasHeads (..), Value (..), eval, evalNode)
 import FreeFoil.NbE.Sum
 
 -- | Functions: @λx. t@, @t u@ and @Π (x : a). b@.
@@ -44,6 +45,13 @@ deriveBitraversable ''LamF
 
 deriveZipMatchK ''LamF
 instance (NFData scope, NFData term) => NFData (LamF scope term)
+
+-- | The heads: the function of an application.
+instance HasHeads LamF where
+  {-# INLINE headsWith #-}
+  headsWith hd other = \case
+    AppF fun arg -> AppF (hd fun) (other arg)
+    node         -> bimap id other node
 
 instance (Sinkable ctx, CoSinkable binder) => EvalF ctx binder LamF where
   {-# INLINE evalF #-}
