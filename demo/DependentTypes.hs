@@ -59,7 +59,8 @@ import Data.Foldable (fold)
 import Data.Functor.Const (Const (..))
 import Data.Bifunctor (bimap)
 import Data.Monoid (All (..))
-import Data.ZipMatchK (ZipMatchFoldK, ZipMatchK)
+import Data.ZipMatchK (ZipMatchFoldK (..), ZipMatchK (..))
+import Data.ZipMatchK.Mappings (Mappings (..))
 import FreeFoil.NbE (Eval (..), Extend (..), HasDefinitions (..), HasHeads (..))
 import Generics.Kind.TH (deriveGenericK)
 import qualified FreeFoil.NbE as NbE
@@ -76,10 +77,19 @@ data TypeAnn ty
 
 deriveGenericK ''TypeAnn
 
--- | Matching compares the annotations, so conversion compares the types of
--- corresponding nodes.
-instance ZipMatchK TypeAnn
-instance ZipMatchFoldK TypeAnn
+-- | Matching ignores the annotations, as free-foil's documentation of
+-- 'AnnSig' advises for types: conversion and α-equivalence compare terms,
+-- and only refinement reads their types. A match always succeeds, and its
+-- annotation is a thunk that the folds of a match, which skip annotations,
+-- never force.
+instance ZipMatchK TypeAnn where
+  zipMatchWithK (f :^: M0) l r = Just $ case (l, r) of
+    (HasType a, HasType b) | Just c <- f a b -> HasType c
+    (IsUniverse, IsUniverse) -> IsUniverse
+    _ -> error "DependentTypes: impossible: the paired types of a match are never used"
+
+instance ZipMatchFoldK TypeAnn where
+  zipMatchFoldK _ _ _ = Just mempty
 
 -- | The signature of elaborated terms.
 type Sig = AnnSig TypeAnn TermSig
@@ -244,8 +254,8 @@ secondValue ann p = case p of
   NbE.VNode (AnnSig _ (PairSig _ b)) -> b
   _ -> NbE.VNode (AnnSig ann (SecondSig p))
 
--- | The projections for η of pairs. Like the elaborated ones, they carry
--- their types.
+-- | The projections for η of pairs. They carry their types, so that they are
+-- refined as well.
 firstOf :: HasTypes ctx => Scope n -> ctx n -> Value n -> Value n
 firstOf _ ctx p = case typeOfValue ctx p of
   NbE.VSuspended _ (AnnSig _ (SigmaSig a _)) -> firstValue (HasType a) p
