@@ -57,7 +57,8 @@
 --
 -- A client with a context of its own gives the same pragmas at its context.
 -- For them to reach the rules, the instance marks 'evalSig' @INLINABLE@,
--- and 'etaMatchWith' and 'extendScopedWith', if it gives them, @INLINE@.
+-- and 'etaMatchWith' and 'extendScopedWith', if it gives them, @INLINE@, as
+-- well as 'headsWith' of its 'HasHeads' instance.
 -- Otherwise every node runs the unspecialised evaluator, and conversion and
 -- readback build the nodes these two methods return. A helper of the
 -- language that takes the context, such as lambda-pi's @appValue@, is
@@ -71,6 +72,7 @@ module FreeFoil.NbE
   , Extend (..)
   , sinkExtend
     -- * Evaluation
+  , HasHeads (..)
   , Eval (..)
   , eval
   , evalNode
@@ -89,8 +91,10 @@ module FreeFoil.NbE
 import qualified Control.Monad.Foil          as Foil
 import qualified Control.Monad.Foil.Internal as Foil (Name (..), Substitution (..))
 import           Control.Monad.Free.Foil     (AST (..), ScopedAST (..), substitute)
+import           Control.Monad.Free.Foil.Annotated (AnnSig (..))
 import           Data.Bifoldable             (Bifoldable (..))
 import           Data.Bifunctor              (Bifunctor (..))
+import           Data.Bifunctor.Sum          (Sum (..))
 import qualified Data.IntMap                 as IntMap
 import           Data.Monoid                 (Any (..))
 import           Data.Void                   (Void, absurd)
@@ -197,6 +201,44 @@ newtype EtaScoped ctx binder sig n =
     (forall l. (Eval ctx binder sig, Foil.Distinct n, Foil.DExt n l) =>
       Foil.Scope l -> ctx l -> binder n l -> Value binder sig l -> Value binder sig l)
 
+-- * Heads
+
+-- | The heads of a signature's nodes: the term positions an elimination
+-- rule eliminates, such as the function of an application. Readback and
+-- conversion do not η-expand a head ('etaExpand'), since expanding the
+-- function of an application would make it a redex. A language that does
+-- not η-expand needs no heads, which is the default:
+--
+-- > instance HasHeads TermSig
+--
+-- The heads are the positions that the higher-order preunification of
+-- Kudasov (2022, §4) marks with @HasHead@.
+class Bifunctor sig => HasHeads sig where
+  -- | The first function goes to the heads of a node, the second to every
+  -- other term position:
+  --
+  -- > headsWith hd other = \case
+  -- >   AppSig fun arg -> AppSig (hd fun) (other arg)
+  -- >   node -> bimap id other node
+  --
+  -- Like 'extendScopedWith', the method is @INLINE@.
+  headsWith :: (b -> d) -> (b -> d) -> sig a b -> sig a d
+  {-# INLINE headsWith #-}
+  headsWith _ other = bimap id other
+
+-- | The heads of a sum are those of its summands.
+instance (HasHeads f, HasHeads g) => HasHeads (Sum f g) where
+  {-# INLINE headsWith #-}
+  headsWith hd other = \case
+    L2 node -> L2 (headsWith hd other node)
+    R2 node -> R2 (headsWith hd other node)
+
+-- | The heads of an annotated node are those of the node. An annotation is
+-- not a head.
+instance (Functor ann, HasHeads sig) => HasHeads (AnnSig ann sig) where
+  {-# INLINE headsWith #-}
+  headsWith hd other (AnnSig ann node) = AnnSig (fmap other ann) (headsWith hd other node)
+
 -- * Evaluation
 
 -- | A language becomes an NbE instance by giving its elimination rules:
@@ -207,7 +249,7 @@ newtype EtaScoped ctx binder sig n =
 -- interpreted node it would discard. The instance upholds the 'Value'
 -- invariant; "LambdaPi" is a one-rule example. An instance comes with the
 -- pragmas described in the module header.
-class (Bifunctor sig, Bifoldable sig) => Eval ctx binder sig where
+class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   -- | The value of a free name, or the name itself if it has none. By
   -- default the context's 'contextDefinition'.
   definition :: Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n
@@ -273,6 +315,17 @@ class (Bifunctor sig, Bifoldable sig) => Eval ctx binder sig where
     sig c d
   {-# INLINE extendScopedWith #-}
   extendScopedWith scoped term = bimap (\a -> scoped a sinkExtend) term
+
+  -- | η-expansion of one value, which readback and conversion apply to a
+  -- value before they look at it. A language whose values or context know
+  -- types expands a neutral at the type of an introduction form, such as a
+  -- neutral function @f@ to @λx. f x@, or a neutral of the unit type to its
+  -- one value. By default a value stays as it is. 'etaMatchWith' is the
+  -- other side of η: it compares an introduction form with another value by
+  -- shape, after both are expanded.
+  etaExpand :: Foil.Distinct n => Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n
+  {-# INLINE etaExpand #-}
+  etaExpand _ _ value = value
 
 -- | Evaluate a term under an environment: look variables up, hand nodes to
 -- 'evalSig'. A variable that the environment does not map is a free name,
@@ -362,16 +415,24 @@ ensureBivacuousSecond x
 -- 'quote' into a wrapper and a worker, and a @SPECIALIZE@ pragma would then
 -- specialise only the wrapper.
 quote ::
+  forall ctx binder sig n.
   (Eval ctx binder sig, Foil.Distinct n, Foil.CoSinkable binder) =>
   Foil.Scope n ->
   ctx n ->
   Value binder sig n ->
   AST binder sig n
 {-# INLINABLE quote #-}
-quote scope ctx = \case
-  VVar x -> Var x
-  VNode node -> Node $! bimap absurd (quote scope ctx) node
-  VSuspended env node -> Node $! extendScopedWith (quoteScoped scope ctx env) (quote scope ctx) node
+quote scope ctx value = readHead (etaExpand scope ctx value)
+  where
+    -- A value read back without η-expanding it: a head ('headsWith'), or a
+    -- value expanded already. Its heads are read back the same way, every
+    -- other position with 'quote'. The function is local, so that a
+    -- specialisation of 'quote' covers it.
+    readHead = \case
+      VVar x -> Var x
+      VNode node -> Node $! bimap absurd id (headsWith readHead (quote scope ctx) node)
+      VSuspended env node ->
+        Node $! headsWith readHead (quote scope ctx) (extendScopedWith (quoteScoped scope ctx env) id node)
 
 -- | Read back one scoped subterm of a suspended node: refresh the binder,
 -- extend the context with the position's 'Extend' and the captured
@@ -422,15 +483,24 @@ nf scope ctx = quote scope ctx . eval scope ctx Foil.identitySubst
 -- values already, and freeze its scoped subterms instead of normalising under
 -- their binders.
 quoteWhnf ::
+  forall ctx binder sig n.
   (Eval ctx binder sig, Foil.Distinct n, Foil.CoSinkable binder, Foil.SinkableK binder) =>
   Foil.Scope n ->
   ctx n ->
   Value binder sig n ->
   AST binder sig n
-quoteWhnf scope ctx = \case
+quoteWhnf scope ctx value = case etaExpand scope ctx value of
   VVar x -> Var x
-  VNode node -> Node $ bimap absurd (quote scope ctx) node
-  VSuspended env node -> Node $ bimap (freezeScoped scope ctx env) (quote scope ctx) node
+  VNode node -> Node $ bimap absurd id (headsWith readHead (quote scope ctx) node)
+  VSuspended env node ->
+    Node $ bimap (freezeScoped scope ctx env) id (headsWith readHead (quote scope ctx) node)
+  where
+    -- A head, read back fully but not η-expanded (see 'quote').
+    readHead = \case
+      VVar x -> Var x
+      VNode node -> Node $! bimap absurd id (headsWith readHead (quote scope ctx) node)
+      VSuspended env node ->
+        Node $! headsWith readHead (quote scope ctx) (extendScopedWith (quoteScoped scope ctx env) id node)
 
 -- | Freeze one scoped subterm of a suspended node without evaluating under
 -- its binder: refresh the binder and substitute the captured environment,

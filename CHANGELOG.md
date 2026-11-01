@@ -9,6 +9,11 @@
   context learns (`extendScopedWith`, in the style of `etaMatchWith`). By
   default a binder only adds its names, so any sinkable context works with
   any language.
+- A language may η-expand a value (`etaExpand`), for example a neutral at
+  the type in its annotation or in the context. Readback and conversion
+  expand a value before they look at it, except at the heads of nodes
+  (`HasHeads`), the positions an elimination rule eliminates. By default
+  nothing is expanded and no position is a head.
 - A context may give the free names of a language values (`definition`,
   by default from `HasDefinitions`),
   which `eval` unfolds where the names are used. `NoContext` gives none.

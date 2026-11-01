@@ -27,7 +27,7 @@ import Control.Monad.Free.Foil
 import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor, deriveBitraversable)
 import Data.ZipMatchK.TH (deriveZipMatchK)
 
-import FreeFoil.NbE (Eval (evalSig), HasDefinitions, Value (VNode), eval, evalNode)
+import FreeFoil.NbE (Eval (evalSig), HasDefinitions, HasHeads, Value (VNode), eval, evalNode)
 import qualified FreeFoil.NbE as NbE
 
 -- | Two introduction forms and one eliminator; no scoped positions.
@@ -58,6 +58,9 @@ pattern FF = Node FalseSig
 -- | @if c then t else f@.
 pattern If :: BoolTm n -> BoolTm n -> BoolTm n -> BoolTm n
 pattern If c t f = Node (IfSig c t f)
+
+-- | No heads: the language does not η-expand.
+instance HasHeads BoolSig
 
 -- | The one elimination rule: a canonical condition selects a branch, a
 -- neutral condition leaves the @if@ stuck.

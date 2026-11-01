@@ -38,7 +38,7 @@ module Pairs
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Eval (..), HasDefinitions)
+import FreeFoil.NbE (Eval (..), HasDefinitions, HasHeads)
 import qualified FreeFoil.NbE as NbE
 
 import Pairs.Generated
@@ -86,6 +86,9 @@ pattern Split p x y body = FFSplit p (FFPatternPair x y) body
 
 -- | Semantic values of pairs.
 type Value = NbE.Value FFPattern TermSig
+
+-- | No heads: the language does not η-expand.
+instance HasHeads TermSig
 
 -- | Three elimination rules. A projection of a pair value selects a
 -- component, and is stuck on anything else. @split@ of a pair value enters

@@ -29,7 +29,7 @@ import Data.Bifunctor.TH       (deriveBifoldable, deriveBifunctor, deriveBitrave
 import Data.ZipMatchK.TH       (deriveZipMatchK)
 import GHC.Generics            (Generic)
 
-import FreeFoil.NbE            (EtaTerm (..), Value (..), eval, evalNode)
+import FreeFoil.NbE            (EtaTerm (..), HasHeads, Value (..), eval, evalNode)
 import FreeFoil.NbE.Sum
 
 -- | Pairs: @(t, u)@, @fst t@, @snd t@ and @split t as (x, y) in u@.
@@ -46,6 +46,9 @@ deriveBitraversable ''PairF
 
 deriveZipMatchK ''PairF
 instance (NFData scope, NFData term) => NFData (PairF scope term)
+
+-- | No heads: the fragment does not η-expand.
+instance HasHeads PairF
 
 instance (Sinkable ctx, CoSinkable binder) => EvalF ctx binder PairF where
   {-# INLINE evalF #-}

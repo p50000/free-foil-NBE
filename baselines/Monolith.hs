@@ -42,7 +42,7 @@ module Monolith
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Eval (..), HasDefinitions)
+import FreeFoil.NbE (Eval (..), HasDefinitions, HasHeads)
 import qualified FreeFoil.NbE as NbE
 import qualified FreeFoil.NbE.Conversion as Conv
 
@@ -80,6 +80,9 @@ whnf scope = NbE.whnf scope NbE.NoContext
 -- | The numeral of a natural number.
 numeral :: Int -> Monolith n
 numeral k = iterate Suc Zero !! k
+
+-- | No heads: the language does not η-expand.
+instance HasHeads TermSig
 
 -- | The three elimination rules, side by side, each as in its standalone
 -- language: β, the projections and @split@, and primitive recursion. A

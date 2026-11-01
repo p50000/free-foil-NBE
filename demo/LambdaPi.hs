@@ -32,7 +32,7 @@ module LambdaPi
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Eval (..), HasDefinitions)
+import FreeFoil.NbE (Eval (..), HasDefinitions, HasHeads)
 import qualified FreeFoil.NbE as NbE
 import qualified FreeFoil.NbE.Conversion as Conv
 
@@ -83,6 +83,9 @@ pattern Pi dom binder body = FFPi dom (FFPatternVar binder) body
 
 -- | Semantic values of lambda-pi.
 type Value = NbE.Value FFPattern TermSig
+
+-- | No heads: the language does not η-expand.
+instance HasHeads TermSig
 
 -- | The one elimination rule, application. A suspended lambda is entered
 -- under its captured environment extended with the argument; a neutral head

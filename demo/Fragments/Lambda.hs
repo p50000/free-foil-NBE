@@ -28,7 +28,7 @@ import Data.Bifunctor.TH       (deriveBifoldable, deriveBifunctor, deriveBitrave
 import Data.ZipMatchK.TH       (deriveZipMatchK)
 import GHC.Generics            (Generic)
 
-import FreeFoil.NbE            (EtaScoped (..), Eval, Value (..), eval, evalNode)
+import FreeFoil.NbE            (EtaScoped (..), Eval, HasHeads, Value (..), eval, evalNode)
 import FreeFoil.NbE.Sum
 
 -- | Functions: @λx. t@, @t u@ and @Π (x : a). b@.
@@ -44,6 +44,9 @@ deriveBitraversable ''LamF
 
 deriveZipMatchK ''LamF
 instance (NFData scope, NFData term) => NFData (LamF scope term)
+
+-- | No heads: the fragment does not η-expand.
+instance HasHeads LamF
 
 instance (Sinkable ctx, CoSinkable binder) => EvalF ctx binder LamF where
   {-# INLINE evalF #-}

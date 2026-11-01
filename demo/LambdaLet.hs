@@ -30,7 +30,7 @@ module LambdaLet
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Eval (..), HasDefinitions)
+import FreeFoil.NbE (Eval (..), HasDefinitions, HasHeads)
 import qualified FreeFoil.NbE as NbE
 
 import LambdaLet.Generated
@@ -73,6 +73,9 @@ pattern Let e binder body = FFLet e (FFPatternVar binder) body
 
 -- | Semantic values of lambda-let.
 type Value = NbE.Value FFPattern TermSig
+
+-- | No heads: the language does not η-expand.
+instance HasHeads TermSig
 
 -- | Two elimination rules. Application is β, as in "LambdaPi". @let@ always
 -- reduces: the body is evaluated under the environment extended with the

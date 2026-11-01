@@ -37,7 +37,7 @@ import           Data.Bifoldable         (Bifoldable)
 import           Data.Bifunctor          (Bifunctor (..))
 import           Data.Bifunctor.Sum      (Sum (..))
 
-import           FreeFoil.NbE            (EtaScoped, EtaTerm, Eval (..), Extend, HasDefinitions, Value, evalNode, sinkExtend)
+import           FreeFoil.NbE            (EtaScoped, EtaTerm, Eval (..), Extend, HasDefinitions, HasHeads, Value, evalNode, sinkExtend)
 
 -- | The position of a fragment @f@ in a language @sig@: how to build one of
 -- its nodes in the language and how to recognise one. This is Swierstra's
@@ -78,7 +78,7 @@ inR (Inj i p) = Inj (i . R2) (\node -> p node >>= \case
 -- forms in the result with 'prj' and rebuilds a stuck node with 'inj'. Every
 -- other node falls through to 'evalNode' on the injected node, which is the
 -- default for a fragment without eliminators.
-class (Bifunctor f, Bifoldable f) => EvalF ctx binder f where
+class (Bifunctor f, Bifoldable f, HasHeads f) => EvalF ctx binder f where
   evalF ::
     (Eval ctx binder sig, Foil.Distinct o, Foil.Distinct i) =>
     Inj f sig ->

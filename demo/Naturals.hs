@@ -39,7 +39,7 @@ module Naturals
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Eval (..), HasDefinitions)
+import FreeFoil.NbE (Eval (..), HasDefinitions, HasHeads)
 import qualified FreeFoil.NbE as NbE
 
 import Naturals.Generated
@@ -88,6 +88,9 @@ numeral k = iterate Suc Zero !! k
 
 -- | Semantic values of naturals.
 type Value = NbE.Value FFPattern TermSig
+
+-- | No heads: the language does not η-expand.
+instance HasHeads TermSig
 
 -- | One elimination rule. @natrec@ evaluates its scrutinee and recurses on
 -- the value: at @zero@ it evaluates the zero branch, at @suc p@ it enters
