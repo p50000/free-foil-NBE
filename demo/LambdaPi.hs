@@ -104,9 +104,10 @@ instance (Sinkable ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPatt
 -- entered under its environment extended with the argument, any other
 -- function is a stuck application.
 appValue :: (Eval ctx FFPattern TermSig, Distinct n) => Scope n -> ctx n -> Value n -> Value n -> Value n
--- The helper takes the context, so it needs the pragma as 'eval' does. A
--- call with a bound 'Distinct' dictionary is not specialised on its own.
-{-# SPECIALIZE appValue :: Distinct n => Scope n -> NbE.NoContext n -> Value n -> Value n -> Value n #-}
+-- The helper takes the context, so it is inlined into the rules and
+-- specialised with them at every context. A call with a bound 'Distinct'
+-- dictionary is not specialised on its own.
+{-# INLINE appValue #-}
 appValue scope ctx fun arg = case fun of
   NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
     case assertDistinct binder of
