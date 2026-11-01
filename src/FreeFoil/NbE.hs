@@ -34,9 +34,9 @@
 -- give the free names of a language values ('definition', by default from
 -- 'HasDefinitions'). Under a binder the language says what the context
 -- learns ('extendScopedWith'). By default the binder only adds its names, so
--- any 'Foil.Sinkable' context works with any language. Readback and
--- conversion let the language refine a value by the context ('refineVar',
--- 'refineSig'), for example η-expand it at its type. The demonstration
+-- any 'Foil.Sinkable' context works with any language. In readback the
+-- language may refine values by the context ('refineVar', 'refineSig'),
+-- for example η-expand them at their types. The demonstration
 -- languages use 'NoContext', which knows nothing beyond the scope.
 --
 -- A language specialises 'nf', 'eval' and 'quote' to its types, next to
@@ -189,7 +189,7 @@ sinkExtend = Extend (\_ _ _ -> Foil.sink)
 -- of that position, from the scope, the context and any value to the
 -- component. The two observers of a pair are @fst@ and @snd@. Like an
 -- 'Extend', an observer receives the language's 'Eval' instance from the
--- core, and its scope is distinct, so that it may evaluate.
+-- core, with a distinct scope, so that it may evaluate.
 newtype EtaTerm ctx binder sig n =
   EtaTerm ((Eval ctx binder sig, Foil.Distinct n) => Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n)
 
@@ -319,28 +319,22 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   {-# INLINE extendScopedWith #-}
   extendScopedWith scoped term = bimap (\a -> scoped a sinkExtend) term
 
-  -- | What the context says about a variable, which readback and
-  -- conversion ask before they look at it ('refine'). A language whose
-  -- context knows types η-expands a variable at the type of an introduction
-  -- form, such as @f@ of a function type to @λx. f x@, or a variable of the
-  -- unit type to its one value. By default a variable stays as it is.
+  -- | Refine a variable by the context, in readback and conversion
+  -- ('refine'). For example, a language whose context knows types
+  -- η-expands @f@ of a function type to @λx. f x@. By default a variable
+  -- stays as it is.
   --
   -- Unlike 'definition', which 'eval' asks once about a free name, the
-  -- method sees every variable, bound ones too, in the context where the
-  -- variable is read back, which may know more than the context where it was
-  -- evaluated.
+  -- method sees every variable, bound ones too, in the context where it is
+  -- read back.
   refineVar :: Foil.Distinct n => Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n
   {-# INLINE refineVar #-}
   refineVar _ _ = VVar
 
-  -- | What the context says about a node, asked like 'refineVar': for
-  -- example, a neutral application that an annotation gives the unit type is
-  -- that type's one value. The method sees the node's constructor and its
-  -- term positions, which are values, but not its scoped positions. The
-  -- value of the node comes first, for a refinement that keeps it, such as
-  -- @λx. f a x@. By default a node stays as it is. 'etaMatchWith' is the
-  -- other side of η: it compares an introduction form with another value by
-  -- shape, after both are refined.
+  -- | Refine a node by the context, like 'refineVar'. The method sees the
+  -- constructor and the term positions, but not the scoped ones. The value
+  -- of the node comes first, to embed, as in @λx. f a x@. By default a node
+  -- stays as it is.
   refineSig ::
     Foil.Distinct n =>
     Foil.Scope n -> ctx n -> Value binder sig n -> sig a (Value binder sig n) -> Value binder sig n

@@ -1,19 +1,17 @@
 {-# LANGUAGE DataKinds  #-}
 {-# LANGUAGE GADTs      #-}
 {-# LANGUAGE LambdaCase #-}
--- | Bidirectional elaboration of the dependent types language: a term is checked
--- against a type or its type is inferred, and the result carries the types
--- that normalisation needs (see "DependentTypes"). Types are values, and
--- elaboration compares them with the language's own conversion, in the
--- context of the types of the names in scope.
+-- | Bidirectional elaboration of the dependent types language. A term is
+-- checked against a type, or its type is inferred, and the result carries
+-- the types that normalisation needs (see "DependentTypes"). Types are
+-- values, compared with the language's own conversion.
 --
--- The universe has itself as its type. A pair is checked against a Σ type
--- and a λ against a Π type. Every other term is inferred, then compared with
--- the type it is checked against.
+-- A pair is checked against a Σ type and a λ against a Π type. Every other
+-- term is inferred, then compared with the type it is checked against. The
+-- universe has itself as its type.
 --
 -- The algorithm is the standard bidirectional one (see the survey of
--- Dunfield and Krishnaswami, "Bidirectional Typing", 2021), with types as
--- values computed by normalisation by evaluation.
+-- Dunfield and Krishnaswami, "Bidirectional Typing", 2021).
 module DependentTypes.Elaborate
   ( check
   , infer

@@ -11,21 +11,14 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 -- | Dependent functions and pairs over a universe, with a unit type: a
 -- language whose context holds types. Its terms are elaborated (see
--- "DependentTypes.Elaborate"): every binder carries its type, and an
--- eliminator, an application or a projection, carries the type of its
--- result as free-foil's annotation. Every other node is annotated 'Nothing'.
--- Under a binder the language gives the bound name its type, the domain of
--- the @λ@, @Π@ or @Σ@ ('NbE.extendScopedWith').
+-- "DependentTypes.Elaborate"). Every binder carries its type, and every
+-- eliminator carries the type of its result as free-foil's annotation.
 --
--- The language uses both sides of η. The types decide η for functions and
--- the unit type ('NbE.refineVar', 'NbE.refineSig'): a neutral of type
--- @Unit@ is @tt@, and a neutral @f@ of type @(x : A) -> B@ is
--- @\\(x : A). f x@. A variable finds its type in the context, an eliminator
--- in its annotation. So in a context of types ('Typing') @\\(x : Unit). x@
--- normalises to @\\(x : Unit). tt@, while with 'NbE.NoContext' variables
--- have no types. Pairs have η by shape ('NbE.etaMatchWith'): conversion
--- compares a pair with another value through the projections, so @p@ and
--- @(first p, second p)@ are convertible, and @p@ is a normal form.
+-- η for functions and the unit type goes by types. In a context of types
+-- ('Typing'), readback turns a neutral @f : (x : A) -> B@ into
+-- @\\(x : A). f x@, and a neutral of type @Unit@ into @tt@. η for pairs goes
+-- by shape ('NbE.etaMatchWith'), so @p@ is a normal form, convertible with
+-- @(first p, second p)@.
 --
 -- The grammar follows the monolithic language's, with the projections
 -- named as in Rzk, and the modules follow Renata Shakirova's pairs language.
@@ -141,9 +134,7 @@ instance HasHeads TermSig where
     SecondSig p    -> SecondSig (hd p)
     node           -> bimap id other node
 
--- | β for functions and for projections of a pair, the types of bound
--- names, η at the types of functions and of the unit type, and η of pairs
--- by shape.
+-- | β for functions and projections, the types of bound names, and η.
 instance (HasTypes ctx, HasDefinitions ctx FFPattern Sig) => Eval ctx FFPattern Sig where
   {-# INLINABLE evalSig #-}
   evalSig scope ctx env (AnnSig ann node) = case node of
@@ -208,9 +199,8 @@ secondValue ann p = case p of
   NbE.VNode (AnnSig _ (PairSig _ b)) -> b
   _ -> NbE.VNode (AnnSig ann (SecondSig p))
 
--- | The projections that compare a pair with another value by η. A
--- projection of a neutral whose type is known is annotated with its type,
--- so that it is refined as well.
+-- | The projections for η of pairs. Like the elaborated ones, they carry
+-- their types where these are known.
 firstOf :: (HasTypes ctx, Distinct n) => Scope n -> ctx n -> Value n -> Value n
 firstOf _ ctx p = firstValue (typeOfNeutral ctx p >>= sigmaDomain) p
 

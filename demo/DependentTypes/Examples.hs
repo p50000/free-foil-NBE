@@ -1,7 +1,7 @@
--- | Example terms of the dependent types language: closed terms with their types and their
--- normal forms in a context of types, and pairs of convertible and of
--- inconvertible terms of one type. The examples are strings, elaborated by
--- "DependentTypes.Elaborate".
+-- | Example terms of the dependent types language: closed terms with their
+-- types and normal forms, and pairs of terms of one type that are
+-- convertible or not, all in a context of types. The examples are strings,
+-- elaborated by "DependentTypes.Elaborate".
 module DependentTypes.Examples
   ( Example (..)
   , unitVariable

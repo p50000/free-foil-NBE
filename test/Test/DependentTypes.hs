@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
--- | Tests of the dependent types language: every example elaborates and reaches its
--- normal form in a context of types, the conversion examples, the untyped
--- normal form without a context, and elaboration errors.
+-- | Tests of the dependent types language: the normal forms and conversions
+-- of the examples in a context of types, the untyped normal form without a
+-- context, and elaboration errors.
 module Test.DependentTypes (tests) where
 
 import Test.Tasty

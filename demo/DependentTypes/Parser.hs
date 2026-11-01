@@ -21,7 +21,7 @@ import DependentTypes.Generated (toTerm)
 import DependentTypes.Syntax.Abs (Term, VarIdent (..))
 import DependentTypes.Syntax.Par (myLexer, pTerm)
 
--- | Resolve a raw term into scope-safe syntax; a free variable missing from
+-- | Resolve a raw term into scope-safe syntax. A free variable missing from
 -- the environment is an error.
 resolve :: Distinct n => Scope n -> Map String (Name n) -> Term -> Raw n
 resolve = resolveWith toTerm VarIdent
