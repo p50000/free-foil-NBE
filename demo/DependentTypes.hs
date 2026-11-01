@@ -403,24 +403,24 @@ singletonCodomain scope ctx dom env cod = withFresh scope $ \x ->
 refineAt :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> Value n -> TypeValue n -> Value n
 {-# INLINE refineAt #-}
 refineAt scope ctx value ty
-  | isSingletonType ty = canonical scope ctx ty
+  | isSingletonType ty = canonicalSingleton scope ctx ty
   | otherwise          = value
 
 -- | The one value of a singleton type: @tt@, a λ whose body is the one value
 -- of the codomain, or the pair of the one values.
-canonical :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> TypeValue n -> Value n
-{-# INLINABLE canonical #-}
-{-# SPECIALIZE canonical :: Distinct n => Scope n -> Typing n -> TypeValue n -> Value n #-}
-canonical scope ctx ty = case ty of
+canonicalSingleton :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> TypeValue n -> Value n
+{-# INLINABLE canonicalSingleton #-}
+{-# SPECIALIZE canonicalSingleton :: Distinct n => Scope n -> Typing n -> TypeValue n -> Value n #-}
+canonicalSingleton scope ctx ty = case ty of
   NbE.VNode (AnnSig _ UnitSig) -> NbE.VNode (AnnSig (HasType unitType) TTSig)
   NbE.VSuspended env (AnnSig _ (PiSig dom cod)) -> withFresh scope $ \x ->
     let scope' = extendScope x scope
         ctx' = assume x dom ctx
-        body = NbE.quote scope' ctx' (canonical scope' ctx' (codomainAt scope' ctx' (sink env) cod (NbE.VVar (nameOf x))))
+        body = NbE.quote scope' ctx' (canonicalSingleton scope' ctx' (codomainAt scope' ctx' (sink env) cod (NbE.VVar (nameOf x))))
     in NbE.VSuspended identitySubst (AnnSig (HasType ty) (LamSig dom (ScopedAST (FFPatternVar x) body)))
   NbE.VSuspended env (AnnSig _ (SigmaSig dom cod)) ->
-    let a = canonical scope ctx dom
-    in NbE.VNode (AnnSig (HasType ty) (PairSig a (canonical scope ctx (codomainAt scope ctx env cod a))))
+    let a = canonicalSingleton scope ctx dom
+    in NbE.VNode (AnnSig (HasType ty) (PairSig a (canonicalSingleton scope ctx (codomainAt scope ctx env cod a))))
   _ -> error "DependentTypes: impossible: the one value of a type that is not a singleton"
 
 -- * Normalisation
