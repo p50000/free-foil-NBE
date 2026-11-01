@@ -137,6 +137,7 @@ unitType = NbE.VNode (AnnSig (HasType universe) UnitSig)
 
 -- | The type in an annotation.
 annotatedType :: TypeAnn (TypeValue n) -> TypeValue n
+{-# INLINE annotatedType #-}
 annotatedType = \case
   HasType ty -> ty
   IsUniverse -> universe
@@ -244,12 +245,14 @@ appValue ann scope ctx fun arg = case fun of
 -- | The first component of a pair value. Any other value gives a stuck
 -- projection of the type in the annotation.
 firstValue :: TypeAnn (TypeValue n) -> Value n -> Value n
+{-# INLINE firstValue #-}
 firstValue ann p = case p of
   NbE.VNode (AnnSig _ (PairSig a _)) -> a
   _ -> NbE.VNode (AnnSig ann (FirstSig p))
 
 -- | The second component of a pair value, like 'firstValue'.
 secondValue :: TypeAnn (TypeValue n) -> Value n -> Value n
+{-# INLINE secondValue #-}
 secondValue ann p = case p of
   NbE.VNode (AnnSig _ (PairSig _ b)) -> b
   _ -> NbE.VNode (AnnSig ann (SecondSig p))
@@ -257,11 +260,13 @@ secondValue ann p = case p of
 -- | The projections for η of pairs. They carry their types, so that they are
 -- refined as well.
 firstOf :: HasTypes ctx => Scope n -> ctx n -> Value n -> Value n
+{-# INLINE firstOf #-}
 firstOf _ ctx p = case typeOfValue ctx p of
   NbE.VSuspended _ (AnnSig _ (SigmaSig a _)) -> firstValue (HasType a) p
   _ -> notOfPairType
 
 secondOf :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> Value n -> Value n
+{-# INLINE secondOf #-}
 secondOf scope ctx p = case typeOfValue ctx p of
   NbE.VSuspended env (AnnSig _ (SigmaSig _ cod)) ->
     secondValue (HasType (codomainAt scope ctx env cod (firstOf scope ctx p))) p
@@ -275,6 +280,7 @@ notOfPairType = error "DependentTypes: impossible: η for a pair against a value
 -- | The type of a value: of a variable from the context, of a node from its
 -- annotation.
 typeOfValue :: HasTypes ctx => ctx n -> Value n -> TypeValue n
+{-# INLINE typeOfValue #-}
 typeOfValue ctx = \case
   NbE.VVar x -> typeOfName ctx x
   NbE.VNode (AnnSig ann _) -> annotatedType ann
@@ -282,6 +288,7 @@ typeOfValue ctx = \case
 
 -- | The binder of one name of a type.
 assumeVar :: HasTypes ctx => TypeValue n -> Extend ctx FFPattern Sig n
+{-# INLINE assumeVar #-}
 assumeVar ty = Extend $ \_ pat _ ctx -> case pat of
   FFPatternVar x -> assume x ty ctx
 
@@ -290,11 +297,13 @@ assumeVar ty = Extend $ \_ pat _ ctx -> case pat of
 codomainAt ::
   (Eval ctx FFPattern Sig, Distinct n, Distinct i) =>
   Scope n -> ctx n -> Substitution Value i n -> ScopedAST FFPattern Sig i -> Value n -> TypeValue n
+{-# INLINE codomainAt #-}
 codomainAt scope ctx env (ScopedAST (FFPatternVar b) cod) arg = case assertDistinct b of
   Distinct -> NbE.eval scope ctx (addSubst env b arg) cod
 
 -- | η-expand a neutral at its type.
 expandAt :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> Value n -> TypeValue n -> Value n
+{-# INLINE expandAt #-}
 expandAt scope ctx value ty = case ty of
   NbE.VNode (AnnSig _ UnitSig) -> NbE.VNode (AnnSig (HasType unitType) TTSig)
   NbE.VSuspended env (AnnSig _ (PiSig dom cod)) -> expandFunction scope ctx value ty dom env cod
@@ -308,6 +317,7 @@ expandFunction ::
   (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n, Distinct i) =>
   Scope n -> ctx n -> Value n -> TypeValue n -> TypeValue n ->
   Substitution Value i n -> ScopedAST FFPattern Sig i -> Value n
+{-# INLINE expandFunction #-}
 expandFunction scope ctx fun ty dom env codomain =
   withFresh scope $ \g ->
     let scopeG = extendScope g scope
