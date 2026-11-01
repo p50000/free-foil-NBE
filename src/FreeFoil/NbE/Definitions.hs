@@ -17,14 +17,26 @@ module FreeFoil.NbE.Definitions
   ) where
 
 import qualified Control.Monad.Foil          as Foil
-import qualified Control.Monad.Foil.Internal as Foil (Substitution (..))
+import qualified Control.Monad.Foil.Internal as Foil (Name (..), Substitution (..))
 import           Control.Monad.Free.Foil     (AST)
 import           Data.Bifunctor              (Bifunctor)
+
+import qualified Data.IntMap                 as IntMap
 
 import           FreeFoil.NbE                (Context (..), Eval, HasDefinitions (..), Value, eval)
 
 -- | A context of definitions: the values of the names it defines.
 newtype Defined binder sig n = Defined (Foil.Substitution (Value binder sig) n n)
+
+-- | Under a binder the context defines the same names. The keys are renamed
+-- through free-foil's internal constructor, as free-foil does for
+-- 'Foil.NameSet', since free-foil has no instance for a substitution from a
+-- scope to itself.
+instance Bifunctor sig => Foil.Sinkable (Defined binder sig) where
+  sinkabilityProof rename (Defined (Foil.UnsafeSubstitution values)) =
+    Defined (Foil.UnsafeSubstitution (IntMap.fromList
+      [ (Foil.nameId (rename (Foil.UnsafeName k)), Foil.sinkabilityProof rename v)
+      | (k, v) <- IntMap.toList values ]))
 
 instance Bifunctor sig => Context (Defined binder sig) where
   {-# INLINE extendContext #-}
