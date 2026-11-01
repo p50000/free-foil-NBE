@@ -39,7 +39,7 @@ module Naturals
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Context, Eval (..), HasDefinitions)
+import FreeFoil.NbE (Eval (..), HasDefinitions)
 import qualified FreeFoil.NbE as NbE
 
 import Naturals.Generated
@@ -102,7 +102,7 @@ type Value = NbE.Value FFPattern TermSig
 -- normalises under the two names of the @suc@ branch. The zero branch is
 -- evaluated at most once across the whole recursion. @zero@ and @suc@ fall
 -- through to the default.
-instance (Context ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPattern TermSig where
+instance (Sinkable ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPattern TermSig where
   {-# INLINABLE evalSig #-}
   evalSig scope ctx env = \case
     NatRecSig n z (ScopedAST (FFPatternRec k r) s) ->

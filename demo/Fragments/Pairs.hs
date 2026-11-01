@@ -29,7 +29,7 @@ import Data.Bifunctor.TH       (deriveBifoldable, deriveBifunctor, deriveBitrave
 import Data.ZipMatchK.TH       (deriveZipMatchK)
 import GHC.Generics            (Generic)
 
-import FreeFoil.NbE            (Context, EtaTerm (..), Value (..), eval, evalNode)
+import FreeFoil.NbE            (EtaTerm (..), Value (..), eval, evalNode)
 import FreeFoil.NbE.Sum
 
 -- | Pairs: @(t, u)@, @fst t@, @snd t@ and @split t as (x, y) in u@.
@@ -47,7 +47,7 @@ deriveBitraversable ''PairF
 deriveZipMatchK ''PairF
 instance (NFData scope, NFData term) => NFData (PairF scope term)
 
-instance (Context ctx, CoSinkable binder) => EvalF ctx binder PairF where
+instance (Sinkable ctx, CoSinkable binder) => EvalF ctx binder PairF where
   {-# INLINE evalF #-}
   evalF pos scope ctx env = \case
     FstF p -> fstValue pos (eval scope ctx env p)

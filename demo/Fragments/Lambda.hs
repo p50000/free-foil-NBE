@@ -28,7 +28,7 @@ import Data.Bifunctor.TH       (deriveBifoldable, deriveBifunctor, deriveBitrave
 import Data.ZipMatchK.TH       (deriveZipMatchK)
 import GHC.Generics            (Generic)
 
-import FreeFoil.NbE            (Context, EtaScoped (..), Eval, Value (..), eval, evalNode)
+import FreeFoil.NbE            (EtaScoped (..), Eval, Value (..), eval, evalNode)
 import FreeFoil.NbE.Sum
 
 -- | Functions: @λx. t@, @t u@ and @Π (x : a). b@.
@@ -45,7 +45,7 @@ deriveBitraversable ''LamF
 deriveZipMatchK ''LamF
 instance (NFData scope, NFData term) => NFData (LamF scope term)
 
-instance (Context ctx, CoSinkable binder) => EvalF ctx binder LamF where
+instance (Sinkable ctx, CoSinkable binder) => EvalF ctx binder LamF where
   {-# INLINE evalF #-}
   evalF pos scope ctx env = \case
     AppF fun arg -> appValue pos scope ctx (eval scope ctx env fun) (eval scope ctx env arg)

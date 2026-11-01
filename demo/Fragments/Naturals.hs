@@ -27,7 +27,7 @@ import Data.Bifunctor.TH       (deriveBifoldable, deriveBifunctor, deriveBitrave
 import Data.ZipMatchK.TH       (deriveZipMatchK)
 import GHC.Generics            (Generic)
 
-import FreeFoil.NbE            (Context, Value (..), eval, evalNode)
+import FreeFoil.NbE            (Value (..), eval, evalNode)
 import FreeFoil.NbE.Sum
 
 -- | Naturals: @zero@, @suc t@ and @natrec n { zero -> z ; suc k, r -> s }@.
@@ -44,7 +44,7 @@ deriveBitraversable ''NatF
 deriveZipMatchK ''NatF
 instance (NFData scope, NFData term) => NFData (NatF scope term)
 
-instance (Context ctx, CoSinkable binder) => EvalF ctx binder NatF where
+instance (Sinkable ctx, CoSinkable binder) => EvalF ctx binder NatF where
   {-# INLINE evalF #-}
   evalF pos scope ctx env = \case
     NatRecF n z (ScopedAST binder s) ->

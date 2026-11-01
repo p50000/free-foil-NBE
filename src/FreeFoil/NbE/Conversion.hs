@@ -44,7 +44,7 @@ import           Data.Bifoldable             (biall, biand)
 import           Data.Void                   (absurd)
 import           Data.ZipMatchK              (ZipMatchFoldK, zipMatchAll2)
 
-import           FreeFoil.NbE                (Context (..), EtaScoped (..), EtaTerm (..), Eval (..), Value (..), eval)
+import           FreeFoil.NbE                (EtaScoped (..), EtaTerm (..), Eval (..), Extend (..), Value (..), eval)
 
 -- | Two values are convertible: their normal forms are equal up to renaming
 -- of bound variables and η. Nodes match when they have the same constructor,
@@ -61,8 +61,11 @@ conv scope ctx l r = case (l, r) of
   (VVar x, VVar y) -> x == y
   (VNode a, VNode b)
     | Just same <- zipMatchAll2 (\v _ -> absurd v) (conv scope ctx) a b -> same
+  -- The left node gives each scoped position its extension of the context,
+  -- as a function of the right position. When 'extendScopedWith' inlines,
+  -- the intermediate node does not survive.
   (VSuspended envL a, VSuspended envR b)
-    | Just same <- zipMatchAll2 (convScoped scope ctx envL envR) (conv scope ctx) a b -> same
+    | Just same <- zipMatchAll2 ($) ($) (extendScopedWith (convScoped scope ctx envL envR) (conv scope ctx) a) b -> same
   -- Nodes of different constructors are compared by η. A node goes to
   -- 'VNode' exactly when it has no scoped subterms, so a 'VNode' and a
   -- 'VSuspended' never have the same constructor.
@@ -83,13 +86,14 @@ convEta scope ctx intro other = case intro of
   VNode node ->
     maybe False (biall absurd id) (etaMatchWith (\v _ -> absurd v) observedTerm node)
   VSuspended env node ->
-    maybe False biand (etaMatchWith (convObserved scope ctx env other) observedTerm node)
+    maybe False biand (etaMatchWith ($) observedTerm (extendScopedWith (convObserved scope ctx env other) id node))
   VVar _ -> False
   where
     observedTerm v (EtaTerm observe) = conv scope ctx v (observe scope ctx other)
 
 -- | A scoped position of an introduction form against the other value
--- observed under the position's refreshed binder.
+-- observed under the position's refreshed binder, in the context of the
+-- position's extension.
 convObserved ::
   (Eval ctx binder sig, ZipMatchFoldK sig, Foil.Distinct n, Foil.Distinct i, Foil.UnifiablePattern binder) =>
   Foil.Scope n ->
@@ -97,14 +101,15 @@ convObserved ::
   Foil.Substitution (Value binder sig) i n ->
   Value binder sig n ->
   ScopedAST binder sig i ->
+  Extend ctx binder n ->
   EtaScoped ctx binder sig n ->
   Bool
 {-# INLINE convObserved #-}
-convObserved scope ctx env other (ScopedAST binder body) (EtaScoped observe) =
+convObserved scope ctx env other (ScopedAST binder body) (Extend extend) (EtaScoped observe) =
   Foil.withRefreshedPattern scope binder $ \extendEnv binder' scope' ->
     case Foil.assertDistinct binder of
       Foil.Distinct ->
-        let ctx' = extendContext scope binder' scope' ctx
+        let ctx' = extend scope binder' scope' ctx
         in conv scope' ctx'
              (eval scope' ctx' (extendEnv env) body)
              (observe scope' ctx' binder' (Foil.sink other))
@@ -113,7 +118,8 @@ convObserved scope ctx env other (ScopedAST binder body) (EtaScoped observe) =
 -- have the same shape; they come from different scopes, so free-foil's
 -- 'Foil.unsafeUnifiablePatterns' compares them. The left binder is refreshed
 -- for the common scope, the names it binds extend both environments (the
--- right one by position in the pattern), and the bodies are compared with
+-- right one by position in the pattern), the context is extended with the
+-- left position's extension, and the bodies are compared with
 -- 'convertibleUnder'.
 convScoped ::
   (Eval ctx binder sig, ZipMatchFoldK sig, Foil.Distinct n, Foil.Distinct i1, Foil.Distinct i2, Foil.UnifiablePattern binder) =>
@@ -122,16 +128,17 @@ convScoped ::
   Foil.Substitution (Value binder sig) i1 n ->
   Foil.Substitution (Value binder sig) i2 n ->
   ScopedAST binder sig i1 ->
+  Extend ctx binder n ->
   ScopedAST binder sig i2 ->
   Bool
 {-# INLINE convScoped #-}
-convScoped scope ctx envL envR (ScopedAST binderL bodyL) (ScopedAST binderR bodyR)
+convScoped scope ctx envL envR (ScopedAST binderL bodyL) (Extend extend) (ScopedAST binderR bodyR)
   | not (Foil.unsafeUnifiablePatterns binderL binderR) = False
   | otherwise =
       Foil.withRefreshedPattern scope binderL $ \extendL binderL' scope' ->
         case (Foil.assertDistinct binderL, Foil.assertDistinct binderR) of
           (Foil.Distinct, Foil.Distinct) ->
-            let ctx'  = extendContext scope binderL' scope' ctx
+            let ctx'  = extend scope binderL' scope' ctx
                 fresh = map VVar (Foil.namesOfPattern binderL')
                 envR' = Foil.addSubstPattern (Foil.sink envR) binderR fresh
             in convertibleUnder scope' ctx' (extendL envL) envR' bodyL bodyR

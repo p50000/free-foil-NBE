@@ -38,7 +38,7 @@ module Pairs
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Context, Eval (..), HasDefinitions)
+import FreeFoil.NbE (Eval (..), HasDefinitions)
 import qualified FreeFoil.NbE as NbE
 
 import Pairs.Generated
@@ -94,7 +94,7 @@ type Value = NbE.Value FFPattern TermSig
 -- evaluated, so readback normalises under its two names. A pair falls
 -- through to the default and becomes a 'NbE.VNode' whose components are
 -- lazy values.
-instance (Context ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPattern TermSig where
+instance (Sinkable ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPattern TermSig where
   {-# INLINABLE evalSig #-}
   evalSig scope ctx env = \case
     FstSig p -> fstValue (NbE.eval scope ctx env p)

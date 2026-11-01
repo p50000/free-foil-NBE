@@ -3,9 +3,12 @@
 ## Unreleased
 
 - Evaluation, readback and conversion take, beside the scope, a context the
-  client supplies (`Context`). A language's `Eval` instance states what it
-  needs of the context, and the demonstration languages use `NoContext`,
-  which knows nothing beyond the scope.
+  client supplies. A language's `Eval` instance states what it needs of the
+  context, and the demonstration languages use `NoContext`, which knows
+  nothing beyond the scope. Under a binder the language says what the
+  context learns (`extendScopedWith`, in the style of `etaMatchWith`). By
+  default a binder only adds its names, so any sinkable context works with
+  any language.
 - A context may give the free names of a language values (`definition`,
   by default from `HasDefinitions`),
   which `eval` unfolds where the names are used. `NoContext` gives none.

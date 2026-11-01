@@ -23,7 +23,7 @@ import           Data.Bifunctor              (Bifunctor)
 
 import qualified Data.IntMap                 as IntMap
 
-import           FreeFoil.NbE                (Context (..), Eval, HasDefinitions (..), Value, eval)
+import           FreeFoil.NbE                (Eval, HasDefinitions (..), Value, eval)
 
 -- | A context of definitions: the values of the names it defines.
 newtype Defined binder sig n = Defined (Foil.Substitution (Value binder sig) n n)
@@ -38,23 +38,9 @@ instance Bifunctor sig => Foil.Sinkable (Defined binder sig) where
       [ (Foil.nameId (rename (Foil.UnsafeName k)), Foil.sinkabilityProof rename v)
       | (k, v) <- IntMap.toList values ]))
 
-instance Bifunctor sig => Context (Defined binder sig) where
-  {-# INLINE extendContext #-}
-  extendContext _ _ _ (Defined subst) = Defined (underBinder subst)
-
 instance Bifunctor sig => HasDefinitions (Defined binder sig) binder sig where
   {-# INLINE contextDefinition #-}
   contextDefinition _ (Defined subst) = Foil.lookupSubst subst
-
--- | A substitution over a scope, under a binder of that scope. The names the
--- binder adds are not in the map, so they map to themselves, and the map is
--- reused at the larger input scope. 'Foil.addRename' would do the same with
--- public functions, at the cost of a deletion per name at every binder. The
--- function belongs in free-foil.
-underBinder :: (Foil.Sinkable e, Foil.DExt n l) => Foil.Substitution e n n -> Foil.Substitution e l l
-{-# INLINE underBinder #-}
-underBinder subst = case Foil.sink subst of
-  Foil.UnsafeSubstitution values -> Foil.UnsafeSubstitution values
 
 -- | The context that defines no names.
 noDefinitions :: Defined binder sig n

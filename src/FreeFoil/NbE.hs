@@ -29,12 +29,13 @@
 -- 'Foil.SinkableK' for 'whnf', which has a generic default.
 --
 -- Evaluation, readback and conversion take the scope and, beside it, a
--- context the client supplies ('Context'). The core is polymorphic in the
--- context, and a language states in its 'Eval' instance what it needs of it.
--- A context may give the free names of a language values ('definition',
--- by default from 'HasDefinitions').
--- The demonstration languages use 'NoContext', which knows nothing beyond
--- the scope.
+-- context the client supplies. The core is polymorphic in the context, and a
+-- language states in its 'Eval' instance what it needs of it. A context may
+-- give the free names of a language values ('definition', by default from
+-- 'HasDefinitions'). Under a binder the language says what the context
+-- learns ('extendScopedWith'). By default the binder only adds its names, so
+-- any 'Foil.Sinkable' context works with any language. The demonstration
+-- languages use 'NoContext', which knows nothing beyond the scope.
 --
 -- A language specialises 'nf', 'eval' and 'quote' to its types, next to
 -- its 'Eval' instance, keeping the scope polymorphic and fixing the context
@@ -56,17 +57,18 @@
 --
 -- A client with a context of its own gives the same pragmas at its context.
 -- For them to reach the rules, the instance marks 'evalSig' and
--- 'etaMatchWith' @INLINABLE@. Otherwise every node runs the unspecialised
--- evaluator. A helper of the language that takes the context, such as
--- lambda-pi's @appValue@, is specialised only at the contexts of its own
--- pragmas.
+-- 'etaMatchWith' @INLINABLE@, and 'extendScopedWith', if it gives one,
+-- @INLINE@. Otherwise every node runs the unspecialised evaluator. A helper
+-- of the language that takes the context, such as lambda-pi's @appValue@,
+-- is specialised only at the contexts of its own pragmas.
 module FreeFoil.NbE
   ( -- * Semantic domain
     Value (..)
     -- * Context
-  , Context (..)
   , NoContext (..)
   , HasDefinitions (..)
+  , Extend (..)
+  , sinkExtend
     -- * Evaluation
   , Eval (..)
   , eval
@@ -137,22 +139,11 @@ instance Bifunctor sig => Foil.Sinkable (Value binder sig) where
 
 -- * Context
 
--- | The context that evaluation, readback and conversion carry beside the
--- scope, indexed by it. 'NoContext' is the simplest instance.
-class Context ctx where
-  -- | The context under a binder: given the scope, the binder, refreshed for
-  -- the scope, and the scope under it, which free-foil computes when it
-  -- refreshes the binder.
-  extendContext ::
-    (Foil.CoSinkable binder, Foil.Distinct n, Foil.DExt n l) =>
-    Foil.Scope n -> binder n l -> Foil.Scope l -> ctx n -> ctx l
-
 -- | The context that knows nothing beyond the scope.
 data NoContext (n :: Foil.S) = NoContext
 
-instance Context NoContext where
-  {-# INLINE extendContext #-}
-  extendContext _ _ _ _ = NoContext
+instance Foil.Sinkable NoContext where
+  sinkabilityProof _ NoContext = NoContext
 
 -- | The values a context gives to free names, the default of 'definition'.
 -- 'NoContext' defines nothing. A language generic in the context requires
@@ -166,6 +157,20 @@ class HasDefinitions ctx binder sig where
 instance HasDefinitions NoContext binder sig where
   {-# INLINE contextDefinition #-}
   contextDefinition _ _ = VVar
+
+-- | The context under the binder of a scoped position: from the scope, the
+-- binder, refreshed for the scope, the scope under it, which free-foil
+-- computes when it refreshes the binder, and the context. A language gives
+-- one for each scoped position of a node with 'extendScopedWith'.
+newtype Extend ctx binder n = Extend
+  (forall l. (Foil.Distinct n, Foil.DExt n l) =>
+    Foil.Scope n -> binder n l -> Foil.Scope l -> ctx n -> ctx l)
+
+-- | The context under a binder that adds nothing but its names: the same
+-- context, sunk.
+sinkExtend :: Foil.Sinkable ctx => Extend ctx binder n
+{-# INLINE sinkExtend #-}
+sinkExtend = Extend (\_ _ _ -> Foil.sink)
 
 -- * η
 
@@ -196,7 +201,7 @@ newtype EtaScoped ctx binder sig n =
 -- interpreted node it would discard. The instance upholds the 'Value'
 -- invariant; "LambdaPi" is a one-rule example. An instance comes with the
 -- pragmas described in the module header.
-class (Context ctx, Bifunctor sig, Bifoldable sig) => Eval ctx binder sig where
+class (Bifunctor sig, Bifoldable sig) => Eval ctx binder sig where
   -- | The value of a free name, or the name itself if it has none. By
   -- default the context's 'contextDefinition'.
   definition :: Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n
@@ -234,6 +239,34 @@ class (Context ctx, Bifunctor sig, Bifoldable sig) => Eval ctx binder sig where
     Maybe (sig c d)
   {-# INLINE etaMatchWith #-}
   etaMatchWith _ _ _ = Nothing
+
+  -- | The context under the binder of each scoped position of a node, for
+  -- readback and conversion, in the style of 'etaMatchWith':
+  --
+  -- > extendScopedWith scoped term = \case
+  -- >   PiSig dom body -> PiSig (term dom) (scoped body (Extend (\_ (PatternVar x) _ ctx -> assume x dom ctx)))
+  -- >   …
+  --
+  -- The term positions are values, so that an extension may use them, such
+  -- as the domain of a Π. By default every binder only adds its names
+  -- ('sinkExtend'), which needs a 'Foil.Sinkable' context. A context that
+  -- holds something for every name in scope, such as its type, is not
+  -- sinkable, and a language that uses one gives this method. The method is
+  -- @INLINE@, so that readback and conversion build no intermediate node.
+  extendScopedWith ::
+    Foil.Distinct n =>
+    (a -> Extend ctx binder n -> c) ->
+    (Value binder sig n -> d) ->
+    sig a (Value binder sig n) ->
+    sig c d
+  default extendScopedWith ::
+    (Foil.Sinkable ctx, Foil.Distinct n) =>
+    (a -> Extend ctx binder n -> c) ->
+    (Value binder sig n -> d) ->
+    sig a (Value binder sig n) ->
+    sig c d
+  {-# INLINE extendScopedWith #-}
+  extendScopedWith scoped term = bimap (\a -> scoped a sinkExtend) term
 
 -- | Evaluate a term under an environment: look variables up, hand nodes to
 -- 'evalSig'. A variable that the environment does not map is a free name,
@@ -314,25 +347,27 @@ quote ::
 quote scope ctx = \case
   VVar x -> Var x
   VNode node -> Node $! bimap absurd (quote scope ctx) node
-  VSuspended env node -> Node $! bimap (quoteScoped scope ctx env) (quote scope ctx) node
+  VSuspended env node -> Node $! extendScopedWith (quoteScoped scope ctx env) (quote scope ctx) node
 
 -- | Read back one scoped subterm of a suspended node: refresh the binder,
--- extend the context and the captured environment with it, the latter as a
--- fresh neutral, evaluate the body once under them, and quote the result. It
--- inlines into 'quote', so it is specialised with it.
+-- extend the context with the position's 'Extend' and the captured
+-- environment with the binder, as a fresh neutral, evaluate the body once
+-- under them, and quote the result. It inlines into 'quote', so it is
+-- specialised with it.
 quoteScoped ::
   (Eval ctx binder sig, Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder) =>
   Foil.Scope n ->
   ctx n ->
   Foil.Substitution (Value binder sig) i n ->
   ScopedAST binder sig i ->
+  Extend ctx binder n ->
   ScopedAST binder sig n
 {-# INLINE quoteScoped #-}
-quoteScoped scope ctx env (ScopedAST binder body) =
+quoteScoped scope ctx env (ScopedAST binder body) (Extend extend) =
   Foil.withRefreshedPattern scope binder $ \extendEnv binder' scope' ->
     case Foil.assertDistinct binder of
       Foil.Distinct ->
-        let ctx' = extendContext scope binder' scope' ctx
+        let ctx' = extend scope binder' scope' ctx
         in ScopedAST binder' (quote scope' ctx' (eval scope' ctx' (extendEnv env) body))
 
 -- | Normal form: evaluate, then read back fully.

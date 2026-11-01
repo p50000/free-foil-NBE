@@ -32,7 +32,7 @@ module LambdaPi
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Context, Eval (..), HasDefinitions)
+import FreeFoil.NbE (Eval (..), HasDefinitions)
 import qualified FreeFoil.NbE as NbE
 import qualified FreeFoil.NbE.Conversion as Conv
 
@@ -88,7 +88,7 @@ type Value = NbE.Value FFPattern TermSig
 -- under its captured environment extended with the argument; a neutral head
 -- rebuilds the application. @Lam@ and @Pi@ fall through to the default, so a
 -- @Pi@ keeps its domain as a value and its codomain suspended.
-instance (Context ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPattern TermSig where
+instance (Sinkable ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPattern TermSig where
   {-# INLINABLE evalSig #-}
   evalSig scope ctx env = \case
     AppSig fun arg -> appValue scope ctx (NbE.eval scope ctx env fun) (NbE.eval scope ctx env arg)

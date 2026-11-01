@@ -77,7 +77,7 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 
 | Path | What it is |
 |------|-----------|
-| `src/FreeFoil/NbE.hs` | The core: `Value`, the `Eval` class, the client's `Context` and its `HasDefinitions`, generic `eval` and `quote`, `nf` and `whnf`. |
+| `src/FreeFoil/NbE.hs` | The core: `Value`, the `Eval` class, the client's context (`NoContext`, `HasDefinitions`, `extendScopedWith`), generic `eval` and `quote`, `nf` and `whnf`. |
 | `src/FreeFoil/NbE/Conversion.hs` | Conversion checking on values: `conv`, `convertible` and `convertibleUnder`. |
 | `src/FreeFoil/NbE/Annotated.hs` | Evaluation of annotated terms, ignoring the annotations: the `Eval` instance of `AnnSig` over a language of fragments. |
 | `src/FreeFoil/NbE/Definitions.hs` | Top-level definitions: a context that gives free names the values of their bodies. |
