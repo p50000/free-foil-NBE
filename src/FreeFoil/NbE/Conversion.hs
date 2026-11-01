@@ -46,7 +46,7 @@ import           Data.Bifoldable             (biall, biand)
 import           Data.Void                   (absurd)
 import           Data.ZipMatchK              (ZipMatchFoldK, zipMatchAll2)
 
-import           FreeFoil.NbE                (EtaScoped (..), EtaTerm (..), Eval (..), Extend (..), HasHeads (..), Value (..), eval)
+import           FreeFoil.NbE                (EtaScoped (..), EtaTerm (..), Eval (..), Extend (..), HasHeads (..), Value (..), eval, refine)
 
 -- | Two values are convertible: their normal forms are equal up to renaming
 -- of bound variables and η. Nodes match when they have the same constructor,
@@ -60,10 +60,10 @@ conv ::
   Value binder sig n ->
   Bool
 {-# INLINABLE conv #-}
-conv scope ctx l0 r0 = sameHead (etaExpand scope ctx l0) (etaExpand scope ctx r0)
+conv scope ctx l0 r0 = sameHead (refine scope ctx l0) (refine scope ctx r0)
   where
-    -- Two values compared without η-expanding them: heads ('headsWith'), or
-    -- values expanded already. Their heads are compared the same way, every
+    -- Two values compared without refining them: heads ('headsWith'), or
+    -- values refined already. Their heads are compared the same way, every
     -- other position with 'conv'. The function is local, so that a
     -- specialisation of 'conv' covers it.
     sameHead l r = case (l, r) of

@@ -59,7 +59,7 @@ pattern FF = Node FalseSig
 pattern If :: BoolTm n -> BoolTm n -> BoolTm n -> BoolTm n
 pattern If c t f = Node (IfSig c t f)
 
--- | No heads: the language does not η-expand.
+-- | No heads: the language does not refine values.
 instance HasHeads BoolSig
 
 -- | The one elimination rule: a canonical condition selects a branch, a

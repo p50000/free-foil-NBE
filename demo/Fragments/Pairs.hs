@@ -47,7 +47,7 @@ deriveBitraversable ''PairF
 deriveZipMatchK ''PairF
 instance (NFData scope, NFData term) => NFData (PairF scope term)
 
--- | No heads: the fragment does not η-expand.
+-- | No heads: the fragment does not refine values.
 instance HasHeads PairF
 
 instance (Sinkable ctx, CoSinkable binder) => EvalF ctx binder PairF where

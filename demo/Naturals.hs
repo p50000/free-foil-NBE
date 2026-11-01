@@ -89,7 +89,7 @@ numeral k = iterate Suc Zero !! k
 -- | Semantic values of naturals.
 type Value = NbE.Value FFPattern TermSig
 
--- | No heads: the language does not η-expand.
+-- | No heads: the language does not refine values.
 instance HasHeads TermSig
 
 -- | One elimination rule. @natrec@ evaluates its scrutinee and recurses on

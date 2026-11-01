@@ -34,7 +34,9 @@
 -- give the free names of a language values ('definition', by default from
 -- 'HasDefinitions'). Under a binder the language says what the context
 -- learns ('extendScopedWith'). By default the binder only adds its names, so
--- any 'Foil.Sinkable' context works with any language. The demonstration
+-- any 'Foil.Sinkable' context works with any language. Readback and
+-- conversion let the language refine a value by the context ('refineVar',
+-- 'refineSig'), for example η-expand it at its type. The demonstration
 -- languages use 'NoContext', which knows nothing beyond the scope.
 --
 -- A language specialises 'nf', 'eval' and 'quote' to its types, next to
@@ -80,6 +82,7 @@ module FreeFoil.NbE
   , EtaTerm (..)
   , EtaScoped (..)
     -- * Readback
+  , refine
   , quote
   , quoteScoped
   , nf
@@ -205,9 +208,9 @@ newtype EtaScoped ctx binder sig n =
 
 -- | The heads of a signature's nodes: the term positions an elimination
 -- rule eliminates, such as the function of an application. Readback and
--- conversion do not η-expand a head ('etaExpand'), since expanding the
+-- conversion do not refine a head ('refine'), since η-expanding the
 -- function of an application would make it a redex. A language that does
--- not η-expand needs no heads, which is the default:
+-- not refine values needs no heads, which is the default:
 --
 -- > instance HasHeads TermSig
 --
@@ -316,16 +319,33 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   {-# INLINE extendScopedWith #-}
   extendScopedWith scoped term = bimap (\a -> scoped a sinkExtend) term
 
-  -- | η-expansion of one value, which readback and conversion apply to a
-  -- value before they look at it. A language whose values or context know
-  -- types expands a neutral at the type of an introduction form, such as a
-  -- neutral function @f@ to @λx. f x@, or a neutral of the unit type to its
-  -- one value. By default a value stays as it is. 'etaMatchWith' is the
+  -- | What the context says about a variable, which readback and
+  -- conversion ask before they look at it ('refine'). A language whose
+  -- context knows types η-expands a variable at the type of an introduction
+  -- form, such as @f@ of a function type to @λx. f x@, or a variable of the
+  -- unit type to its one value. By default a variable stays as it is.
+  --
+  -- Unlike 'definition', which 'eval' asks once about a free name, the
+  -- method sees every variable, bound ones too, in the context where the
+  -- variable is read back, which may know more than the context where it was
+  -- evaluated.
+  refineVar :: Foil.Distinct n => Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n
+  {-# INLINE refineVar #-}
+  refineVar _ _ = VVar
+
+  -- | What the context says about a node, asked like 'refineVar': for
+  -- example, a neutral application that an annotation gives the unit type is
+  -- that type's one value. The method sees the node's constructor and its
+  -- term positions, which are values, but not its scoped positions. The
+  -- value of the node comes first, for a refinement that keeps it, such as
+  -- @λx. f a x@. By default a node stays as it is. 'etaMatchWith' is the
   -- other side of η: it compares an introduction form with another value by
-  -- shape, after both are expanded.
-  etaExpand :: Foil.Distinct n => Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n
-  {-# INLINE etaExpand #-}
-  etaExpand _ _ value = value
+  -- shape, after both are refined.
+  refineSig ::
+    Foil.Distinct n =>
+    Foil.Scope n -> ctx n -> Value binder sig n -> sig a (Value binder sig n) -> Value binder sig n
+  {-# INLINE refineSig #-}
+  refineSig _ _ value _ = value
 
 -- | Evaluate a term under an environment: look variables up, hand nodes to
 -- 'evalSig'. A variable that the environment does not map is a free name,
@@ -408,6 +428,17 @@ ensureBivacuousSecond x
 
 -- * Readback
 
+-- | Refine a value by the context: a variable by 'refineVar', a node by
+-- 'refineSig'.
+refine ::
+  (Eval ctx binder sig, Foil.Distinct n) =>
+  Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n
+{-# INLINE refine #-}
+refine scope ctx value = case value of
+  VVar x            -> refineVar scope ctx x
+  VNode node        -> refineSig scope ctx value node
+  VSuspended _ node -> refineSig scope ctx value node
+
 -- | Read a value back into a term. Term subterms recurse directly; scoped
 -- subterms are read back under their binder by 'quoteScoped'.
 --
@@ -422,10 +453,10 @@ quote ::
   Value binder sig n ->
   AST binder sig n
 {-# INLINABLE quote #-}
-quote scope ctx value = readHead (etaExpand scope ctx value)
+quote scope ctx value = readHead (refine scope ctx value)
   where
-    -- A value read back without η-expanding it: a head ('headsWith'), or a
-    -- value expanded already. Its heads are read back the same way, every
+    -- A value read back without refining it: a head ('headsWith'), or a
+    -- value refined already. Its heads are read back the same way, every
     -- other position with 'quote'. The function is local, so that a
     -- specialisation of 'quote' covers it.
     readHead = \case
@@ -489,13 +520,13 @@ quoteWhnf ::
   ctx n ->
   Value binder sig n ->
   AST binder sig n
-quoteWhnf scope ctx value = case etaExpand scope ctx value of
+quoteWhnf scope ctx value = case refine scope ctx value of
   VVar x -> Var x
   VNode node -> Node $ bimap absurd id (headsWith readHead (quote scope ctx) node)
   VSuspended env node ->
     Node $ bimap (freezeScoped scope ctx env) id (headsWith readHead (quote scope ctx) node)
   where
-    -- A head, read back fully but not η-expanded (see 'quote').
+    -- A head, read back fully but not refined (see 'quote').
     readHead = \case
       VVar x -> Var x
       VNode node -> Node $! bimap absurd id (headsWith readHead (quote scope ctx) node)

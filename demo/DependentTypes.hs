@@ -20,9 +20,10 @@
 -- @split p : (a : A) * B as (x, y) in t@ the type @A@ for @x@ and @B@ at @x@
 -- for @y@, evaluated in the context that already has @x@.
 --
--- The types decide η ('NbE.etaExpand'). A neutral of type @Unit@ is @tt@, and
--- a neutral @f@ of type @(x : A) -> B@ is @\\(x : A). f x@. A neutral finds
--- its type in its annotation, a variable in the context. So in a context of
+-- The types decide η ('NbE.refineVar', 'NbE.refineSig'). A neutral of type
+-- @Unit@ is @tt@, and a neutral @f@ of type @(x : A) -> B@ is
+-- @\\(x : A). f x@. A variable finds its type in the context, an eliminator
+-- in its annotation. So in a context of
 -- types ('Typing') @\\(x : Unit). x@ normalises to @\\(x : Unit). tt@, while
 -- with 'NbE.NoContext' variables have no types. Pairs have no η, since the
 -- language has no projections.
@@ -170,10 +171,16 @@ instance (HasTypes ctx, HasDefinitions ctx FFPattern Sig) => Eval ctx FFPattern 
     UnitSig            -> UnitSig
     TTSig              -> TTSig
 
-  {-# INLINABLE etaExpand #-}
-  etaExpand scope ctx value = case typeOfNeutral ctx value of
-    Just ty -> expandAt scope ctx value ty
-    Nothing -> value
+  {-# INLINABLE refineVar #-}
+  refineVar scope ctx x = case typeOfName ctx x of
+    Just ty -> expandAt scope ctx (NbE.VVar x) ty
+    Nothing -> NbE.VVar x
+
+  {-# INLINABLE refineSig #-}
+  refineSig scope ctx value (AnnSig ann node) = case (ann, node) of
+    (Just ty, AppSig {})   -> expandAt scope ctx value ty
+    (Just ty, SplitSig {}) -> expandAt scope ctx value ty
+    _                      -> value
 
 -- | Apply a function value to an argument value: a suspended lambda is
 -- entered under its environment extended with the argument, any other
@@ -218,15 +225,6 @@ codomainAt scope ctx ty arg = case ty of
     at :: forall i l. Distinct i => Substitution Value i n -> NameBinder i l -> Elaborated l -> Value n
     at env b cod = case assertDistinct b of
       Distinct -> NbE.eval scope ctx (addSubst env b arg) cod
-
--- | The type of a neutral: of a variable from the context, of an eliminator
--- from its annotation. 'Nothing' for any other value.
-typeOfNeutral :: HasTypes ctx => ctx n -> Value n -> Maybe (Value n)
-typeOfNeutral ctx = \case
-  NbE.VVar x -> typeOfName ctx x
-  NbE.VNode (AnnSig ty (AppSig _ _)) -> ty
-  NbE.VSuspended _ (AnnSig ty (SplitSig {})) -> ty
-  _ -> Nothing
 
 -- | η-expand a neutral at its type.
 expandAt :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> Value n -> Value n -> Value n

@@ -45,7 +45,7 @@ deriveBitraversable ''LamF
 deriveZipMatchK ''LamF
 instance (NFData scope, NFData term) => NFData (LamF scope term)
 
--- | No heads: the fragment does not η-expand.
+-- | No heads: the fragment does not refine values.
 instance HasHeads LamF
 
 instance (Sinkable ctx, CoSinkable binder) => EvalF ctx binder LamF where

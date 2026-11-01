@@ -84,7 +84,7 @@ pattern Pi dom binder body = FFPi dom (FFPatternVar binder) body
 -- | Semantic values of lambda-pi.
 type Value = NbE.Value FFPattern TermSig
 
--- | No heads: the language does not η-expand.
+-- | No heads: the language does not refine values.
 instance HasHeads TermSig
 
 -- | The one elimination rule, application. A suspended lambda is entered

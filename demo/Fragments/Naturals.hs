@@ -44,7 +44,7 @@ deriveBitraversable ''NatF
 deriveZipMatchK ''NatF
 instance (NFData scope, NFData term) => NFData (NatF scope term)
 
--- | No heads: the fragment does not η-expand.
+-- | No heads: the fragment does not refine values.
 instance HasHeads NatF
 
 instance (Sinkable ctx, CoSinkable binder) => EvalF ctx binder NatF where

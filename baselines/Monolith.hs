@@ -81,7 +81,7 @@ whnf scope = NbE.whnf scope NbE.NoContext
 numeral :: Int -> Monolith n
 numeral k = iterate Suc Zero !! k
 
--- | No heads: the language does not η-expand.
+-- | No heads: the language does not refine values.
 instance HasHeads TermSig
 
 -- | The three elimination rules, side by side, each as in its standalone

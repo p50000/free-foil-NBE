@@ -87,7 +87,7 @@ pattern Split p x y body = FFSplit p (FFPatternPair x y) body
 -- | Semantic values of pairs.
 type Value = NbE.Value FFPattern TermSig
 
--- | No heads: the language does not η-expand.
+-- | No heads: the language does not refine values.
 instance HasHeads TermSig
 
 -- | Three elimination rules. A projection of a pair value selects a
