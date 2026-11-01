@@ -51,9 +51,10 @@
 --
 -- A client with a context of its own gives the same pragmas at its context.
 -- For them to reach the rules, the instance marks 'evalSig' and
--- 'etaMatchWith' @INLINABLE@, and a helper of the language that takes the
--- context, such as lambda-pi's @appValue@, is @INLINE@. Otherwise every node
--- runs the unspecialised evaluator.
+-- 'etaMatchWith' @INLINABLE@. Otherwise every node runs the unspecialised
+-- evaluator. A helper of the language that takes the context, such as
+-- lambda-pi's @appValue@, is specialised only at the contexts of its own
+-- pragmas.
 module FreeFoil.NbE
   ( -- * Semantic domain
     Value (..)

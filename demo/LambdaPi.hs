@@ -103,8 +103,9 @@ instance Definitions ctx FFPattern TermSig => Eval ctx FFPattern TermSig where
 -- entered under its environment extended with the argument, any other
 -- function is a stuck application.
 appValue :: (Definitions ctx FFPattern TermSig, Distinct n) => ctx n -> Value n -> Value n -> Value n
--- Inlined, so that the β path is specialised with the rules at any context.
-{-# INLINE appValue #-}
+-- The helper takes the context, so it needs the pragma as 'eval' does. A
+-- call with a bound 'Distinct' dictionary is not specialised on its own.
+{-# SPECIALIZE appValue :: Distinct n => Scope n -> Value n -> Value n -> Value n #-}
 appValue ctx fun arg = case fun of
   NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
     case assertDistinct binder of
