@@ -28,6 +28,14 @@
 -- readback turns a neutral of a singleton type into that type's one value
 -- ('NbE.refineVar', 'NbE.refineSig'), such as @tt@ or @\\(x : A). tt@.
 --
+-- η by shape is that of Abel and Coquand ("Untyped algorithmic equality for
+-- Martin-Löf's logical framework with surjective pairs", 2007), who note that
+-- it does not decide η for the unit type. Recognising singleton types follows
+-- Agda (@isSingletonRecord@ in @Agda.TypeChecking.Records@, used when its
+-- conversion compares two neutrals) and Kovács ("Eta conversion for the unit
+-- type (is still not that simple)", WITS 2025), where neutrals carry the
+-- lazily computed relevance of their types.
+--
 -- The grammar follows the monolithic language's, with the projections
 -- named as in Rzk, and the modules follow Renata Shakirova's pairs language.
 module DependentTypes
