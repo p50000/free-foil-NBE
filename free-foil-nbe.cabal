@@ -113,6 +113,30 @@ library dependent-types-syntax
         , array
     default-language: Haskell2010
 
+-- The dependent types demo language: a context of types, filled under
+-- binders by the language, η by types, and bidirectional elaboration.
+library dependent-types-demo
+    import:           warnings
+    visibility:       public
+    hs-source-dirs:   demo
+    exposed-modules:  DependentTypes
+        , DependentTypes.Elaborate
+        , DependentTypes.Examples
+        , DependentTypes.Parser
+        , DependentTypes.Raw
+    other-modules:    DependentTypes.Generated
+    build-depends:    base ^>=4.20.2.0
+        , bifunctors
+        , containers ^>=0.7
+        , demo-parsing
+        , dependent-types-syntax
+        , free-foil ^>=0.6.1
+        , free-foil-nbe
+        , kind-generics >=0.5.0 && <0.6
+        , kind-generics-th
+        , template-haskell
+    default-language: Haskell2010
+
 -- The pairs demo language: grammar-generated syntax whose one pattern binds
 -- two names, one Eval instance, parsing, and example terms.
 library pairs-demo
@@ -287,6 +311,7 @@ test-suite free-foil-nbe-test
                     , Test.Annotated
                     , Test.Booleans
                     , Test.Definitions
+                    , Test.DependentTypes
                     , Test.Fragments
                     , Test.LambdaLet
                     , Test.LambdaNWays
@@ -299,6 +324,7 @@ test-suite free-foil-nbe-test
         , bifunctors
         , containers ^>=0.7
         , deepseq
+        , dependent-types-demo
         , fragments-demo
         , free-foil ^>=0.6.1
         , free-foil-nbe
