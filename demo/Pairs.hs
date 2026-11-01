@@ -107,7 +107,7 @@ instance (Sinkable ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPatt
         p' -> NbE.VSuspended env (SplitSig p' (ScopedAST (FFPatternPair x y) body))
     node -> NbE.evalNode scope ctx env node
 
-  {-# INLINABLE etaMatchWith #-}
+  {-# INLINE etaMatchWith #-}
   etaMatchWith _ term = \case
     PairSig a b -> Just (PairSig (term a (NbE.EtaTerm (\_ _ -> fstValue))) (term b (NbE.EtaTerm (\_ _ -> sndValue))))
     _ -> Nothing

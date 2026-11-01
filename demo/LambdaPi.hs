@@ -94,7 +94,7 @@ instance (Sinkable ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPatt
     AppSig fun arg -> appValue scope ctx (NbE.eval scope ctx env fun) (NbE.eval scope ctx env arg)
     node -> NbE.evalNode scope ctx env node
 
-  {-# INLINABLE etaMatchWith #-}
+  {-# INLINE etaMatchWith #-}
   etaMatchWith scoped _ = \case
     LamSig body -> Just (LamSig (scoped body (NbE.EtaScoped (\scope ctx (FFPatternVar x) other ->
       appValue scope ctx other (NbE.VVar (nameOf x))))))
