@@ -37,7 +37,7 @@ check scope typing term ty = case term of
     NbE.VSuspended _ (AnnSig _ (SigmaSig dom _)) -> do
       a' <- check scope typing a dom
       b' <- check scope typing b (codomainAt scope typing ty (evalIn scope typing a'))
-      pure (node (PairSig a' b'))
+      pure (annotated (quoteIn scope typing ty) (PairSig a' b'))
     _ -> Left ("a pair against a type that is not a Σ: " ++ show (quoteIn scope typing ty))
   Node (LamSig dom (ScopedAST pat body))
     | NbE.VSuspended _ (AnnSig _ (PiSig piDom _)) <- ty -> case pat of
@@ -50,7 +50,7 @@ check scope typing term ty = case term of
                 let scope' = extendScope x scope
                     typing' = assume x domV typing
                 body' <- check scope' typing' body (codomainAt scope' typing' (sink ty) (NbE.VVar (nameOf x)))
-                pure (node (LamSig dom' (ScopedAST pat body')))
+                pure (annotated (quoteIn scope typing ty) (LamSig dom' (ScopedAST pat body')))
               else Left ("the domain " ++ show dom' ++ " is not " ++ show (quoteIn scope typing piDom))
   _ -> do
     (term', ty') <- infer scope typing term
@@ -63,9 +63,9 @@ check scope typing term ty = case term of
 infer :: Distinct n => Scope n -> Typing n -> Raw n -> Either String (Elaborated n, Value n)
 infer scope typing = \case
   Var x -> pure (Var x, typeOf x typing)
-  Node UniverseSig -> pure (node UniverseSig, universe)
-  Node UnitSig -> pure (node UnitSig, universe)
-  Node TTSig -> pure (node TTSig, unitType)
+  Node UniverseSig -> pure (universeTerm, universe)
+  Node UnitSig -> pure (unitTerm, universe)
+  Node TTSig -> pure (annotated unitTerm TTSig, unitType)
   Node (AppSig fun arg) -> do
     (fun', funTy) <- infer scope typing fun
     case funTy of
@@ -81,8 +81,8 @@ infer scope typing = \case
         let scope' = extendScope x scope
             typing' = assume x (evalIn scope typing dom') typing
         (body', bodyTy) <- infer scope' typing' body
-        let piTy = node (PiSig dom' (ScopedAST pat (quoteIn scope' typing' bodyTy)))
-        pure (node (LamSig dom' (ScopedAST pat body')), evalIn scope typing piTy)
+        let piTy = annotated universeTerm (PiSig dom' (ScopedAST pat (quoteIn scope' typing' bodyTy)))
+        pure (annotated piTy (LamSig dom' (ScopedAST pat body')), evalIn scope typing piTy)
   Node (PiSig dom (ScopedAST pat cod)) -> typeFormer PiSig scope typing dom pat cod
   Node (SigmaSig dom (ScopedAST pat cod)) -> typeFormer SigmaSig scope typing dom pat cod
   Node (FirstSig p) -> do
@@ -114,7 +114,7 @@ typeFormer former scope typing dom pat cod = case pat of
     (Distinct, Ext) -> do
       dom' <- check scope typing dom universe
       cod' <- check (extendScope x scope) (assume x (evalIn scope typing dom') typing) cod universe
-      pure (node (former dom' (ScopedAST pat cod')), universe)
+      pure (annotated universeTerm (former dom' (ScopedAST pat cod')), universe)
 
 -- | Elaborate a closed term against a closed type, both parsed from strings.
 -- The result is the elaborated term and its type.
@@ -126,13 +126,17 @@ elaborate term ty = do
   term' <- check emptyScope emptyTyping term0 (evalIn emptyScope emptyTyping ty')
   pure (term', ty')
 
--- | A node annotated 'Nothing'.
-node :: TermSig (ScopedAST FFPattern Sig n) (Elaborated n) -> Elaborated n
-node = Node . AnnSig Nothing
+-- | The universe, which has no annotation.
+universeTerm :: Elaborated n
+universeTerm = Node (AnnSig IsUniverse UniverseSig)
 
--- | An eliminator annotated with the type of its result.
+-- | The unit type.
+unitTerm :: Elaborated n
+unitTerm = annotated universeTerm UnitSig
+
+-- | A node annotated with its type.
 annotated :: Elaborated n -> TermSig (ScopedAST FFPattern Sig n) (Elaborated n) -> Elaborated n
-annotated ty = Node . AnnSig (Just ty)
+annotated ty = Node . AnnSig (HasType ty)
 
 evalIn :: Distinct n => Scope n -> Typing n -> Elaborated n -> Value n
 evalIn scope typing = NbE.eval scope typing identitySubst

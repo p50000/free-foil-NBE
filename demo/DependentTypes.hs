@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE DeriveTraversable     #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
@@ -6,16 +7,18 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE UndecidableInstances  #-}
 -- The Show instance of a synonym over library types.
 {-# OPTIONS_GHC -Wno-orphans #-}
 -- | Dependent functions and pairs over a universe, with a unit type: a
 -- language whose context holds types. Its terms are elaborated (see
--- "DependentTypes.Elaborate"). Every binder carries its type, and every
--- eliminator carries the type of its result as free-foil's annotation.
+-- "DependentTypes.Elaborate"). Every node carries its type as free-foil's
+-- annotation ('TypeAnn'), except the universe, whose type is itself.
 --
 -- η for functions and the unit type goes by types. In a context of types
--- ('Typing'), readback turns a neutral @f : (x : A) -> B@ into
+-- ('HasTypes'), readback turns a neutral @f : (x : A) -> B@ into
 -- @\\(x : A). f x@, and a neutral of type @Unit@ into @tt@. η for pairs goes
 -- by shape ('NbE.etaMatchWith'), so @p@ is a normal form, convertible with
 -- @(first p, second p)@.
@@ -25,10 +28,12 @@
 module DependentTypes
   ( -- * Terms
     Sig
+  , TypeAnn (..)
   , Elaborated
   , Raw
   , Value
   , unannotated
+  , fullyAnnotated
   , universe
   , unitType
     -- * Contexts of types
@@ -47,15 +52,33 @@ module DependentTypes
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
 import Control.Monad.Free.Foil.Annotated (AnnSig (..))
+import Data.Bifoldable (bifoldMap)
 import Data.Bifunctor (bimap)
-import FreeFoil.NbE (Eval (..), Extend (..), HasDefinitions (..), HasHeads (..), NoContext (..))
+import Data.Monoid (All (..))
+import Data.ZipMatchK (ZipMatchFoldK, ZipMatchK)
+import FreeFoil.NbE (Eval (..), Extend (..), HasDefinitions (..), HasHeads (..))
+import Generics.Kind.TH (deriveGenericK)
 import qualified FreeFoil.NbE as NbE
 import qualified FreeFoil.NbE.Conversion as Conv
 
 import DependentTypes.Generated (FFPattern (..), FFTerm, TermSig (..))
 
+-- | The annotation of an elaborated node: its type. Only the universe has
+-- none, since its type is itself.
+data TypeAnn ty
+  = HasType ty
+  | IsUniverse
+  deriving (Functor, Foldable, Traversable)
+
+deriveGenericK ''TypeAnn
+
+-- | Matching compares the annotations, so conversion compares the types of
+-- corresponding nodes.
+instance ZipMatchK TypeAnn
+instance ZipMatchFoldK TypeAnn
+
 -- | The signature of elaborated terms.
-type Sig = AnnSig Maybe TermSig
+type Sig = AnnSig TypeAnn TermSig
 
 -- | Elaborated terms in scope @n@.
 type Elaborated n = AST FFPattern Sig n
@@ -70,32 +93,46 @@ type Value = NbE.Value FFPattern Sig
 unannotated :: Elaborated n -> Raw n
 unannotated = hoistAST (\(AnnSig _ node) -> node)
 
+-- | Whether every node but the universe carries its type, also inside the
+-- annotations, as elaboration and normalisation produce them.
+fullyAnnotated :: Elaborated n -> Bool
+fullyAnnotated = \case
+  Var _ -> True
+  Node (AnnSig ann node) -> fits ann node && all fullyAnnotated ann && getAll (bifoldMap scoped (All . fullyAnnotated) node)
+  where
+    scoped :: ScopedAST FFPattern Sig n -> All
+    scoped (ScopedAST _ body) = All (fullyAnnotated body)
+    fits IsUniverse UniverseSig = True
+    fits IsUniverse _           = False
+    fits (HasType _) UniverseSig = False
+    fits (HasType _) _           = True
+
 -- | Terms print without their annotations.
 instance Show (AST FFPattern Sig n) where
   show = show . unannotated
 
 -- | The universe, whose type is itself.
 universe :: Value n
-universe = NbE.VNode (AnnSig Nothing UniverseSig)
+universe = NbE.VNode (AnnSig IsUniverse UniverseSig)
 
 -- | The unit type.
 unitType :: Value n
-unitType = NbE.VNode (AnnSig Nothing UnitSig)
+unitType = NbE.VNode (AnnSig (HasType universe) UnitSig)
+
+-- | The type in an annotation.
+annotatedType :: TypeAnn (Value n) -> Value n
+annotatedType = \case
+  HasType ty -> ty
+  IsUniverse -> universe
 
 -- * Contexts of types
 
--- | What the language needs of a context: the types of names.
+-- | What the language needs of a context: the type of every name in scope.
 class HasTypes ctx where
   -- | The context under a binder of one name of a type.
   assume :: DExt n l => NameBinder n l -> Value n -> ctx n -> ctx l
-  -- | The type of a name, if the context knows it.
-  typeOfName :: ctx n -> Name n -> Maybe (Value n)
-
--- | No types, so normalisation is untyped, except for the types in the
--- annotations.
-instance HasTypes NoContext where
-  assume _ _ _ = NoContext
-  typeOfName _ _ = Nothing
+  -- | The type of a name.
+  typeOfName :: ctx n -> Name n -> Value n
 
 -- | A type for every name in scope.
 newtype Typing n = Typing (NameMap n (Value n))
@@ -110,7 +147,7 @@ typeOf x (Typing types) = lookupName x types
 
 instance HasTypes Typing where
   assume x ty (Typing types) = Typing (addNameBinder x (sink ty) (sink1 types))
-  typeOfName (Typing types) x = Just (lookupName x types)
+  typeOfName (Typing types) x = lookupName x types
 
 instance HasDefinitions Typing FFPattern Sig where
   contextDefinition _ _ = NbE.VVar
@@ -145,8 +182,10 @@ instance (HasTypes ctx, HasDefinitions ctx FFPattern Sig) => Eval ctx FFPattern 
     _ -> NbE.evalNode scope ctx env (AnnSig ann node)
 
   {-# INLINE etaMatchWith #-}
-  etaMatchWith _ term (AnnSig _ node) = case node of
-    PairSig a b -> Just (AnnSig Nothing (PairSig (term a (NbE.EtaTerm firstOf)) (term b (NbE.EtaTerm secondOf))))
+  etaMatchWith _ term (AnnSig ann node) = case (ann, node) of
+    (HasType ty, PairSig a b) -> Just $ AnnSig
+      (HasType (term ty (NbE.EtaTerm (\_ c -> typeOfValue c))))
+      (PairSig (term a (NbE.EtaTerm firstOf)) (term b (NbE.EtaTerm secondOf)))
     _ -> Nothing
 
   {-# INLINE extendScopedWith #-}
@@ -163,22 +202,22 @@ instance (HasTypes ctx, HasDefinitions ctx FFPattern Sig) => Eval ctx FFPattern 
     TTSig             -> TTSig
 
   {-# INLINABLE refineVar #-}
-  refineVar scope ctx x = case typeOfName ctx x of
-    Just ty -> expandAt scope ctx (NbE.VVar x) ty
-    Nothing -> NbE.VVar x
+  refineVar scope ctx x = expandAt scope ctx (NbE.VVar x) (typeOfName ctx x)
 
-  -- Only an eliminator has an annotation.
+  -- A node in a value is a neutral only if it is an eliminator.
   {-# INLINABLE refineSig #-}
-  refineSig scope ctx value (AnnSig ann _) = case ann of
-    Just ty -> expandAt scope ctx value ty
-    Nothing -> value
+  refineSig scope ctx value (AnnSig ann node) = case node of
+    AppSig {}    -> expandAt scope ctx value (annotatedType ann)
+    FirstSig {}  -> expandAt scope ctx value (annotatedType ann)
+    SecondSig {} -> expandAt scope ctx value (annotatedType ann)
+    _            -> value
 
 -- | Apply a function value to an argument value: a suspended lambda is
 -- entered under its environment extended with the argument, any other
 -- function is a stuck application of the type in the annotation.
 appValue ::
   (Eval ctx FFPattern Sig, Distinct n) =>
-  Maybe (Value n) -> Scope n -> ctx n -> Value n -> Value n -> Value n
+  TypeAnn (Value n) -> Scope n -> ctx n -> Value n -> Value n -> Value n
 {-# INLINE appValue #-}
 appValue ann scope ctx fun arg = case fun of
   NbE.VSuspended env (AnnSig _ (LamSig _ (ScopedAST (FFPatternVar x) body))) ->
@@ -188,38 +227,38 @@ appValue ann scope ctx fun arg = case fun of
 
 -- | The first component of a pair value. Any other value gives a stuck
 -- projection of the type in the annotation.
-firstValue :: Maybe (Value n) -> Value n -> Value n
+firstValue :: TypeAnn (Value n) -> Value n -> Value n
 firstValue ann p = case p of
   NbE.VNode (AnnSig _ (PairSig a _)) -> a
   _ -> NbE.VNode (AnnSig ann (FirstSig p))
 
 -- | The second component of a pair value, like 'firstValue'.
-secondValue :: Maybe (Value n) -> Value n -> Value n
+secondValue :: TypeAnn (Value n) -> Value n -> Value n
 secondValue ann p = case p of
   NbE.VNode (AnnSig _ (PairSig _ b)) -> b
   _ -> NbE.VNode (AnnSig ann (SecondSig p))
 
 -- | The projections for η of pairs. Like the elaborated ones, they carry
--- their types where these are known.
-firstOf :: (HasTypes ctx, Distinct n) => Scope n -> ctx n -> Value n -> Value n
-firstOf _ ctx p = firstValue (typeOfNeutral ctx p >>= sigmaDomain) p
+-- their types.
+firstOf :: HasTypes ctx => Scope n -> ctx n -> Value n -> Value n
+firstOf _ ctx p = firstValue (HasType (sigmaDomain (typeOfValue ctx p))) p
 
 secondOf :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> Value n -> Value n
-secondOf scope ctx p = secondValue (fmap (\ty -> codomainAt scope ctx ty (firstOf scope ctx p)) (typeOfNeutral ctx p)) p
+secondOf scope ctx p = secondValue (HasType (codomainAt scope ctx (typeOfValue ctx p) (firstOf scope ctx p))) p
 
--- | The type of a neutral: of a variable from the context, of an eliminator
--- from its annotation.
-typeOfNeutral :: HasTypes ctx => ctx n -> Value n -> Maybe (Value n)
-typeOfNeutral ctx = \case
+-- | The type of a value: of a variable from the context, of a node from its
+-- annotation.
+typeOfValue :: HasTypes ctx => ctx n -> Value n -> Value n
+typeOfValue ctx = \case
   NbE.VVar x -> typeOfName ctx x
-  NbE.VNode (AnnSig ty _) -> ty
-  NbE.VSuspended _ (AnnSig ty _) -> ty
+  NbE.VNode (AnnSig ann _) -> annotatedType ann
+  NbE.VSuspended _ (AnnSig ann _) -> annotatedType ann
 
 -- | The domain of a Σ type.
-sigmaDomain :: Value n -> Maybe (Value n)
+sigmaDomain :: Value n -> Value n
 sigmaDomain = \case
-  NbE.VSuspended _ (AnnSig _ (SigmaSig a _)) -> Just a
-  _ -> Nothing
+  NbE.VSuspended _ (AnnSig _ (SigmaSig a _)) -> a
+  _ -> error "DependentTypes: not a Σ type"
 
 -- | The binder of one name of a type.
 assumeVar :: HasTypes ctx => Value n -> Extend ctx FFPattern Sig n
@@ -240,7 +279,7 @@ codomainAt scope ctx ty arg = case ty of
 -- | η-expand a neutral at its type.
 expandAt :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> Value n -> Value n -> Value n
 expandAt scope ctx value ty = case ty of
-  NbE.VNode (AnnSig _ UnitSig) -> NbE.VNode (AnnSig Nothing TTSig)
+  NbE.VNode (AnnSig _ UnitSig) -> NbE.VNode (AnnSig (HasType unitType) TTSig)
   NbE.VSuspended _ (AnnSig _ (PiSig dom _)) -> expandFunction scope ctx value ty dom
   _ -> value
 
@@ -258,9 +297,9 @@ expandFunction scope ctx fun ty dom =
          let scopeX = extendScope x scopeG
              ctxX = assume x (sink dom) ctxG
              cod = NbE.quote scopeX ctxX (codomainAt scopeX ctxX (sink ty) (NbE.VVar (nameOf x)))
-             body = Node (AnnSig (Just cod) (AppSig (Var (sink (nameOf g))) (Var (nameOf x))))
+             body = Node (AnnSig (HasType cod) (AppSig (Var (sink (nameOf g))) (Var (nameOf x))))
          in NbE.VSuspended (addSubst identitySubst g fun)
-              (AnnSig Nothing (LamSig dom (ScopedAST (FFPatternVar x) body)))
+              (AnnSig (HasType ty) (LamSig dom (ScopedAST (FFPatternVar x) body)))
 
 -- * Normalisation
 

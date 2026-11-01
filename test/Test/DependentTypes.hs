@@ -1,7 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 -- | Tests of the dependent types language: the normal forms and conversions
--- of the examples in a context of types, the untyped normal form without a
--- context, and elaboration errors.
+-- of the examples in a context of types, and elaboration errors.
 module Test.DependentTypes (tests) where
 
 import Test.Tasty
@@ -9,9 +8,8 @@ import Test.Tasty.HUnit
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil (alphaEquiv)
-import qualified FreeFoil.NbE as NbE
 
-import DependentTypes (convertible, emptyTyping, nf)
+import DependentTypes (convertible, emptyTyping, fullyAnnotated, nf)
 import DependentTypes.Elaborate (elaborate)
 import DependentTypes.Examples
 
@@ -26,6 +24,14 @@ tests =
             assertBool (show result) (alphaEquiv emptyScope result normal)
         | (name, Example term0 ty normal0) <- examples
         ]
+    , testGroup "every node but the universe carries its type, before and after normalisation"
+        [ testCase name $ do
+            (term, _) <- elaborated term0 ty
+            assertBool (show term) (fullyAnnotated term)
+            let result = nf emptyScope emptyTyping term
+            assertBool (show result) (fullyAnnotated result)
+        | (name, Example term0 ty _) <- examples
+        ]
     , testGroup "conversion in a context of types"
         [ testCase name $ do
             (t, _) <- elaborated t0 ty
@@ -33,11 +39,6 @@ tests =
             convertible emptyScope emptyTyping t u @?= expected
         | (name, Conversion ty t0 u0 expected) <- conversions
         ]
-    , testCase "without a context a variable has no type" $ do
-        let Example term0 ty _ = unitVariable
-        (term, _) <- elaborated term0 ty
-        let result = NbE.nf emptyScope NbE.NoContext term
-        assertBool (show result) (alphaEquiv emptyScope result term)
     , testGroup "elaboration rejects"
         [ testCase "a term of another type" $
             rejects "\\(x : Unit). x" "(x : U) -> U"
