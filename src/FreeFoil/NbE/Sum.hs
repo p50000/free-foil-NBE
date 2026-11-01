@@ -81,11 +81,12 @@ class (Context ctx, Bifunctor f, Bifoldable f) => EvalF ctx binder f where
   evalF ::
     (Eval ctx binder sig, Foil.Distinct o, Foil.Distinct i) =>
     Inj f sig ->
+    Foil.Scope o ->
     ctx o ->
     Foil.Substitution (Value binder sig) i o ->
     f (ScopedAST binder sig i) (AST binder sig i) ->
     Value binder sig o
-  evalF pos ctx env node = evalNode ctx env (inj pos node)
+  evalF pos scope ctx env node = evalNode scope ctx env (inj pos node)
 
   -- | The η laws of the fragment's introduction forms at a position, as
   -- 'etaMatchWith'. By default there are none.
@@ -102,9 +103,9 @@ class (Context ctx, Bifunctor f, Bifoldable f) => EvalF ctx binder f where
 -- | The rules of a sum are the rules of its summands.
 instance (EvalF ctx binder f, EvalF ctx binder g) => EvalF ctx binder (Sum f g) where
   {-# INLINE evalF #-}
-  evalF pos ctx env = \case
-    L2 node -> evalF (inL pos) ctx env node
-    R2 node -> evalF (inR pos) ctx env node
+  evalF pos scope ctx env = \case
+    L2 node -> evalF (inL pos) scope ctx env node
+    R2 node -> evalF (inR pos) scope ctx env node
   {-# INLINE etaMatchWithF #-}
   etaMatchWithF pos scoped term = \case
     L2 node -> L2 <$> etaMatchWithF (inL pos) scoped term node

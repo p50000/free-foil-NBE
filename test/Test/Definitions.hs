@@ -55,14 +55,14 @@ tests =
                 withFreeVars emptyScope Map.empty ["f"] $ \scope env ->
                   withDefinitions scope env [("d", raw "f f")] $ \defs scope' env' ->
                     alphaEquiv scope'
-                      (NbE.nf (contextOf scope defs) (resolve scope' env' (raw "\\x. d")))
+                      (NbE.nf scope' (contextOf scope defs) (resolve scope' env' (raw "\\x. d")))
                       (resolve scope' env' (raw "\\x. f f"))
                       @?= True
             , testCase "an undefined free name stays neutral" $
                 withFreeVars emptyScope Map.empty ["f"] $ \scope env ->
                   withDefinitions scope env [("d", raw "\\x. x")] $ \defs scope' env' ->
                     alphaEquiv scope'
-                      (NbE.nf (contextOf scope defs) (resolve scope' env' (raw "f d")))
+                      (NbE.nf scope' (contextOf scope defs) (resolve scope' env' (raw "f d")))
                       (resolve scope' env' (raw "f (\\x. x)"))
                       @?= True
             , testCase "a defined name is convertible with what it unfolds to" $
@@ -70,20 +70,20 @@ tests =
                   [ ("two", raw "\\s. \\z. s (s z)")
                   , ("plus", raw "\\m. \\n. \\s. \\z. m s (n s z)")
                   ] $ \defs scope env ->
-                    convertible (contextOf emptyScope defs)
+                    convertible scope (contextOf emptyScope defs)
                       (resolve scope env (raw "plus two two"))
                       (resolve scope env (raw "\\s. \\z. s (s (s (s z)))"))
                       @?= True
             , testCase "whnf unfolds a defined name at the head" $
                 withDefinitions emptyScope Map.empty [("id", raw "\\x. x")] $ \defs scope env ->
                   alphaEquiv scope
-                    (NbE.whnf (contextOf emptyScope defs) (resolve scope env (raw "id id")))
+                    (NbE.whnf scope (contextOf emptyScope defs) (resolve scope env (raw "id id")))
                     (resolve scope env (raw "\\x. x"))
                     @?= True
             , testCase "whnf keeps a defined name under a binder" $
                 withDefinitions emptyScope Map.empty [("id", raw "\\x. x")] $ \defs scope env ->
                   alphaEquiv scope
-                    (NbE.whnf (contextOf emptyScope defs) (resolve scope env (raw "\\y. id y")))
+                    (NbE.whnf scope (contextOf emptyScope defs) (resolve scope env (raw "\\y. id y")))
                     (resolve scope env (raw "\\y. id y"))
                     @?= True
             ]
@@ -111,7 +111,7 @@ unfoldsTo name definitions term expected =
     withDefinitions emptyScope Map.empty [ (x, raw t) | (x, t) <- definitions ] $ \defs scope env -> do
       result <- timeout 1000000 $
         pure $! alphaEquiv scope
-          (NbE.nf (contextOf emptyScope defs) (resolve scope env (raw term)))
+          (NbE.nf scope (contextOf emptyScope defs) (resolve scope env (raw term)))
           (resolve scope env (raw expected))
       result @?= Just True
 
@@ -154,8 +154,8 @@ withDefinitions scope0 env0 = go EmptyTelescope scope0 env0
 
 -- | The context of a telescope: its definitions, made in turn.
 contextOf :: Distinct n => Scope n -> Telescope n l -> Defined FFPattern TermSig l
-contextOf scope EmptyTelescope = noDefinitions scope
-contextOf scope (Definition defs x body) = define x body (contextOf scope defs)
+contextOf _ EmptyTelescope = noDefinitions
+contextOf scope (Definition defs x body) = define (scopeOf scope defs) x body (contextOf scope defs)
 
 -- | The scope of a telescope extends the scope it starts from.
 withTelescopeExt :: Distinct n => Telescope n l -> (DExt n l => r) -> r
@@ -183,12 +183,12 @@ environmentOf :: Distinct n => Scope n -> Telescope n l -> Substitution Value l 
 environmentOf _ EmptyTelescope = identitySubst
 environmentOf scope (Definition defs x body) =
   let env = environmentOf scope defs
-  in addSubst env x (NbE.eval scope env body)
+  in addSubst env x (NbE.eval scope NbE.NoContext env body)
 
 -- | The normal form of a term with every definition unfolded through the
 -- environment: the result is a term over the outer scope.
 nfEnvironment :: (Distinct n, Distinct l) => Scope n -> Telescope n l -> LambdaPi l -> LambdaPi n
-nfEnvironment scope defs = NbE.quote scope . NbE.eval scope (environmentOf scope defs)
+nfEnvironment scope defs = NbE.quote scope NbE.NoContext . NbE.eval scope NbE.NoContext (environmentOf scope defs)
 
 -- | A random program over two free variables: up to three definitions, each
 -- over the names defined before it, and two terms over all of them, the
@@ -222,7 +222,7 @@ agreesWith name reference (Program definitions term _) =
       in ioProperty $
            agreesWithin name (alphaEquiv scope)
              (reference scope0 defs t)
-             (NbE.nf (contextOf scope0 defs) t)
+             (NbE.nf scope (contextOf scope0 defs) t)
 
 propInlined :: Program -> Property
 propInlined = agreesWith "nf in the context" $ \scope defs t ->
@@ -240,8 +240,8 @@ propConvertible (Program definitions term other) =
           u = resolve scope env other
       in ioProperty $
            agreesWithin "conversion in the context" (==)
-             (convertible scope0 (inline scope0 defs t) (inline scope0 defs u))
-             (convertible (contextOf scope0 defs) t u)
+             (convertible scope0 NbE.NoContext (inline scope0 defs t) (inline scope0 defs u))
+             (convertible scope (contextOf scope0 defs) t u)
 
 -- | Normalising @term@ in a context of definitions of the composed language
 -- gives @expected@. The terms may use the free variables of
@@ -251,7 +251,7 @@ composedExample name definitions term expected =
   testCase name $ Fragments.withFree $ \scope0 env0 ->
     withDefined scope0 env0 definitions $ \ctx scope env ->
       alphaEquiv scope
-        (NbE.nf ctx (Fragments.parseIn scope env term))
+        (NbE.nf scope ctx (Fragments.parseIn scope env term))
         (Fragments.parseIn scope env expected)
         @?= True
 
@@ -264,7 +264,7 @@ withDefined ::
   [(String, String)] ->
   (forall l. Distinct l => Defined Combined.Pat Combined.Sig l -> Scope l -> Map String (Name l) -> r) ->
   r
-withDefined scope0 env0 = go (noDefinitions scope0) scope0 env0
+withDefined scope0 env0 = go noDefinitions scope0 env0
   where
     go ::
       Distinct m =>
@@ -277,6 +277,6 @@ withDefined scope0 env0 = go (noDefinitions scope0) scope0 env0
     go ctx scope env [] k = k ctx scope env
     go ctx scope env ((x, body) : rest) k =
       withFresh scope $ \binder ->
-        let ctx' = define binder (Fragments.parseIn scope env body) ctx
+        let ctx' = define scope binder (Fragments.parseIn scope env body) ctx
             env' = Map.insert x (nameOf binder) (Map.map sink env)
         in go ctx' (extendScope binder scope) env' rest k

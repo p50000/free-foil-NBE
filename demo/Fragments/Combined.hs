@@ -48,7 +48,6 @@ import           Fragments.Lambda        (LamF (..))
 import           Fragments.Naturals      (NatF (..))
 import           Fragments.Pairs         (PairF (..))
 import           Fragments.Pattern       (Pat (..))
-import           FreeFoil.NbE            (eval, nf, whnf)
 import qualified FreeFoil.NbE            as NbE
 import qualified FreeFoil.NbE.Conversion as Conv
 import qualified Monolith
@@ -63,13 +62,13 @@ type Combined n = AST Pat Sig n
 -- | Semantic values of the composed language.
 type Value = NbE.Value Pat Sig
 
-{-# SPECIALIZE NbE.nf :: Distinct n => Scope n -> Combined n -> Combined n #-}
+{-# SPECIALIZE NbE.nf :: Distinct n => Scope n -> NbE.NoContext n -> Combined n -> Combined n #-}
 {-# SPECIALIZE NbE.eval ::
       (Distinct o, Distinct i) =>
-      Scope o -> Substitution Value i o -> Combined i -> Value o #-}
-{-# SPECIALIZE NbE.quote :: Distinct n => Scope n -> Value n -> Combined n #-}
-{-# SPECIALIZE Conv.conv :: Distinct n => Scope n -> Value n -> Value n -> Bool #-}
-{-# SPECIALIZE Conv.convertible :: Distinct n => Scope n -> Combined n -> Combined n -> Bool #-}
+      Scope o -> NbE.NoContext o -> Substitution Value i o -> Combined i -> Value o #-}
+{-# SPECIALIZE NbE.quote :: Distinct n => Scope n -> NbE.NoContext n -> Value n -> Combined n #-}
+{-# SPECIALIZE Conv.conv :: Distinct n => Scope n -> NbE.NoContext n -> Value n -> Value n -> Bool #-}
+{-# SPECIALIZE Conv.convertible :: Distinct n => Scope n -> NbE.NoContext n -> Combined n -> Combined n -> Bool #-}
 
 pattern Lam :: Pat n l -> Combined l -> Combined n
 pattern Lam binder body = Node (L2 (LamF (ScopedAST binder body)))
@@ -107,6 +106,21 @@ pattern NatRec n z binder s = Node (R2 (R2 (NatRecF n z (ScopedAST binder s))))
 instance (NFData (f scope term), NFData (g scope term)) => NFData (Sum f g scope term) where
   rnf (L2 x) = rnf x
   rnf (R2 y) = rnf y
+
+-- | Evaluation in a scope, with no other context.
+eval :: (Distinct o, Distinct i) => Scope o -> Substitution Value i o -> Combined i -> Value o
+{-# INLINE eval #-}
+eval scope = NbE.eval scope NbE.NoContext
+
+-- | Normal form in a scope, with no other context.
+nf :: Distinct n => Scope n -> Combined n -> Combined n
+{-# INLINE nf #-}
+nf scope = NbE.nf scope NbE.NoContext
+
+-- | Weak-head normal form in a scope, with no other context.
+whnf :: Distinct n => Scope n -> Combined n -> Combined n
+{-# INLINE whnf #-}
+whnf scope = NbE.whnf scope NbE.NoContext
 
 -- | The numeral of a natural number.
 numeral :: Int -> Combined n

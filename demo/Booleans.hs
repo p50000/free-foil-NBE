@@ -63,13 +63,13 @@ pattern If c t f = Node (IfSig c t f)
 -- neutral condition leaves the @if@ stuck.
 instance Definitions ctx NameBinder BoolSig => Eval ctx NameBinder BoolSig where
   {-# INLINABLE evalSig #-}
-  evalSig ctx env = \case
-    IfSig cond t f -> case eval ctx env cond of
-      VNode TrueSig  -> eval ctx env t
-      VNode FalseSig -> eval ctx env f
-      cond'          -> VNode (IfSig cond' (eval ctx env t) (eval ctx env f))
-    node -> evalNode ctx env node
+  evalSig scope ctx env = \case
+    IfSig cond t f -> case eval scope ctx env cond of
+      VNode TrueSig  -> eval scope ctx env t
+      VNode FalseSig -> eval scope ctx env f
+      cond'          -> VNode (IfSig cond' (eval scope ctx env t) (eval scope ctx env f))
+    node -> evalNode scope ctx env node
 
 -- | Normal form, inherited from the generic 'NbE.nf'.
 nf :: Distinct n => Scope n -> BoolTm n -> BoolTm n
-nf = NbE.nf
+nf scope = NbE.nf scope NbE.NoContext

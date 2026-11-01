@@ -16,6 +16,7 @@ import Test.Tasty.QuickCheck
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil (alphaEquiv)
+import FreeFoil.NbE (NoContext (..))
 import FreeFoil.NbE.Conversion (convertible)
 import Pairs (Pairs, nf, nfSubst, whnf)
 import Pairs.Examples
@@ -64,7 +65,7 @@ etaCase expected name t u =
     withFreeVars emptyScope Map.empty ["p"] $ \scope env ->
       case (,) <$> parseOpen scope env t <*> parseOpen scope env u of
         Left err     -> assertFailure ("parse failed: " ++ err)
-        Right (a, b) -> convertible scope a b @?= expected
+        Right (a, b) -> convertible scope NoContext a b @?= expected
 
 -- Properties on random open terms
 
@@ -76,7 +77,7 @@ propAgrees (OpenTerm raw) =
 propConvNf :: OpenTerm -> Property
 propConvNf (OpenTerm raw) =
   withOpen raw $ \scope t ->
-    property (convertible scope t (nfSubst scope t))
+    property (convertible scope NoContext t (nfSubst scope t))
 
 -- | α-equal normal forms are convertible. The converse fails with η:
 -- @(fst p, snd p)@ and @p@ are convertible and their normal forms differ.
@@ -86,7 +87,7 @@ propConvPairs (OpenTerm rawT) (OpenTerm rawU) =
     let t = resolve scope env rawT
         u = resolve scope env rawU
     in property $
-         convertible scope t u
+         convertible scope NoContext t u
            || not (alphaEquiv scope (nfSubst scope t) (nfSubst scope u))
 
 -- | Resolve a raw term over 'freeVars' and continue in its scope.

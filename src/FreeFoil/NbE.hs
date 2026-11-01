@@ -3,6 +3,8 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE InstanceSigs          #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes            #-}
@@ -25,23 +27,24 @@
 -- binder type must be 'Foil.CoSinkable', which free-foil generates, plus
 -- 'Foil.SinkableK' for 'whnf', which has a generic default.
 --
--- Evaluation, readback and conversion carry a context the client supplies
--- ('Context'). The core is polymorphic in the context, and a language states
--- in its 'Eval' instance what it needs of it. A context may give the free
--- names of a language values ('Definitions'). The demonstration languages
--- use a free-foil 'Foil.Scope', which defines nothing.
+-- Evaluation, readback and conversion take the scope and, beside it, a
+-- context the client supplies ('Context'). The core is polymorphic in the
+-- context, and a language states in its 'Eval' instance what it needs of it.
+-- A context may give the free names of a language values ('Definitions').
+-- The demonstration languages use 'NoContext', which knows nothing beyond
+-- the scope.
 --
 -- A language specialises 'nf', 'eval' and 'quote' to its types, next to
 -- its 'Eval' instance, keeping the scope polymorphic and fixing the context
--- to 'Foil.Scope':
+-- to 'NoContext':
 --
 -- > type Term n = AST Pattern TermSig n
 -- > type Value n = NbE.Value Pattern TermSig n
 -- >
--- > {-# SPECIALIZE NbE.nf    :: Distinct n => Scope n -> Term n -> Term n #-}
+-- > {-# SPECIALIZE NbE.nf    :: Distinct n => Scope n -> NoContext n -> Term n -> Term n #-}
 -- > {-# SPECIALIZE NbE.eval  :: (Distinct o, Distinct i) =>
--- >       Scope o -> Substitution Value i o -> Term i -> Value o #-}
--- > {-# SPECIALIZE NbE.quote :: Distinct n => Scope n -> Value n -> Term n #-}
+-- >       Scope o -> NoContext o -> Substitution Value i o -> Term i -> Value o #-}
+-- > {-# SPECIALIZE NbE.quote :: Distinct n => Scope n -> NoContext n -> Value n -> Term n #-}
 --
 -- and likewise 'FreeFoil.NbE.Conversion.conv' and
 -- 'FreeFoil.NbE.Conversion.convertible'. Without the pragmas the monolithic
@@ -60,6 +63,7 @@ module FreeFoil.NbE
     Value (..)
     -- * Context
   , Context (..)
+  , NoContext (..)
   , Definitions (..)
     -- * Evaluation
   , Eval (..)
@@ -131,38 +135,34 @@ instance Bifunctor sig => Foil.Sinkable (Value binder sig) where
 
 -- * Context
 
--- | The context that evaluation, readback and conversion carry, indexed by
--- the scope. Under a binder the core extends it with 'extendContext',
--- passing the scope under the binder, and relies on 'contextScope' of the
--- result being that scope. 'Foil.Scope' is the simplest instance.
+-- | The context that evaluation, readback and conversion carry beside the
+-- scope, indexed by it. 'NoContext' is the simplest instance.
 class Context ctx where
-  -- | The scope of the context.
-  contextScope :: ctx n -> Foil.Scope n
-  -- | The context under a binder: given the binder, refreshed for the
-  -- context's scope, and the scope under it, which free-foil computes when
-  -- it refreshes the binder.
+  -- | The context under a binder: given the scope, the binder, refreshed for
+  -- the scope, and the scope under it, which free-foil computes when it
+  -- refreshes the binder.
   extendContext ::
     (Foil.CoSinkable binder, Foil.Distinct n, Foil.DExt n l) =>
-    binder n l -> Foil.Scope l -> ctx n -> ctx l
+    Foil.Scope n -> binder n l -> Foil.Scope l -> ctx n -> ctx l
 
-instance Context Foil.Scope where
-  {-# INLINE contextScope #-}
-  contextScope = id
+-- | The context that knows nothing beyond the scope.
+data NoContext (n :: Foil.S) = NoContext
+
+instance Context NoContext where
   {-# INLINE extendContext #-}
-  extendContext _ scope _ = scope
+  extendContext _ _ _ _ = NoContext
 
--- | The values a context gives to free names. A 'Foil.Scope' defines
+-- | The values a context gives to free names. 'NoContext' defines
 -- nothing. A language's 'Eval' instance requires this class of its context,
 -- which needs @UndecidableInstances@.
 class Context ctx => Definitions ctx binder sig where
   -- | The value of a free name, or the name itself if the context does not
-  -- define it. Every defined name is in 'contextScope', so that a refreshed
-  -- binder never shadows a definition.
-  definition :: ctx n -> Foil.Name n -> Value binder sig n
+  -- define it.
+  definition :: Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n
 
-instance Definitions Foil.Scope binder sig where
+instance Definitions NoContext binder sig where
   {-# INLINE definition #-}
-  definition _ = VVar
+  definition _ _ = VVar
 
 -- * η
 
@@ -170,7 +170,7 @@ instance Definitions Foil.Scope binder sig where
 -- of that position, from the context and any value to the component. The two
 -- observers of a pair are @fst@ and @snd@.
 newtype EtaTerm ctx binder sig n =
-  EtaTerm (ctx n -> Value binder sig n -> Value binder sig n)
+  EtaTerm (Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n)
 
 -- | The observer of a scoped position of an introduction form: from the
 -- context under the position's refreshed binder, that binder, and the other
@@ -181,7 +181,7 @@ newtype EtaTerm ctx binder sig n =
 newtype EtaScoped ctx binder sig n =
   EtaScoped
     (forall l. (Foil.Distinct n, Foil.DExt n l) =>
-      ctx l -> binder n l -> Value binder sig l -> Value binder sig l)
+      Foil.Scope l -> ctx l -> binder n l -> Value binder sig l -> Value binder sig l)
 
 -- * Evaluation
 
@@ -196,6 +196,7 @@ newtype EtaScoped ctx binder sig n =
 class (Definitions ctx binder sig, Bifunctor sig, Bifoldable sig) => Eval ctx binder sig where
   evalSig ::
     (Foil.Distinct o, Foil.Distinct i) =>
+    Foil.Scope o ->
     ctx o ->
     Foil.Substitution (Value binder sig) i o ->
     sig (ScopedAST binder sig i) (AST binder sig i) ->
@@ -230,16 +231,17 @@ class (Definitions ctx binder sig, Bifunctor sig, Bifoldable sig) => Eval ctx bi
 -- otherwise.
 eval ::
   (Eval ctx binder sig, Foil.Distinct o, Foil.Distinct i) =>
+  Foil.Scope o ->
   ctx o ->
   Foil.Substitution (Value binder sig) i o ->
   AST binder sig i ->
   Value binder sig o
 {-# INLINABLE eval #-}
-eval ctx !env = \case
+eval scope ctx !env = \case
   Var x -> case Foil.lookupSubst env x of
-    VVar y -> definition ctx y
+    VVar y -> definition scope ctx y
     v -> v
-  Node node -> evalSig ctx env node
+  Node node -> evalSig scope ctx env node
 
 -- | Evaluate a node that has no elimination rule: suspend it whole under the
 -- environment if it has scoped subterms, otherwise evaluate its term
@@ -249,18 +251,19 @@ eval ctx !env = \case
 -- ordinary data type is.
 evalNode ::
   (Eval ctx binder sig, Foil.Distinct o, Foil.Distinct i) =>
+  Foil.Scope o ->
   ctx o ->
   Foil.Substitution (Value binder sig) i o ->
   sig (ScopedAST binder sig i) (AST binder sig i) ->
   Value binder sig o
 {-# INLINE evalNode #-}
-evalNode ctx env node =
+evalNode scope ctx env node =
   case ensureBivacuousFirst node of
-    Just node' -> VNode (bimap absurd (eval ctx env) node')
+    Just node' -> VNode (bimap absurd (eval scope ctx env) node')
     Nothing -> VSuspended env $ case ensureBivacuousSecond node of
       -- Nothing to evaluate either (a lambda, say): reuse the cell as it is.
       Just node' -> vacuous node'
-      Nothing    -> bimap id (eval ctx env) node
+      Nothing    -> bimap id (eval scope ctx env) node
 
 -- A node whose parameter positions are provably empty is the same heap
 -- object at any parameter type, so it is reused by coercion rather than
@@ -293,14 +296,15 @@ ensureBivacuousSecond x
 -- specialise only the wrapper.
 quote ::
   (Eval ctx binder sig, Foil.Distinct n, Foil.CoSinkable binder) =>
+  Foil.Scope n ->
   ctx n ->
   Value binder sig n ->
   AST binder sig n
 {-# INLINABLE quote #-}
-quote ctx = \case
+quote scope ctx = \case
   VVar x -> Var x
-  VNode node -> Node $! bimap absurd (quote ctx) node
-  VSuspended env node -> Node $! bimap (quoteScoped ctx env) (quote ctx) node
+  VNode node -> Node $! bimap absurd (quote scope ctx) node
+  VSuspended env node -> Node $! bimap (quoteScoped scope ctx env) (quote scope ctx) node
 
 -- | Read back one scoped subterm of a suspended node: refresh the binder,
 -- extend the context and the captured environment with it, the latter as a
@@ -308,17 +312,18 @@ quote ctx = \case
 -- inlines into 'quote', so it is specialised with it.
 quoteScoped ::
   (Eval ctx binder sig, Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder) =>
+  Foil.Scope n ->
   ctx n ->
   Foil.Substitution (Value binder sig) i n ->
   ScopedAST binder sig i ->
   ScopedAST binder sig n
 {-# INLINE quoteScoped #-}
-quoteScoped ctx env (ScopedAST binder body) =
-  Foil.withRefreshedPattern (contextScope ctx) binder $ \extendEnv binder' scope' ->
+quoteScoped scope ctx env (ScopedAST binder body) =
+  Foil.withRefreshedPattern scope binder $ \extendEnv binder' scope' ->
     case Foil.assertDistinct binder of
       Foil.Distinct ->
-        let ctx' = extendContext binder' scope' ctx
-        in ScopedAST binder' (quote ctx' (eval ctx' (extendEnv env) body))
+        let ctx' = extendContext scope binder' scope' ctx
+        in ScopedAST binder' (quote scope' ctx' (eval scope' ctx' (extendEnv env) body))
 
 -- | Normal form: evaluate, then read back fully.
 --
@@ -337,24 +342,26 @@ quoteScoped ctx env (ScopedAST binder body) =
 -- term.
 nf ::
   (Eval ctx binder sig, Foil.Distinct n, Foil.CoSinkable binder) =>
+  Foil.Scope n ->
   ctx n ->
   AST binder sig n ->
   AST binder sig n
 {-# INLINABLE nf #-}
-nf ctx = quote ctx . eval ctx Foil.identitySubst
+nf scope ctx = quote scope ctx . eval scope ctx Foil.identitySubst
 
 -- | Read back the head of a value only: quote its term subterms, which are
 -- values already, and freeze its scoped subterms instead of normalising under
 -- their binders.
 quoteWhnf ::
   (Eval ctx binder sig, Foil.Distinct n, Foil.CoSinkable binder, Foil.SinkableK binder) =>
+  Foil.Scope n ->
   ctx n ->
   Value binder sig n ->
   AST binder sig n
-quoteWhnf ctx = \case
+quoteWhnf scope ctx = \case
   VVar x -> Var x
-  VNode node -> Node $ bimap absurd (quote ctx) node
-  VSuspended env node -> Node $ bimap (freezeScoped ctx env) (quote ctx) node
+  VNode node -> Node $ bimap absurd (quote scope ctx) node
+  VSuspended env node -> Node $ bimap (freezeScoped scope ctx env) (quote scope ctx) node
 
 -- | Freeze one scoped subterm of a suspended node without evaluating under
 -- its binder: refresh the binder and substitute the captured environment,
@@ -362,23 +369,25 @@ quoteWhnf ctx = \case
 -- so a redex under the binder survives.
 freezeScoped ::
   (Eval ctx binder sig, Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder, Foil.SinkableK binder) =>
+  Foil.Scope n ->
   ctx n ->
   Foil.Substitution (Value binder sig) i n ->
   ScopedAST binder sig i ->
   ScopedAST binder sig n
-freezeScoped ctx env (ScopedAST binder body) =
-  Foil.withRefreshedPattern (contextScope ctx) binder $ \extendSubst binder' scope' ->
-    ScopedAST binder' (substitute scope' (extendSubst (quoteSubst ctx env)) body)
+freezeScoped scope ctx env (ScopedAST binder body) =
+  Foil.withRefreshedPattern scope binder $ \extendSubst binder' scope' ->
+    ScopedAST binder' (substitute scope' (extendSubst (quoteSubst scope ctx env)) body)
 
 -- | Quote every value in an environment, turning it into a syntactic
 -- substitution.
 quoteSubst ::
   (Eval ctx binder sig, Foil.Distinct n, Foil.CoSinkable binder) =>
+  Foil.Scope n ->
   ctx n ->
   Foil.Substitution (Value binder sig) i n ->
   Foil.Substitution (AST binder sig) i n
-quoteSubst ctx (Foil.UnsafeSubstitution m) =
-  Foil.UnsafeSubstitution (IntMap.map (quote ctx) m)
+quoteSubst scope ctx (Foil.UnsafeSubstitution m) =
+  Foil.UnsafeSubstitution (IntMap.map (quote scope ctx) m)
 
 -- | Weak-head normal form: evaluate, then read back the head only. Shares
 -- 'eval' with 'nf'; 'quoteWhnf' does not go under binders, so a redex
@@ -386,7 +395,8 @@ quoteSubst ctx (Foil.UnsafeSubstitution m) =
 -- readbacks differ only at scoped positions.
 whnf ::
   (Eval ctx binder sig, Foil.Distinct n, Foil.CoSinkable binder, Foil.SinkableK binder) =>
+  Foil.Scope n ->
   ctx n ->
   AST binder sig n ->
   AST binder sig n
-whnf ctx = quoteWhnf ctx . eval ctx Foil.identitySubst
+whnf scope ctx = quoteWhnf scope ctx . eval scope ctx Foil.identitySubst

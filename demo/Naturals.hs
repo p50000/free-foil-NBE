@@ -39,7 +39,7 @@ module Naturals
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Definitions, Eval (..), eval, nf, whnf)
+import FreeFoil.NbE (Definitions, Eval (..))
 import qualified FreeFoil.NbE as NbE
 
 import Naturals.Generated
@@ -55,15 +55,16 @@ import Naturals.Generated
 type Naturals n = FFTerm n
 
 -- Specialise the generic loop to this signature, as in "LambdaPi".
-{-# SPECIALIZE NbE.nf :: Distinct n => Scope n -> Naturals n -> Naturals n #-}
+{-# SPECIALIZE NbE.nf :: Distinct n => Scope n -> NbE.NoContext n -> Naturals n -> Naturals n #-}
 {-# SPECIALIZE NbE.eval ::
       (Distinct o, Distinct i) =>
       Scope o ->
+      NbE.NoContext o ->
       Substitution (NbE.Value FFPattern TermSig) i o ->
       Naturals i ->
       NbE.Value FFPattern TermSig o #-}
 {-# SPECIALIZE NbE.quote ::
-      Distinct n => Scope n -> NbE.Value FFPattern TermSig n -> Naturals n #-}
+      Distinct n => Scope n -> NbE.NoContext n -> NbE.Value FFPattern TermSig n -> Naturals n #-}
 
 -- | @zero@.
 pattern Zero :: Naturals n
@@ -103,17 +104,32 @@ type Value = NbE.Value FFPattern TermSig
 -- through to the default.
 instance Definitions ctx FFPattern TermSig => Eval ctx FFPattern TermSig where
   {-# INLINABLE evalSig #-}
-  evalSig ctx env = \case
+  evalSig scope ctx env = \case
     NatRecSig n z (ScopedAST (FFPatternRec k r) s) ->
       case assertDistinct (FFPatternRec k r) of
         Distinct ->
-          let zeroCase = eval ctx env z
+          let zeroCase = NbE.eval scope ctx env z
               recurse m = case m of
                 NbE.VNode ZeroSig    -> zeroCase
-                NbE.VNode (SucSig p) -> eval ctx (addSubst (addSubst env k p) r (recurse p)) s
+                NbE.VNode (SucSig p) -> NbE.eval scope ctx (addSubst (addSubst env k p) r (recurse p)) s
                 m' -> NbE.VSuspended env (NatRecSig m' zeroCase (ScopedAST (FFPatternRec k r) s))
-          in recurse (eval ctx env n)
-    node -> NbE.evalNode ctx env node
+          in recurse (NbE.eval scope ctx env n)
+    node -> NbE.evalNode scope ctx env node
+
+-- | Evaluation in a scope, with no other context.
+eval :: (Distinct o, Distinct i) => Scope o -> Substitution Value i o -> Naturals i -> Value o
+{-# INLINE eval #-}
+eval scope = NbE.eval scope NbE.NoContext
+
+-- | Normal form in a scope, with no other context.
+nf :: Distinct n => Scope n -> Naturals n -> Naturals n
+{-# INLINE nf #-}
+nf scope = NbE.nf scope NbE.NoContext
+
+-- | Weak-head normal form in a scope, with no other context.
+whnf :: Distinct n => Scope n -> Naturals n -> Naturals n
+{-# INLINE whnf #-}
+whnf scope = NbE.whnf scope NbE.NoContext
 
 -- | Weak-head normal form by substitution, for 'nfSubst'. The recursive
 -- result is substituted as the unevaluated recursion on the predecessor. It

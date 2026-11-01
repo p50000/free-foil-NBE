@@ -30,7 +30,7 @@ module LambdaLet
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Definitions, Eval (..), eval, nf, whnf)
+import FreeFoil.NbE (Definitions, Eval (..))
 import qualified FreeFoil.NbE as NbE
 
 import LambdaLet.Generated
@@ -46,15 +46,16 @@ import LambdaLet.Generated
 type LambdaLet n = FFTerm n
 
 -- Specialise the generic loop to this signature, as in "LambdaPi".
-{-# SPECIALIZE NbE.nf :: Distinct n => Scope n -> LambdaLet n -> LambdaLet n #-}
+{-# SPECIALIZE NbE.nf :: Distinct n => Scope n -> NbE.NoContext n -> LambdaLet n -> LambdaLet n #-}
 {-# SPECIALIZE NbE.eval ::
       (Distinct o, Distinct i) =>
       Scope o ->
+      NbE.NoContext o ->
       Substitution (NbE.Value FFPattern TermSig) i o ->
       LambdaLet i ->
       NbE.Value FFPattern TermSig o #-}
 {-# SPECIALIZE NbE.quote ::
-      Distinct n => Scope n -> NbE.Value FFPattern TermSig n -> LambdaLet n #-}
+      Distinct n => Scope n -> NbE.NoContext n -> NbE.Value FFPattern TermSig n -> LambdaLet n #-}
 
 -- | Application.
 pattern App :: LambdaLet n -> LambdaLet n -> LambdaLet n
@@ -82,17 +83,32 @@ type Value = NbE.Value FFPattern TermSig
 -- occurrence instead.
 instance Definitions ctx FFPattern TermSig => Eval ctx FFPattern TermSig where
   {-# INLINABLE evalSig #-}
-  evalSig ctx env = \case
+  evalSig scope ctx env = \case
     AppSig fun arg ->
-      case eval ctx env fun of
+      case NbE.eval scope ctx env fun of
         NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
           case assertDistinct binder of
-            Distinct -> eval ctx (addSubst env' binder (eval ctx env arg)) body
-        fun' -> NbE.VNode (AppSig fun' (eval ctx env arg))
+            Distinct -> NbE.eval scope ctx (addSubst env' binder (NbE.eval scope ctx env arg)) body
+        fun' -> NbE.VNode (AppSig fun' (NbE.eval scope ctx env arg))
     LetSig e (ScopedAST (FFPatternVar binder) body) ->
       case assertDistinct binder of
-        Distinct -> eval ctx (addSubst env binder (eval ctx env e)) body
-    node -> NbE.evalNode ctx env node
+        Distinct -> NbE.eval scope ctx (addSubst env binder (NbE.eval scope ctx env e)) body
+    node -> NbE.evalNode scope ctx env node
+
+-- | Evaluation in a scope, with no other context.
+eval :: (Distinct o, Distinct i) => Scope o -> Substitution Value i o -> LambdaLet i -> Value o
+{-# INLINE eval #-}
+eval scope = NbE.eval scope NbE.NoContext
+
+-- | Normal form in a scope, with no other context.
+nf :: Distinct n => Scope n -> LambdaLet n -> LambdaLet n
+{-# INLINE nf #-}
+nf scope = NbE.nf scope NbE.NoContext
+
+-- | Weak-head normal form in a scope, with no other context.
+whnf :: Distinct n => Scope n -> LambdaLet n -> LambdaLet n
+{-# INLINE whnf #-}
+whnf scope = NbE.whnf scope NbE.NoContext
 
 -- | Weak-head normal form by substitution; @let@ substitutes its bound
 -- expression unevaluated.

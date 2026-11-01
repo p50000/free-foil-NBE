@@ -2,12 +2,12 @@
 
 ## Unreleased
 
-- Evaluation, readback and conversion take a context the client supplies
-  (`Context`) where they took a scope. A language's `Eval` instance states
-  what it needs of the context, and the demonstration languages use a
-  free-foil `Scope`.
+- Evaluation, readback and conversion take, beside the scope, a context the
+  client supplies (`Context`). A language's `Eval` instance states what it
+  needs of the context, and the demonstration languages use `NoContext`,
+  which knows nothing beyond the scope.
 - A context may give the free names of a language values (`Definitions`),
-  which `eval` unfolds where the names are used. A `Scope` gives none.
+  which `eval` unfolds where the names are used. `NoContext` gives none.
   Top-level definitions (`FreeFoil.NbE.Definitions`) are such a context,
   built one definition at a time, and a term is normalised in it with
   plain `nf`.

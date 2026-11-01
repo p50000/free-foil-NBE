@@ -47,7 +47,7 @@ ignoring = Inj (AnnSig blank) (\(AnnSig _ node) -> Just node)
 -- | The rules of a language, ignoring the annotations of its terms.
 instance {-# OVERLAPPABLE #-} (Definitions ctx binder (AnnSig ann sig), EvalF ctx binder sig, Annotation ann, Functor ann) => Eval ctx binder (AnnSig ann sig) where
   {-# INLINE evalSig #-}
-  evalSig ctx env (AnnSig _ node) = evalF ignoring ctx env node
+  evalSig scope ctx env (AnnSig _ node) = evalF ignoring scope ctx env node
   {-# INLINE etaMatchWith #-}
   etaMatchWith scoped term (AnnSig _ node) = AnnSig blank <$> etaMatchWithF ignoring scoped term node
 

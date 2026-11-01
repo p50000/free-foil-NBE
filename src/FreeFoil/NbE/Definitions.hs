@@ -23,19 +23,16 @@ import           Data.Bifunctor              (Bifunctor)
 
 import           FreeFoil.NbE                (Context (..), Definitions (..), Eval, Value, eval)
 
--- | A context of definitions: a scope and the values of the names it
--- defines.
-data Defined binder sig n = Defined (Foil.Scope n) (Foil.Substitution (Value binder sig) n n)
+-- | A context of definitions: the values of the names it defines.
+newtype Defined binder sig n = Defined (Foil.Substitution (Value binder sig) n n)
 
 instance Bifunctor sig => Context (Defined binder sig) where
-  {-# INLINE contextScope #-}
-  contextScope (Defined scope _) = scope
   {-# INLINE extendContext #-}
-  extendContext _ scope (Defined _ subst) = Defined scope (underBinder subst)
+  extendContext _ _ _ (Defined subst) = Defined (underBinder subst)
 
 instance Bifunctor sig => Definitions (Defined binder sig) binder sig where
   {-# INLINE definition #-}
-  definition (Defined _ subst) = Foil.lookupSubst subst
+  definition _ (Defined subst) = Foil.lookupSubst subst
 
 -- | A substitution over a scope, under a binder of that scope. The names the
 -- binder adds are not in the map, so they map to themselves, and the map is
@@ -47,9 +44,9 @@ underBinder :: (Foil.Sinkable e, Foil.DExt n l) => Foil.Substitution e n n -> Fo
 underBinder subst = case Foil.sink subst of
   Foil.UnsafeSubstitution values -> Foil.UnsafeSubstitution values
 
--- | The context over a scope that defines none of its names.
-noDefinitions :: Foil.Scope n -> Defined binder sig n
-noDefinitions scope = Defined scope Foil.identitySubst
+-- | The context that defines no names.
+noDefinitions :: Defined binder sig n
+noDefinitions = Defined Foil.identitySubst
 
 -- | The context under a binder whose name has a value.
 defineValue ::
@@ -58,16 +55,17 @@ defineValue ::
   Value binder sig n ->
   Defined binder sig n ->
   Defined binder sig l
-defineValue x value (Defined scope subst) =
-  Defined (Foil.extendScope x scope) (Foil.addSubst (Foil.sink subst) x (Foil.sink value))
+defineValue x value (Defined subst) =
+  Defined (Foil.addSubst (Foil.sink subst) x (Foil.sink value))
 
 -- | The context under a binder whose name has the value of a body. The body
 -- may use the names defined before, and is evaluated when the name is first
 -- used.
 define ::
   (Eval (Defined binder sig) binder sig, Foil.Distinct n, Foil.DExt n l) =>
+  Foil.Scope n ->
   Foil.NameBinder n l ->
   AST binder sig n ->
   Defined binder sig n ->
   Defined binder sig l
-define x body ctx = defineValue x (eval ctx Foil.identitySubst body) ctx
+define scope x body ctx = defineValue x (eval scope ctx Foil.identitySubst body) ctx

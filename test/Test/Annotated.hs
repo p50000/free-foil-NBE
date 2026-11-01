@@ -61,16 +61,16 @@ annotations = \case
     a : bifoldMap (\(ScopedAST _ body) -> annotations body) annotations node
 
 nfAnnotated :: Distinct n => Scope n -> Annotated n -> Annotated n
-nfAnnotated = NbE.nf
+nfAnnotated scope = NbE.nf scope NbE.NoContext
 
 whnfAnnotated :: Distinct n => Scope n -> Annotated n -> Annotated n
-whnfAnnotated = NbE.whnf
+whnfAnnotated scope = NbE.whnf scope NbE.NoContext
 
 -- | Contexts of definitions over the annotated and the plain signature.
-noAnnotatedDefinitions :: Scope n -> Defined Pat (AnnSig Loc Sig) n
+noAnnotatedDefinitions :: Defined Pat (AnnSig Loc Sig) n
 noAnnotatedDefinitions = noDefinitions
 
-noPlainDefinitions :: Scope n -> Defined Pat Sig n
+noPlainDefinitions :: Defined Pat Sig n
 noPlainDefinitions = noDefinitions
 
 tests :: TestTree
@@ -105,14 +105,14 @@ tests =
                   scope' = extendScope d scope
                   env' = Map.insert "d" (nameOf d) (Map.map sink env)
                   term = parseIn scope' env' "d a"
-                  annotated = define d (annotatedAt 1 body) (noAnnotatedDefinitions scope)
-                  plain = define d body (noPlainDefinitions scope)
-              in alphaEquiv scope' (unannotated (NbE.nf annotated (annotatedAt 2 term))) (NbE.nf plain term) @?= True
+                  annotated = define scope d (annotatedAt 1 body) noAnnotatedDefinitions
+                  plain = define scope d body noPlainDefinitions
+              in alphaEquiv scope' (unannotated (NbE.nf scope' annotated (annotatedAt 2 term))) (NbE.nf scope' plain term) @?= True
         ]
     , testGroup "conversion"
         [ testCase "η through an annotation" $
             let closed = parseIn emptyScope Map.empty
-            in convertible emptyScope (annotatedAt 1 (closed "\\f. \\x. f x")) (annotatedAt 2 (closed "\\f. f")) @?= True
+            in convertible emptyScope NbE.NoContext (annotatedAt 1 (closed "\\f. \\x. f x")) (annotatedAt 2 (closed "\\f. f")) @?= True
         , testProperty "agrees with the unannotated language" propConv
         , testProperty "two annotations of one term are convertible" propBlind
         ]
@@ -155,10 +155,10 @@ propConv (Mixed raw1) (Mixed raw2) = withFree $ \scope env ->
   let t1 = resolve scope env raw1
       t2 = resolve scope env raw2
   in ioProperty $ budgeted (nf scope t1, nf scope t2) $ \_ ->
-       convertible scope (annotatedAt 1 t1) (annotatedAt 2 t2) == convertible scope t1 t2
+       convertible scope NbE.NoContext (annotatedAt 1 t1) (annotatedAt 2 t2) == convertible scope NbE.NoContext t1 t2
 
 propBlind :: Mixed -> Property
 propBlind (Mixed raw) = withFree $ \scope env ->
   let t = resolve scope env raw
   in ioProperty $ budgeted (nf scope t) $ \_ ->
-       convertible scope (annotatedAt 1 t) (annotatedAt 2 t)
+       convertible scope NbE.NoContext (annotatedAt 1 t) (annotatedAt 2 t)

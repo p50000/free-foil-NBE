@@ -47,15 +47,15 @@ instance (NFData scope, NFData term) => NFData (LamF scope term)
 
 instance (Context ctx, CoSinkable binder) => EvalF ctx binder LamF where
   {-# INLINE evalF #-}
-  evalF pos ctx env = \case
-    AppF fun arg -> appValue pos ctx (eval ctx env fun) (eval ctx env arg)
-    node -> evalNode ctx env (inj pos node)
+  evalF pos scope ctx env = \case
+    AppF fun arg -> appValue pos scope ctx (eval scope ctx env fun) (eval scope ctx env arg)
+    node -> evalNode scope ctx env (inj pos node)
 
   {-# INLINE etaMatchWithF #-}
   etaMatchWithF pos scoped _ = \case
-    LamF body -> Just (LamF (scoped body (EtaScoped (\ctx binder other ->
+    LamF body -> Just (LamF (scoped body (EtaScoped (\scope ctx binder other ->
       case namesOfPattern binder of
-        [x] -> appValue pos ctx other (VVar x)
+        [x] -> appValue pos scope ctx other (VVar x)
         _   -> error "Fragments.Lambda: the η law of a lambda needs a pattern that binds one name"))))
     _ -> Nothing
 
@@ -65,11 +65,11 @@ instance (Context ctx, CoSinkable binder) => EvalF ctx binder LamF where
 -- application.
 appValue ::
   (Eval ctx binder sig, CoSinkable binder, Distinct n) =>
-  Inj LamF sig -> ctx n -> Value binder sig n -> Value binder sig n -> Value binder sig n
+  Inj LamF sig -> Scope n -> ctx n -> Value binder sig n -> Value binder sig n -> Value binder sig n
 {-# INLINE appValue #-}
-appValue pos ctx fun arg = case fun of
+appValue pos scope ctx fun arg = case fun of
   VSuspended env' node
     | Just (LamF (ScopedAST binder body)) <- prj pos node ->
         case assertDistinct binder of
-          Distinct -> eval ctx (addSubstPattern env' binder [arg]) body
+          Distinct -> eval scope ctx (addSubstPattern env' binder [arg]) body
   _ -> VNode (inj pos (AppF fun arg))

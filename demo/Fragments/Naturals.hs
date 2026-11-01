@@ -46,16 +46,16 @@ instance (NFData scope, NFData term) => NFData (NatF scope term)
 
 instance (Context ctx, CoSinkable binder) => EvalF ctx binder NatF where
   {-# INLINE evalF #-}
-  evalF pos ctx env = \case
+  evalF pos scope ctx env = \case
     NatRecF n z (ScopedAST binder s) ->
       case assertDistinct binder of
         Distinct ->
-          let zeroCase = eval ctx env z
+          let zeroCase = eval scope ctx env z
               recurse m = case m of
                 VNode node
                   | Just ZeroF <- prj pos node -> zeroCase
                   | Just (SucF p) <- prj pos node ->
-                      eval ctx (addSubstPattern env binder [p, recurse p]) s
+                      eval scope ctx (addSubstPattern env binder [p, recurse p]) s
                 m' -> VSuspended env (inj pos (NatRecF m' zeroCase (ScopedAST binder s)))
-          in recurse (eval ctx env n)
-    node -> evalNode ctx env (inj pos node)
+          in recurse (eval scope ctx env n)
+    node -> evalNode scope ctx env (inj pos node)
