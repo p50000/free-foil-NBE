@@ -1,0 +1,28 @@
+-- LBNF grammar for the dependent types demonstration language: dependent
+-- functions and pairs over a universe, with a unit type. Every binder is
+-- annotated with its type, as in the output of elaboration.
+-- Generated modules live under DependentTypes.Syntax.* (see ../../../grammar-regen.sh).
+
+comment "--" ;
+comment "{-" "-}" ;
+
+token VarIdent letter (letter | digit | '_' | '\'')* ;
+
+Var.      Term2 ::= VarIdent ;
+Universe. Term2 ::= "U" ;
+Unit.     Term2 ::= "Unit" ;
+TT.       Term2 ::= "tt" ;
+Pair.     Term2 ::= "(" Term "," Term ")" ;
+App.      Term1 ::= Term1 Term2 ;
+First.    Term1 ::= "first" Term2 ;
+Second.   Term1 ::= "second" Term2 ;
+Lam.      Term  ::= "\\" "(" Pattern ":" Term ")" "." ScopedTerm ;
+Pi.       Term  ::= "(" Pattern ":" Term ")" "->" ScopedTerm ;
+Sigma.    Term  ::= "(" Pattern ":" Term ")" "*" ScopedTerm ;
+coercions Term 2 ;
+
+AScopedTerm. ScopedTerm ::= Term ;
+
+PatternVar. Pattern ::= VarIdent ;
+
+entrypoints Term ;
