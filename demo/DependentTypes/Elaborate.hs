@@ -34,13 +34,13 @@ import DependentTypes.Parser (parseOpen)
 check :: Distinct n => Scope n -> Typing n -> Raw n -> TypeValue n -> Either String (Elaborated n)
 check scope typing term ty = case term of
   Node (PairSig a b) -> case ty of
-    NbE.VSuspended _ (AnnSig _ (SigmaSig dom _)) -> do
+    NbE.VSuspended env (AnnSig _ (SigmaSig dom cod)) -> do
       a' <- check scope typing a dom
-      b' <- check scope typing b (codomainAt scope typing ty (evalIn scope typing a'))
+      b' <- check scope typing b (codomainAt scope typing env cod (evalIn scope typing a'))
       pure (annotated (quoteIn scope typing ty) (PairSig a' b'))
     _ -> Left ("a pair against a type that is not a Σ: " ++ show (quoteIn scope typing ty))
   Node (LamSig dom (ScopedAST pat body))
-    | NbE.VSuspended _ (AnnSig _ (PiSig piDom _)) <- ty -> case pat of
+    | NbE.VSuspended env (AnnSig _ (PiSig piDom cod)) <- ty -> case pat of
         FFPatternVar x -> case (assertDistinct x, assertExt x) of
           (Distinct, Ext) -> do
             dom' <- check scope typing dom universe
@@ -49,7 +49,7 @@ check scope typing term ty = case term of
               then do
                 let scope' = extendScope x scope
                     typing' = assume x domV typing
-                body' <- check scope' typing' body (codomainAt scope' typing' (sink ty) (NbE.VVar (nameOf x)))
+                body' <- check scope' typing' body (codomainAt scope' typing' (sink env) cod (NbE.VVar (nameOf x)))
                 pure (annotated (quoteIn scope typing ty) (LamSig dom' (ScopedAST pat body')))
               else Left ("the domain " ++ show dom' ++ " is not " ++ show (quoteIn scope typing piDom))
   _ -> do
@@ -69,9 +69,9 @@ infer scope typing = \case
   Node (AppSig fun arg) -> do
     (fun', funTy) <- infer scope typing fun
     case funTy of
-      NbE.VSuspended _ (AnnSig _ (PiSig dom _)) -> do
+      NbE.VSuspended env (AnnSig _ (PiSig dom cod)) -> do
         arg' <- check scope typing arg dom
-        let ty = codomainAt scope typing funTy (evalIn scope typing arg')
+        let ty = codomainAt scope typing env cod (evalIn scope typing arg')
         pure (annotated (quoteIn scope typing ty) (AppSig fun' arg'), ty)
       _ -> Left ("not a function: " ++ show fun')
   Node (LamSig dom (ScopedAST pat body)) -> case pat of
@@ -86,21 +86,24 @@ infer scope typing = \case
   Node (PiSig dom (ScopedAST pat cod)) -> typeFormer PiSig scope typing dom pat cod
   Node (SigmaSig dom (ScopedAST pat cod)) -> typeFormer SigmaSig scope typing dom pat cod
   Node (FirstSig p) -> do
-    (p', _, a) <- inferPair scope typing p
+    (p', a, _) <- inferPair scope typing p
     pure (annotated (quoteIn scope typing a) (FirstSig p'), a)
   Node (SecondSig p) -> do
-    (p', ty, a) <- inferPair scope typing p
+    (p', a, codomain) <- inferPair scope typing p
     let first = evalIn scope typing (annotated (quoteIn scope typing a) (FirstSig p'))
-        b = codomainAt scope typing ty first
+        b = codomain first
     pure (annotated (quoteIn scope typing b) (SecondSig p'), b)
   Node (PairSig _ _) -> Left "the type of a pair is not inferred; check it against a Σ type"
 
--- | Infer the type of a term that is projected: a Σ type, and its domain.
-inferPair :: Distinct n => Scope n -> Typing n -> Raw n -> Either String (Elaborated n, TypeValue n, TypeValue n)
+-- | Infer the type of a term that is projected, a Σ type: its domain, and
+-- its codomain at a value.
+inferPair ::
+  Distinct n =>
+  Scope n -> Typing n -> Raw n -> Either String (Elaborated n, TypeValue n, Value n -> TypeValue n)
 inferPair scope typing p = do
   (p', ty) <- infer scope typing p
   case ty of
-    NbE.VSuspended _ (AnnSig _ (SigmaSig a _)) -> pure (p', ty, a)
+    NbE.VSuspended env (AnnSig _ (SigmaSig a cod)) -> pure (p', a, codomainAt scope typing env cod)
     _ -> Left ("not a pair: " ++ show p')
 
 -- | A Π or Σ type: its domain is a type, and so is its codomain under the
