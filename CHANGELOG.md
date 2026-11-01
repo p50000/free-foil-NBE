@@ -28,6 +28,11 @@
   Coquand (2007).
 - The generic core: the semantic domain `Value`, the `Eval` class, generic
   evaluation and readback, `nf` and `whnf`.
+- A demonstration language with a context of types, dependent pairs:
+  functions and pairs over a universe, with a unit type. Under a binder the
+  language gives the bound names their types, which decide η for functions
+  and the unit type. Its terms are elaborated bidirectionally, and an
+  eliminator carries its type as an annotation.
 - Five demonstration languages, each with an `Eval` instance: lambda-pi,
   Booleans, lambda-let, pairs and naturals. All but Booleans also have a BNFC
   grammar, generated scope-safe syntax, a reference normaliser and a parser;
