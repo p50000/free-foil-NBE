@@ -189,9 +189,9 @@ sinkExtend = Extend (\_ _ _ -> Foil.sink)
 -- of that position, from the scope, the context and any value to the
 -- component. The two observers of a pair are @fst@ and @snd@. Like an
 -- 'Extend', an observer receives the language's 'Eval' instance from the
--- core.
+-- core, with a distinct scope, so that it may evaluate.
 newtype EtaTerm ctx binder sig n =
-  EtaTerm (Eval ctx binder sig => Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n)
+  EtaTerm ((Eval ctx binder sig, Foil.Distinct n) => Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n)
 
 -- | The observer of a scoped position of an introduction form: from the
 -- context under the position's refreshed binder, that binder, and the other
