@@ -61,7 +61,7 @@
 -- Otherwise every node runs the unspecialised evaluator, and conversion and
 -- readback build the nodes these two methods return. A helper of the
 -- language that takes the context, such as lambda-pi's @appValue@, is
--- specialised only at the contexts of its own pragmas.
+-- @INLINE@ too, so that it is specialised with the rules at every context.
 module FreeFoil.NbE
   ( -- * Semantic domain
     Value (..)
@@ -87,7 +87,7 @@ module FreeFoil.NbE
   ) where
 
 import qualified Control.Monad.Foil          as Foil
-import qualified Control.Monad.Foil.Internal as Foil (Substitution (..))
+import qualified Control.Monad.Foil.Internal as Foil (Name (..), Substitution (..))
 import           Control.Monad.Free.Foil     (AST (..), ScopedAST (..), substitute)
 import           Data.Bifoldable             (Bifoldable (..))
 import           Data.Bifunctor              (Bifunctor (..))
@@ -287,9 +287,13 @@ eval ::
   Value binder sig o
 {-# INLINABLE eval #-}
 eval scope ctx !env = \case
-  Var x -> case Foil.lookupSubst env x of
-    VVar y -> definition scope ctx y
-    v -> v
+  -- A name that the environment does not map is the same name in the output
+  -- scope, as 'Foil.lookupSubst' has it. The map is read directly, so that
+  -- 'definition' sees only those names.
+  Var x -> case env of
+    Foil.UnsafeSubstitution values -> case IntMap.lookup (Foil.nameId x) values of
+      Just v  -> v
+      Nothing -> definition scope ctx (Foil.UnsafeName (Foil.nameId x))
   Node node -> evalSig scope ctx env node
 
 -- | Evaluate a node that has no elimination rule: suspend it whole under the
