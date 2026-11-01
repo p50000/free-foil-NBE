@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes            #-}
@@ -53,7 +54,9 @@ module DependentTypes
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
 import Control.Monad.Free.Foil.Annotated (AnnSig (..))
-import Data.Bifoldable (bifoldMap)
+import Data.Bifoldable (bifold)
+import Data.Foldable (fold)
+import Data.Functor.Const (Const (..))
 import Data.Bifunctor (bimap)
 import Data.Monoid (All (..))
 import Data.ZipMatchK (ZipMatchFoldK, ZipMatchK)
@@ -100,12 +103,11 @@ unannotated = hoistAST (\(AnnSig _ node) -> node)
 -- | Whether every node but the universe carries its type, also inside the
 -- annotations, as elaboration and normalisation produce them.
 fullyAnnotated :: Elaborated n -> Bool
-fullyAnnotated = \case
-  Var _ -> True
-  Node (AnnSig ann node) -> fits ann node && all fullyAnnotated ann && getAll (bifoldMap scoped (All . fullyAnnotated) node)
+fullyAnnotated = getAll . getConst . foldAST (\_ -> mempty) (\_ (Const body) -> Const body) node
   where
-    scoped :: ScopedAST FFPattern Sig n -> All
-    scoped (ScopedAST _ body) = All (fullyAnnotated body)
+    node :: forall (m :: S). AnnSig TypeAnn TermSig (Const All m) (Const All m) -> Const All m
+    node (AnnSig ann t) = Const (All (fits ann t)) <> fold ann <> bifold t
+    fits :: TypeAnn a -> TermSig b c -> Bool
     fits IsUniverse UniverseSig = True
     fits IsUniverse _           = False
     fits (HasType _) UniverseSig = False
