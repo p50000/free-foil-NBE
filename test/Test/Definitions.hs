@@ -1,6 +1,7 @@
-{-# LANGUAGE DataKinds  #-}
-{-# LANGUAGE GADTs      #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE DataKinds        #-}
+{-# LANGUAGE GADTs            #-}
+{-# LANGUAGE PatternSynonyms  #-}
+{-# LANGUAGE RankNTypes       #-}
 -- | Tests of top-level definitions. On lambda-pi, normalising in a context
 -- of definitions agrees with normalising the program with every definition
 -- inlined, and with evaluating it under an environment that maps each
@@ -22,7 +23,7 @@ import qualified Fragments.Combined       as Combined
 import qualified FreeFoil.NbE             as NbE
 import           FreeFoil.NbE.Conversion  (convertible)
 import           FreeFoil.NbE.Definitions (Defined, define, noDefinitions)
-import           LambdaPi                 (LambdaPi, Value, nfSubst)
+import           LambdaPi                 (LambdaPi, Value, nfSubst, pattern Lam)
 import           LambdaPi.Generated       (FFPattern, TermSig)
 import           LambdaPi.Parser          (resolve, withFreeVars)
 import           LambdaPi.Syntax.Abs      (Term)
@@ -86,6 +87,17 @@ tests =
                     (NbE.whnf scope (contextOf emptyScope defs) (resolve scope env (raw "\\y. id y")))
                     (resolve scope env (raw "\\y. id y"))
                     @?= True
+            , testCase "a name bound in a body may have the raw name of the definition" $
+                withDefinitions emptyScope Map.empty [("d", raw "\\z. z")] $ \defs scope env -> do
+                  -- The body is resolved in the scope before d, so free-foil
+                  -- gives z the raw name it then gives d. The bound z must
+                  -- not unfold to d.
+                  case defs of
+                    Definition _ d (Lam z _) -> nameId (nameOf z) @?= nameId (nameOf d)
+                    _                        -> assertFailure "the body is not a lambda"
+                  let nfIn t = NbE.nf scope (contextOf emptyScope defs) (resolve scope env (raw t))
+                  alphaEquiv scope (nfIn "d") (resolve scope env (raw "\\z. z")) @?= True
+                  alphaEquiv scope (nfIn "d d") (resolve scope env (raw "\\z. z")) @?= True
             ]
         , testProperty "nf in the context agrees with nfSubst of the inlined program" propInlined
         , testProperty "nf in the context agrees with evaluation under the environment of the definitions" propEnvironment
