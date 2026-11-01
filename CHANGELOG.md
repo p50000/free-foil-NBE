@@ -28,7 +28,7 @@
   Coquand (2007).
 - The generic core: the semantic domain `Value`, the `Eval` class, generic
   evaluation and readback, `nf` and `whnf`.
-- A demonstration language with a context of types, dependent pairs:
+- A demonstration language with a context of types, dependent types:
   functions and pairs over a universe, with a unit type. Under a binder the
   language gives the bound names their types, which decide η for functions
   and the unit type. Its terms are elaborated bidirectionally, and an

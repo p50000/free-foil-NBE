@@ -6,7 +6,7 @@ import Test.Tasty.QuickCheck
 import qualified Test.Annotated
 import qualified Test.Booleans
 import qualified Test.Definitions
-import qualified Test.DependentPairs
+import qualified Test.DependentTypes
 import qualified Test.Fragments
 import qualified Test.LambdaLet
 import qualified Test.LambdaNWays
@@ -29,6 +29,6 @@ main =
         , Test.Monolith.tests
         , Test.Naturals.tests
         , Test.Pairs.tests
-        , Test.DependentPairs.tests
+        , Test.DependentTypes.tests
         , Test.Annotated.tests
         ]

@@ -11,7 +11,7 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 -- | Dependent functions and pairs over a universe, with a unit type: a
 -- language whose context holds types. Its terms are elaborated (see
--- "DependentPairs.Elaborate"): every binder carries its type, and an
+-- "DependentTypes.Elaborate"): every binder carries its type, and an
 -- eliminator, an application or a @split@, carries the type of its result
 -- as free-foil's annotation. Every other node is annotated 'Nothing'.
 --
@@ -29,7 +29,7 @@
 --
 -- The grammar follows the monolithic language's, and the modules follow
 -- Renata Shakirova's pairs language.
-module DependentPairs
+module DependentTypes
   ( -- * Terms
     Sig
   , Elaborated
@@ -59,7 +59,7 @@ import FreeFoil.NbE (Eval (..), Extend (..), HasDefinitions (..), HasHeads (..),
 import qualified FreeFoil.NbE as NbE
 import qualified FreeFoil.NbE.Conversion as Conv
 
-import DependentPairs.Generated (FFPattern (..), FFTerm, TermSig (..))
+import DependentTypes.Generated (FFPattern (..), FFTerm, TermSig (..))
 
 -- | The signature of elaborated terms.
 type Sig = AnnSig Maybe TermSig
@@ -152,7 +152,7 @@ instance (HasTypes ctx, HasDefinitions ctx FFPattern Sig) => Eval ctx FFPattern 
         NbE.VNode (AnnSig _ (PairSig a b)) -> case pat of
           FFPatternPair x y -> case assertDistinct (FFPatternPair x y) of
             Distinct -> NbE.eval scope ctx (addSubst (addSubst env x a) y b) body
-          FFPatternVar _ -> error "DependentPairs: split binds two names"
+          FFPatternVar _ -> error "DependentTypes: split binds two names"
         p' -> NbE.VSuspended env
                 (AnnSig (fmap (NbE.eval scope ctx env) ann)
                   (SplitSig p' (NbE.eval scope ctx env ty) (ScopedAST pat body)))
@@ -192,7 +192,7 @@ appValue ann scope ctx fun arg = case fun of
 assumeVar :: HasTypes ctx => Value n -> Extend ctx FFPattern Sig n
 assumeVar ty = Extend $ \_ pat _ ctx -> case pat of
   FFPatternVar x    -> assume x ty ctx
-  FFPatternPair _ _ -> error "DependentPairs: this binder binds one name"
+  FFPatternPair _ _ -> error "DependentTypes: this binder binds one name"
 
 -- | The binder of @split p : (a : A) * B as (x, y) in t@: @x : A@, then
 -- @y : B@ at @x@.
@@ -202,18 +202,18 @@ assumeComponents ty = Extend $ \scope pat _ ctx -> case pat of
     (Distinct, Ext, Ext) ->
       let ctxX = assume x (firstComponent ty) ctx
       in assume y (codomainAt (extendScope x scope) ctxX (sink ty) (NbE.VVar (nameOf x))) ctxX
-  FFPatternVar _ -> error "DependentPairs: split binds two names"
+  FFPatternVar _ -> error "DependentTypes: split binds two names"
   where
     firstComponent = \case
       NbE.VSuspended _ (AnnSig _ (SigmaSig a _)) -> a
-      _ -> error "DependentPairs: split of a value whose type is not a Σ"
+      _ -> error "DependentTypes: split of a value whose type is not a Σ"
 
 -- | The codomain of a Π or Σ type at a value.
 codomainAt :: forall ctx n. (Eval ctx FFPattern Sig, Distinct n) => Scope n -> ctx n -> Value n -> Value n -> Value n
 codomainAt scope ctx ty arg = case ty of
   NbE.VSuspended env (AnnSig _ (PiSig _ (ScopedAST (FFPatternVar b) cod))) -> at env b cod
   NbE.VSuspended env (AnnSig _ (SigmaSig _ (ScopedAST (FFPatternVar b) cod))) -> at env b cod
-  _ -> error "DependentPairs: not a Π or Σ type"
+  _ -> error "DependentTypes: not a Π or Σ type"
   where
     at :: forall i l. Distinct i => Substitution Value i n -> NameBinder i l -> Elaborated l -> Value n
     at env b cod = case assertDistinct b of

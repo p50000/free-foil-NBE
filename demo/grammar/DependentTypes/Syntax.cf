@@ -1,8 +1,8 @@
--- LBNF grammar for the dependent pairs demonstration language: dependent
+-- LBNF grammar for the dependent types demonstration language: dependent
 -- functions and pairs over a universe, with a unit type. Every binder is
 -- annotated with its type, and split with the type of its scrutinee, as in
 -- the output of elaboration.
--- Generated modules live under DependentPairs.Syntax.* (see ../../../grammar-regen.sh).
+-- Generated modules live under DependentTypes.Syntax.* (see ../../../grammar-regen.sh).
 
 comment "--" ;
 comment "{-" "-}" ;

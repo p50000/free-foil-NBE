@@ -4,7 +4,7 @@
 
 -- | The abstract syntax of language Syntax.
 
-module DependentPairs.Syntax.Abs where
+module DependentTypes.Syntax.Abs where
 
 import Prelude (String)
 import qualified Prelude as C (Eq, Ord, Show, Read)

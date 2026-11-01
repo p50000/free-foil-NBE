@@ -1,8 +1,8 @@
--- | Example dependent pairs terms: closed terms with their types and their
+-- | Example terms of the dependent types language: closed terms with their types and their
 -- normal forms in a context of types, and pairs of convertible and of
 -- inconvertible terms of one type. The examples are strings, elaborated by
--- "DependentPairs.Elaborate".
-module DependentPairs.Examples
+-- "DependentTypes.Elaborate".
+module DependentTypes.Examples
   ( Example (..)
   , unitVariable
   , unitResult

@@ -101,35 +101,35 @@ library pairs-syntax
         , array
     default-language: Haskell2010
 
--- BNFC-generated parser/printer for the dependent pairs language, from
--- demo/grammar/DependentPairs/Syntax.cf.
-library dependent-pairs-syntax
+-- BNFC-generated parser/printer for the dependent types language, from
+-- demo/grammar/DependentTypes/Syntax.cf.
+library dependent-types-syntax
     hs-source-dirs:   gen
-    exposed-modules:  DependentPairs.Syntax.Abs
-        , DependentPairs.Syntax.Lex
-        , DependentPairs.Syntax.Par
-        , DependentPairs.Syntax.Print
+    exposed-modules:  DependentTypes.Syntax.Abs
+        , DependentTypes.Syntax.Lex
+        , DependentTypes.Syntax.Par
+        , DependentTypes.Syntax.Print
     build-depends:    base ^>=4.20.2.0
         , array
     default-language: Haskell2010
 
--- The dependent pairs demo language: a context of types, filled under
+-- The dependent types demo language: a context of types, filled under
 -- binders by the language, η by types, and bidirectional elaboration.
-library dependent-pairs-demo
+library dependent-types-demo
     import:           warnings
     visibility:       public
     hs-source-dirs:   demo
-    exposed-modules:  DependentPairs
-        , DependentPairs.Elaborate
-        , DependentPairs.Examples
-        , DependentPairs.Parser
-        , DependentPairs.Raw
-    other-modules:    DependentPairs.Generated
+    exposed-modules:  DependentTypes
+        , DependentTypes.Elaborate
+        , DependentTypes.Examples
+        , DependentTypes.Parser
+        , DependentTypes.Raw
+    other-modules:    DependentTypes.Generated
     build-depends:    base ^>=4.20.2.0
         , bifunctors
         , containers ^>=0.7
         , demo-parsing
-        , dependent-pairs-syntax
+        , dependent-types-syntax
         , free-foil ^>=0.6.1
         , free-foil-nbe
         , kind-generics >=0.5.0 && <0.6
@@ -311,7 +311,7 @@ test-suite free-foil-nbe-test
                     , Test.Annotated
                     , Test.Booleans
                     , Test.Definitions
-                    , Test.DependentPairs
+                    , Test.DependentTypes
                     , Test.Fragments
                     , Test.LambdaLet
                     , Test.LambdaNWays
@@ -324,7 +324,7 @@ test-suite free-foil-nbe-test
         , bifunctors
         , containers ^>=0.7
         , deepseq
-        , dependent-pairs-demo
+        , dependent-types-demo
         , fragments-demo
         , free-foil ^>=0.6.1
         , free-foil-nbe

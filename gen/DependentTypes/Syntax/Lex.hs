@@ -3,13 +3,13 @@
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
 {-# LANGUAGE CPP #-}
-{-# LINE 4 "DependentPairs/Syntax/Lex.x" #-}
+{-# LINE 4 "DependentTypes/Syntax/Lex.x" #-}
 {-# OPTIONS -Wno-incomplete-patterns #-}
 {-# OPTIONS_GHC -w #-}
 
 {-# LANGUAGE PatternSynonyms #-}
 
-module DependentPairs.Syntax.Lex where
+module DependentTypes.Syntax.Lex where
 
 import Prelude
 
@@ -4396,7 +4396,7 @@ alexRightContext IBOX(sc) user__ _ _ input__ =
         -- match when checking the right context, just
         -- the first match will do.
 #endif
-{-# LINE 56 "DependentPairs/Syntax/Lex.x" #-}
+{-# LINE 56 "DependentTypes/Syntax/Lex.x" #-}
 -- | Create a token with position.
 tok :: (String -> Tok) -> (Posn -> String -> Token)
 tok f p = PT p . f

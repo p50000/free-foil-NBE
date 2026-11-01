@@ -4,9 +4,9 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 
--- | Pretty-printer for DependentPairs.
+-- | Pretty-printer for DependentTypes.
 
-module DependentPairs.Syntax.Print where
+module DependentTypes.Syntax.Print where
 
 import Prelude
   ( ($), (.)
@@ -17,7 +17,7 @@ import Prelude
   , all, elem, foldr, id, map, null, replicate, shows, span
   )
 import Data.Char ( Char, isSpace )
-import qualified DependentPairs.Syntax.Abs
+import qualified DependentTypes.Syntax.Abs
 
 -- | The top-level printing method.
 
@@ -134,26 +134,26 @@ instance Print Integer where
 instance Print Double where
   prt _ x = doc (shows x)
 
-instance Print DependentPairs.Syntax.Abs.VarIdent where
-  prt _ (DependentPairs.Syntax.Abs.VarIdent i) = doc $ showString i
-instance Print DependentPairs.Syntax.Abs.Term where
+instance Print DependentTypes.Syntax.Abs.VarIdent where
+  prt _ (DependentTypes.Syntax.Abs.VarIdent i) = doc $ showString i
+instance Print DependentTypes.Syntax.Abs.Term where
   prt i = \case
-    DependentPairs.Syntax.Abs.Var varident -> prPrec i 2 (concatD [prt 0 varident])
-    DependentPairs.Syntax.Abs.Universe -> prPrec i 2 (concatD [doc (showString "U")])
-    DependentPairs.Syntax.Abs.Unit -> prPrec i 2 (concatD [doc (showString "Unit")])
-    DependentPairs.Syntax.Abs.TT -> prPrec i 2 (concatD [doc (showString "tt")])
-    DependentPairs.Syntax.Abs.Pair term1 term2 -> prPrec i 2 (concatD [doc (showString "("), prt 0 term1, doc (showString ","), prt 0 term2, doc (showString ")")])
-    DependentPairs.Syntax.Abs.App term1 term2 -> prPrec i 1 (concatD [prt 1 term1, prt 2 term2])
-    DependentPairs.Syntax.Abs.Lam pattern_ term scopedterm -> prPrec i 0 (concatD [doc (showString "\\"), doc (showString "("), prt 0 pattern_, doc (showString ":"), prt 0 term, doc (showString ")"), doc (showString "."), prt 0 scopedterm])
-    DependentPairs.Syntax.Abs.Pi pattern_ term scopedterm -> prPrec i 0 (concatD [doc (showString "("), prt 0 pattern_, doc (showString ":"), prt 0 term, doc (showString ")"), doc (showString "->"), prt 0 scopedterm])
-    DependentPairs.Syntax.Abs.Sigma pattern_ term scopedterm -> prPrec i 0 (concatD [doc (showString "("), prt 0 pattern_, doc (showString ":"), prt 0 term, doc (showString ")"), doc (showString "*"), prt 0 scopedterm])
-    DependentPairs.Syntax.Abs.Split term1 term2 pattern_ scopedterm -> prPrec i 0 (concatD [doc (showString "split"), prt 0 term1, doc (showString ":"), prt 0 term2, doc (showString "as"), prt 0 pattern_, doc (showString "in"), prt 0 scopedterm])
+    DependentTypes.Syntax.Abs.Var varident -> prPrec i 2 (concatD [prt 0 varident])
+    DependentTypes.Syntax.Abs.Universe -> prPrec i 2 (concatD [doc (showString "U")])
+    DependentTypes.Syntax.Abs.Unit -> prPrec i 2 (concatD [doc (showString "Unit")])
+    DependentTypes.Syntax.Abs.TT -> prPrec i 2 (concatD [doc (showString "tt")])
+    DependentTypes.Syntax.Abs.Pair term1 term2 -> prPrec i 2 (concatD [doc (showString "("), prt 0 term1, doc (showString ","), prt 0 term2, doc (showString ")")])
+    DependentTypes.Syntax.Abs.App term1 term2 -> prPrec i 1 (concatD [prt 1 term1, prt 2 term2])
+    DependentTypes.Syntax.Abs.Lam pattern_ term scopedterm -> prPrec i 0 (concatD [doc (showString "\\"), doc (showString "("), prt 0 pattern_, doc (showString ":"), prt 0 term, doc (showString ")"), doc (showString "."), prt 0 scopedterm])
+    DependentTypes.Syntax.Abs.Pi pattern_ term scopedterm -> prPrec i 0 (concatD [doc (showString "("), prt 0 pattern_, doc (showString ":"), prt 0 term, doc (showString ")"), doc (showString "->"), prt 0 scopedterm])
+    DependentTypes.Syntax.Abs.Sigma pattern_ term scopedterm -> prPrec i 0 (concatD [doc (showString "("), prt 0 pattern_, doc (showString ":"), prt 0 term, doc (showString ")"), doc (showString "*"), prt 0 scopedterm])
+    DependentTypes.Syntax.Abs.Split term1 term2 pattern_ scopedterm -> prPrec i 0 (concatD [doc (showString "split"), prt 0 term1, doc (showString ":"), prt 0 term2, doc (showString "as"), prt 0 pattern_, doc (showString "in"), prt 0 scopedterm])
 
-instance Print DependentPairs.Syntax.Abs.ScopedTerm where
+instance Print DependentTypes.Syntax.Abs.ScopedTerm where
   prt i = \case
-    DependentPairs.Syntax.Abs.AScopedTerm term -> prPrec i 0 (concatD [prt 0 term])
+    DependentTypes.Syntax.Abs.AScopedTerm term -> prPrec i 0 (concatD [prt 0 term])
 
-instance Print DependentPairs.Syntax.Abs.Pattern where
+instance Print DependentTypes.Syntax.Abs.Pattern where
   prt i = \case
-    DependentPairs.Syntax.Abs.PatternVar varident -> prPrec i 0 (concatD [prt 0 varident])
-    DependentPairs.Syntax.Abs.PatternPair varident1 varident2 -> prPrec i 0 (concatD [doc (showString "("), prt 0 varident1, doc (showString ","), prt 0 varident2, doc (showString ")")])
+    DependentTypes.Syntax.Abs.PatternVar varident -> prPrec i 0 (concatD [prt 0 varident])
+    DependentTypes.Syntax.Abs.PatternPair varident1 varident2 -> prPrec i 0 (concatD [doc (showString "("), prt 0 varident1, doc (showString ","), prt 0 varident2, doc (showString ")")])

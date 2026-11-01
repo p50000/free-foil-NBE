@@ -1,8 +1,8 @@
 {-# LANGUAGE DataKinds #-}
--- | Tests of dependent pairs: every example elaborates and reaches its
+-- | Tests of the dependent types language: every example elaborates and reaches its
 -- normal form in a context of types, the conversion examples, the untyped
 -- normal form without a context, and elaboration errors.
-module Test.DependentPairs (tests) where
+module Test.DependentTypes (tests) where
 
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -11,13 +11,13 @@ import Control.Monad.Foil
 import Control.Monad.Free.Foil (alphaEquiv)
 import qualified FreeFoil.NbE as NbE
 
-import DependentPairs (convertible, emptyTyping, nf)
-import DependentPairs.Elaborate (elaborate)
-import DependentPairs.Examples
+import DependentTypes (convertible, emptyTyping, nf)
+import DependentTypes.Elaborate (elaborate)
+import DependentTypes.Examples
 
 tests :: TestTree
 tests =
-  testGroup "dependent pairs"
+  testGroup "dependent types"
     [ testGroup "every example reaches its normal form in a context of types"
         [ testCase name $ do
             (term, _) <- elaborated term0 ty

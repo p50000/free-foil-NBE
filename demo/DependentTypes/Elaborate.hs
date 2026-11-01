@@ -1,9 +1,9 @@
 {-# LANGUAGE DataKinds  #-}
 {-# LANGUAGE GADTs      #-}
 {-# LANGUAGE LambdaCase #-}
--- | Bidirectional elaboration of dependent pairs terms: a term is checked
+-- | Bidirectional elaboration of the dependent types language: a term is checked
 -- against a type or its type is inferred, and the result carries the types
--- that normalisation needs (see "DependentPairs"). Types are values, and
+-- that normalisation needs (see "DependentTypes"). Types are values, and
 -- elaboration compares them with the language's own conversion, in the
 -- context of the types of the names in scope.
 --
@@ -15,7 +15,7 @@
 -- The algorithm is the standard bidirectional one (see the survey of
 -- Dunfield and Krishnaswami, "Bidirectional Typing", 2021), with types as
 -- values computed by normalisation by evaluation.
-module DependentPairs.Elaborate
+module DependentTypes.Elaborate
   ( check
   , infer
   , elaborate
@@ -29,9 +29,9 @@ import Control.Monad.Free.Foil.Annotated (AnnSig (..))
 import qualified FreeFoil.NbE as NbE
 import qualified FreeFoil.NbE.Conversion as Conv
 
-import DependentPairs
-import DependentPairs.Generated (FFPattern (..), TermSig (..))
-import DependentPairs.Parser (parseOpen)
+import DependentTypes
+import DependentTypes.Generated (FFPattern (..), TermSig (..))
+import DependentTypes.Parser (parseOpen)
 
 -- | Check a term against a type.
 check :: Distinct n => Scope n -> Typing n -> Raw n -> Value n -> Either String (Elaborated n)

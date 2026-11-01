@@ -11,7 +11,7 @@
 {-# OPTIONS_GHC -Wno-incomplete-patterns -Wno-overlapping-patterns #-}
 {-# LANGUAGE PatternSynonyms #-}
 
-module DependentPairs.Syntax.Par
+module DependentTypes.Syntax.Par
   ( happyError
   , myLexer
   , pTerm
@@ -19,8 +19,8 @@ module DependentPairs.Syntax.Par
 
 import Prelude
 
-import qualified DependentPairs.Syntax.Abs
-import DependentPairs.Syntax.Lex
+import qualified DependentTypes.Syntax.Abs
+import DependentTypes.Syntax.Lex
 import qualified Control.Monad as Happy_Prelude
 import qualified Data.Bool as Happy_Prelude
 import qualified Data.Function as Happy_Prelude
@@ -43,10 +43,10 @@ import Control.Monad (ap)
 data HappyAbsSyn 
         = HappyTerminal (Token)
         | HappyErrorToken Happy_Prelude.Int
-        | HappyAbsSyn5 (DependentPairs.Syntax.Abs.VarIdent)
-        | HappyAbsSyn6 (DependentPairs.Syntax.Abs.Term)
-        | HappyAbsSyn9 (DependentPairs.Syntax.Abs.ScopedTerm)
-        | HappyAbsSyn10 (DependentPairs.Syntax.Abs.Pattern)
+        | HappyAbsSyn5 (DependentTypes.Syntax.Abs.VarIdent)
+        | HappyAbsSyn6 (DependentTypes.Syntax.Abs.Term)
+        | HappyAbsSyn9 (DependentTypes.Syntax.Abs.ScopedTerm)
+        | HappyAbsSyn10 (DependentTypes.Syntax.Abs.Pattern)
 
 {-# NOINLINE happyTokenStrings #-}
 happyTokenStrings = ["'('","')'","'*'","','","'->'","'.'","':'","'U'","'Unit'","'\\\\'","'as'","'in'","'split'","'tt'","L_VarIdent","%eof"]
@@ -100,33 +100,33 @@ happy_n_starts = 1 :: Happy_Prelude.Int
 happyReduce_1 = happySpecReduce_1  0# happyReduction_1
 happyReduction_1 (HappyTerminal (PT _ (T_VarIdent happy_var_1)))
          =  HappyAbsSyn5
-                 (DependentPairs.Syntax.Abs.VarIdent happy_var_1
+                 (DependentTypes.Syntax.Abs.VarIdent happy_var_1
         )
 happyReduction_1 _  = notHappyAtAll 
 
 happyReduce_2 = happySpecReduce_1  1# happyReduction_2
 happyReduction_2 (HappyAbsSyn5  happy_var_1)
          =  HappyAbsSyn6
-                 (DependentPairs.Syntax.Abs.Var happy_var_1
+                 (DependentTypes.Syntax.Abs.Var happy_var_1
         )
 happyReduction_2 _  = notHappyAtAll 
 
 happyReduce_3 = happySpecReduce_1  1# happyReduction_3
 happyReduction_3 _
          =  HappyAbsSyn6
-                 (DependentPairs.Syntax.Abs.Universe
+                 (DependentTypes.Syntax.Abs.Universe
         )
 
 happyReduce_4 = happySpecReduce_1  1# happyReduction_4
 happyReduction_4 _
          =  HappyAbsSyn6
-                 (DependentPairs.Syntax.Abs.Unit
+                 (DependentTypes.Syntax.Abs.Unit
         )
 
 happyReduce_5 = happySpecReduce_1  1# happyReduction_5
 happyReduction_5 _
          =  HappyAbsSyn6
-                 (DependentPairs.Syntax.Abs.TT
+                 (DependentTypes.Syntax.Abs.TT
         )
 
 happyReduce_6 = happyReduce 5# 1# happyReduction_6
@@ -137,7 +137,7 @@ happyReduction_6 (_ `HappyStk`
         _ `HappyStk`
         happyRest)
          = HappyAbsSyn6
-                 (DependentPairs.Syntax.Abs.Pair happy_var_2 happy_var_4
+                 (DependentTypes.Syntax.Abs.Pair happy_var_2 happy_var_4
         ) `HappyStk` happyRest
 
 happyReduce_7 = happySpecReduce_3  1# happyReduction_7
@@ -153,7 +153,7 @@ happyReduce_8 = happySpecReduce_2  2# happyReduction_8
 happyReduction_8 (HappyAbsSyn6  happy_var_2)
         (HappyAbsSyn6  happy_var_1)
          =  HappyAbsSyn6
-                 (DependentPairs.Syntax.Abs.App happy_var_1 happy_var_2
+                 (DependentTypes.Syntax.Abs.App happy_var_1 happy_var_2
         )
 happyReduction_8 _ _  = notHappyAtAll 
 
@@ -175,7 +175,7 @@ happyReduction_10 ((HappyAbsSyn9  happy_var_8) `HappyStk`
         _ `HappyStk`
         happyRest)
          = HappyAbsSyn6
-                 (DependentPairs.Syntax.Abs.Lam happy_var_3 happy_var_5 happy_var_8
+                 (DependentTypes.Syntax.Abs.Lam happy_var_3 happy_var_5 happy_var_8
         ) `HappyStk` happyRest
 
 happyReduce_11 = happyReduce 7# 3# happyReduction_11
@@ -188,7 +188,7 @@ happyReduction_11 ((HappyAbsSyn9  happy_var_7) `HappyStk`
         _ `HappyStk`
         happyRest)
          = HappyAbsSyn6
-                 (DependentPairs.Syntax.Abs.Pi happy_var_2 happy_var_4 happy_var_7
+                 (DependentTypes.Syntax.Abs.Pi happy_var_2 happy_var_4 happy_var_7
         ) `HappyStk` happyRest
 
 happyReduce_12 = happyReduce 7# 3# happyReduction_12
@@ -201,7 +201,7 @@ happyReduction_12 ((HappyAbsSyn9  happy_var_7) `HappyStk`
         _ `HappyStk`
         happyRest)
          = HappyAbsSyn6
-                 (DependentPairs.Syntax.Abs.Sigma happy_var_2 happy_var_4 happy_var_7
+                 (DependentTypes.Syntax.Abs.Sigma happy_var_2 happy_var_4 happy_var_7
         ) `HappyStk` happyRest
 
 happyReduce_13 = happyReduce 8# 3# happyReduction_13
@@ -215,7 +215,7 @@ happyReduction_13 ((HappyAbsSyn9  happy_var_8) `HappyStk`
         _ `HappyStk`
         happyRest)
          = HappyAbsSyn6
-                 (DependentPairs.Syntax.Abs.Split happy_var_2 happy_var_4 happy_var_6 happy_var_8
+                 (DependentTypes.Syntax.Abs.Split happy_var_2 happy_var_4 happy_var_6 happy_var_8
         ) `HappyStk` happyRest
 
 happyReduce_14 = happySpecReduce_1  3# happyReduction_14
@@ -228,14 +228,14 @@ happyReduction_14 _  = notHappyAtAll
 happyReduce_15 = happySpecReduce_1  4# happyReduction_15
 happyReduction_15 (HappyAbsSyn6  happy_var_1)
          =  HappyAbsSyn9
-                 (DependentPairs.Syntax.Abs.AScopedTerm happy_var_1
+                 (DependentTypes.Syntax.Abs.AScopedTerm happy_var_1
         )
 happyReduction_15 _  = notHappyAtAll 
 
 happyReduce_16 = happySpecReduce_1  5# happyReduction_16
 happyReduction_16 (HappyAbsSyn5  happy_var_1)
          =  HappyAbsSyn10
-                 (DependentPairs.Syntax.Abs.PatternVar happy_var_1
+                 (DependentTypes.Syntax.Abs.PatternVar happy_var_1
         )
 happyReduction_16 _  = notHappyAtAll 
 
@@ -247,7 +247,7 @@ happyReduction_17 (_ `HappyStk`
         _ `HappyStk`
         happyRest)
          = HappyAbsSyn10
-                 (DependentPairs.Syntax.Abs.PatternPair happy_var_2 happy_var_4
+                 (DependentTypes.Syntax.Abs.PatternPair happy_var_2 happy_var_4
         ) `HappyStk` happyRest
 
 happyTerminalToTok term = case term of {
