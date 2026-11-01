@@ -12,8 +12,9 @@
 -- a λ against a Π type. Every other term is inferred, then compared with
 -- the type it is checked against.
 --
--- The algorithm is the standard bidirectional one, written from general
--- knowledge, with types as values computed by normalisation by evaluation.
+-- The algorithm is the standard bidirectional one (see the survey of
+-- Dunfield and Krishnaswami, "Bidirectional Typing", 2021), with types as
+-- values computed by normalisation by evaluation.
 module DependentPairs.Elaborate
   ( check
   , infer
