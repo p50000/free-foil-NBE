@@ -257,14 +257,10 @@ expandFunction scope ctx fun ty dom =
     in withFresh scopeG $ \x ->
          let scopeX = extendScope x scopeG
              ctxX = assume x (sink dom) ctxG
-             cod = NbE.quote scopeX ctxX (codomainAt scopeX ctxX (sinkPast x (sinkPast g ty)) (NbE.VVar (nameOf x)))
+             cod = NbE.quote scopeX ctxX (codomainAt scopeX ctxX (sink ty) (NbE.VVar (nameOf x)))
              body = Node (AnnSig (Just cod) (AppSig (Var (sink (nameOf g))) (Var (nameOf x))))
          in NbE.VSuspended (addSubst identitySubst g fun)
               (AnnSig Nothing (LamSig dom (ScopedAST (FFPatternVar x) body)))
-
--- | A value under a binder.
-sinkPast :: DExt n l => NameBinder n l -> Value n -> Value l
-sinkPast _ = sink
 
 -- * Normalisation
 
