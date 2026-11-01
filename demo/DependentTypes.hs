@@ -32,6 +32,7 @@ module DependentTypes
   , Elaborated
   , Raw
   , Value
+  , TypeValue
   , unannotated
   , fullyAnnotated
   , universe
@@ -89,6 +90,9 @@ type Raw n = FFTerm n
 -- | Semantic values.
 type Value = NbE.Value FFPattern Sig
 
+-- | Values that are types.
+type TypeValue = Value
+
 -- | A term without its annotations.
 unannotated :: Elaborated n -> Raw n
 unannotated = hoistAST (\(AnnSig _ node) -> node)
@@ -112,15 +116,15 @@ instance Show (AST FFPattern Sig n) where
   show = show . unannotated
 
 -- | The universe, whose type is itself.
-universe :: Value n
+universe :: TypeValue n
 universe = NbE.VNode (AnnSig IsUniverse UniverseSig)
 
 -- | The unit type.
-unitType :: Value n
+unitType :: TypeValue n
 unitType = NbE.VNode (AnnSig (HasType universe) UnitSig)
 
 -- | The type in an annotation.
-annotatedType :: TypeAnn (Value n) -> Value n
+annotatedType :: TypeAnn (TypeValue n) -> TypeValue n
 annotatedType = \case
   HasType ty -> ty
   IsUniverse -> universe
@@ -130,19 +134,19 @@ annotatedType = \case
 -- | What the language needs of a context: the type of every name in scope.
 class HasTypes ctx where
   -- | The context under a binder of one name of a type.
-  assume :: DExt n l => NameBinder n l -> Value n -> ctx n -> ctx l
+  assume :: DExt n l => NameBinder n l -> TypeValue n -> ctx n -> ctx l
   -- | The type of a name.
-  typeOfName :: ctx n -> Name n -> Value n
+  typeOfName :: ctx n -> Name n -> TypeValue n
 
 -- | A type for every name in scope.
-newtype Typing n = Typing (NameMap n (Value n))
+newtype Typing n = Typing (NameMap n (TypeValue n))
 
 -- | The context of the empty scope.
 emptyTyping :: Typing VoidS
 emptyTyping = Typing emptyNameMap
 
 -- | The type of a name.
-typeOf :: Name n -> Typing n -> Value n
+typeOf :: Name n -> Typing n -> TypeValue n
 typeOf x (Typing types) = lookupName x types
 
 instance HasTypes Typing where
@@ -217,7 +221,7 @@ instance (HasTypes ctx, HasDefinitions ctx FFPattern Sig) => Eval ctx FFPattern 
 -- function is a stuck application of the type in the annotation.
 appValue ::
   (Eval ctx FFPattern Sig, Distinct n) =>
-  TypeAnn (Value n) -> Scope n -> ctx n -> Value n -> Value n -> Value n
+  TypeAnn (TypeValue n) -> Scope n -> ctx n -> Value n -> Value n -> Value n
 {-# INLINE appValue #-}
 appValue ann scope ctx fun arg = case fun of
   NbE.VSuspended env (AnnSig _ (LamSig _ (ScopedAST (FFPatternVar x) body))) ->
@@ -227,13 +231,13 @@ appValue ann scope ctx fun arg = case fun of
 
 -- | The first component of a pair value. Any other value gives a stuck
 -- projection of the type in the annotation.
-firstValue :: TypeAnn (Value n) -> Value n -> Value n
+firstValue :: TypeAnn (TypeValue n) -> Value n -> Value n
 firstValue ann p = case p of
   NbE.VNode (AnnSig _ (PairSig a _)) -> a
   _ -> NbE.VNode (AnnSig ann (FirstSig p))
 
 -- | The second component of a pair value, like 'firstValue'.
-secondValue :: TypeAnn (Value n) -> Value n -> Value n
+secondValue :: TypeAnn (TypeValue n) -> Value n -> Value n
 secondValue ann p = case p of
   NbE.VNode (AnnSig _ (PairSig _ b)) -> b
   _ -> NbE.VNode (AnnSig ann (SecondSig p))
@@ -248,36 +252,36 @@ secondOf scope ctx p = secondValue (HasType (codomainAt scope ctx (typeOfValue c
 
 -- | The type of a value: of a variable from the context, of a node from its
 -- annotation.
-typeOfValue :: HasTypes ctx => ctx n -> Value n -> Value n
+typeOfValue :: HasTypes ctx => ctx n -> Value n -> TypeValue n
 typeOfValue ctx = \case
   NbE.VVar x -> typeOfName ctx x
   NbE.VNode (AnnSig ann _) -> annotatedType ann
   NbE.VSuspended _ (AnnSig ann _) -> annotatedType ann
 
 -- | The domain of a Σ type.
-sigmaDomain :: Value n -> Value n
+sigmaDomain :: TypeValue n -> TypeValue n
 sigmaDomain = \case
   NbE.VSuspended _ (AnnSig _ (SigmaSig a _)) -> a
   _ -> error "DependentTypes: not a Σ type"
 
 -- | The binder of one name of a type.
-assumeVar :: HasTypes ctx => Value n -> Extend ctx FFPattern Sig n
+assumeVar :: HasTypes ctx => TypeValue n -> Extend ctx FFPattern Sig n
 assumeVar ty = Extend $ \_ pat _ ctx -> case pat of
   FFPatternVar x -> assume x ty ctx
 
 -- | The codomain of a Π or Σ type at a value.
-codomainAt :: forall ctx n. (Eval ctx FFPattern Sig, Distinct n) => Scope n -> ctx n -> Value n -> Value n -> Value n
+codomainAt :: forall ctx n. (Eval ctx FFPattern Sig, Distinct n) => Scope n -> ctx n -> TypeValue n -> Value n -> TypeValue n
 codomainAt scope ctx ty arg = case ty of
   NbE.VSuspended env (AnnSig _ (PiSig _ (ScopedAST (FFPatternVar b) cod))) -> at env b cod
   NbE.VSuspended env (AnnSig _ (SigmaSig _ (ScopedAST (FFPatternVar b) cod))) -> at env b cod
   _ -> error "DependentTypes: not a Π or Σ type"
   where
-    at :: forall i l. Distinct i => Substitution Value i n -> NameBinder i l -> Elaborated l -> Value n
+    at :: forall i l. Distinct i => Substitution Value i n -> NameBinder i l -> Elaborated l -> TypeValue n
     at env b cod = case assertDistinct b of
       Distinct -> NbE.eval scope ctx (addSubst env b arg) cod
 
 -- | η-expand a neutral at its type.
-expandAt :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> Value n -> Value n -> Value n
+expandAt :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> Value n -> TypeValue n -> Value n
 expandAt scope ctx value ty = case ty of
   NbE.VNode (AnnSig _ UnitSig) -> NbE.VNode (AnnSig (HasType unitType) TTSig)
   NbE.VSuspended _ (AnnSig _ (PiSig dom _)) -> expandFunction scope ctx value ty dom
@@ -288,7 +292,7 @@ expandAt scope ctx value ty = case ty of
 -- environment under a fresh name @g@.
 expandFunction ::
   (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) =>
-  Scope n -> ctx n -> Value n -> Value n -> Value n -> Value n
+  Scope n -> ctx n -> Value n -> TypeValue n -> TypeValue n -> Value n
 expandFunction scope ctx fun ty dom =
   withFresh scope $ \g ->
     let scopeG = extendScope g scope

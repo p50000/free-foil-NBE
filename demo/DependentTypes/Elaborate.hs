@@ -31,7 +31,7 @@ import DependentTypes.Generated (FFPattern (..), TermSig (..))
 import DependentTypes.Parser (parseOpen)
 
 -- | Check a term against a type.
-check :: Distinct n => Scope n -> Typing n -> Raw n -> Value n -> Either String (Elaborated n)
+check :: Distinct n => Scope n -> Typing n -> Raw n -> TypeValue n -> Either String (Elaborated n)
 check scope typing term ty = case term of
   Node (PairSig a b) -> case ty of
     NbE.VSuspended _ (AnnSig _ (SigmaSig dom _)) -> do
@@ -60,7 +60,7 @@ check scope typing term ty = case term of
                  ++ ", not " ++ show (quoteIn scope typing ty))
 
 -- | Infer the type of a term.
-infer :: Distinct n => Scope n -> Typing n -> Raw n -> Either String (Elaborated n, Value n)
+infer :: Distinct n => Scope n -> Typing n -> Raw n -> Either String (Elaborated n, TypeValue n)
 infer scope typing = \case
   Var x -> pure (Var x, typeOf x typing)
   Node UniverseSig -> pure (universeTerm, universe)
@@ -96,7 +96,7 @@ infer scope typing = \case
   Node (PairSig _ _) -> Left "the type of a pair is not inferred; check it against a Σ type"
 
 -- | Infer the type of a term that is projected: a Σ type, and its domain.
-inferPair :: Distinct n => Scope n -> Typing n -> Raw n -> Either String (Elaborated n, Value n, Value n)
+inferPair :: Distinct n => Scope n -> Typing n -> Raw n -> Either String (Elaborated n, TypeValue n, TypeValue n)
 inferPair scope typing p = do
   (p', ty) <- infer scope typing p
   case ty of
@@ -108,7 +108,7 @@ inferPair scope typing p = do
 typeFormer ::
   Distinct n =>
   (Elaborated n -> ScopedAST FFPattern Sig n -> TermSig (ScopedAST FFPattern Sig n) (Elaborated n)) ->
-  Scope n -> Typing n -> Raw n -> FFPattern n l -> Raw l -> Either String (Elaborated n, Value n)
+  Scope n -> Typing n -> Raw n -> FFPattern n l -> Raw l -> Either String (Elaborated n, TypeValue n)
 typeFormer former scope typing dom pat cod = case pat of
   FFPatternVar x -> case (assertDistinct x, assertExt x) of
     (Distinct, Ext) -> do
