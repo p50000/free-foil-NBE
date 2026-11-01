@@ -101,7 +101,7 @@ convObserved ::
   Foil.Substitution (Value binder sig) i n ->
   Value binder sig n ->
   ScopedAST binder sig i ->
-  Extend ctx binder n ->
+  Extend ctx binder sig n ->
   EtaScoped ctx binder sig n ->
   Bool
 {-# INLINE convObserved #-}
@@ -128,7 +128,7 @@ convScoped ::
   Foil.Substitution (Value binder sig) i1 n ->
   Foil.Substitution (Value binder sig) i2 n ->
   ScopedAST binder sig i1 ->
-  Extend ctx binder n ->
+  Extend ctx binder sig n ->
   ScopedAST binder sig i2 ->
   Bool
 {-# INLINE convScoped #-}

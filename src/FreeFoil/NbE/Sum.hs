@@ -92,7 +92,6 @@ class (Bifunctor f, Bifoldable f) => EvalF ctx binder f where
   -- | The η laws of the fragment's introduction forms at a position, as
   -- 'etaMatchWith'. By default there are none.
   etaMatchWithF ::
-    Eval ctx binder sig =>
     Inj f sig ->
     (a -> EtaScoped ctx binder sig n -> c) ->
     (b -> EtaTerm ctx binder sig n -> d) ->
@@ -105,16 +104,16 @@ class (Bifunctor f, Bifoldable f) => EvalF ctx binder f where
   -- position, as 'extendScopedWith'. By default a binder only adds its
   -- names.
   extendScopedWithF ::
-    (Eval ctx binder sig, Foil.Distinct n) =>
+    Foil.Distinct n =>
     Inj f sig ->
-    (a -> Extend ctx binder n -> c) ->
+    (a -> Extend ctx binder sig n -> c) ->
     (Value binder sig n -> d) ->
     f a (Value binder sig n) ->
     f c d
   default extendScopedWithF ::
-    (Foil.Sinkable ctx, Eval ctx binder sig, Foil.Distinct n) =>
+    (Foil.Sinkable ctx, Foil.Distinct n) =>
     Inj f sig ->
-    (a -> Extend ctx binder n -> c) ->
+    (a -> Extend ctx binder sig n -> c) ->
     (Value binder sig n -> d) ->
     f a (Value binder sig n) ->
     f c d

@@ -56,11 +56,12 @@
 -- never specialises the calls to 'eval' inside the instance.
 --
 -- A client with a context of its own gives the same pragmas at its context.
--- For them to reach the rules, the instance marks 'evalSig' and
--- 'etaMatchWith' @INLINABLE@, and 'extendScopedWith', if it gives one,
--- @INLINE@. Otherwise every node runs the unspecialised evaluator. A helper
--- of the language that takes the context, such as lambda-pi's @appValue@,
--- is specialised only at the contexts of its own pragmas.
+-- For them to reach the rules, the instance marks 'evalSig' @INLINABLE@,
+-- and 'etaMatchWith' and 'extendScopedWith', if it gives them, @INLINE@.
+-- Otherwise every node runs the unspecialised evaluator, and conversion and
+-- readback build the nodes these two methods return. A helper of the
+-- language that takes the context, such as lambda-pi's @appValue@, is
+-- specialised only at the contexts of its own pragmas.
 module FreeFoil.NbE
   ( -- * Semantic domain
     Value (..)
@@ -161,24 +162,29 @@ instance HasDefinitions NoContext binder sig where
 -- | The context under the binder of a scoped position: from the scope, the
 -- binder, refreshed for the scope, the scope under it, which free-foil
 -- computes when it refreshes the binder, and the context. A language gives
--- one for each scoped position of a node with 'extendScopedWith'.
-newtype Extend ctx binder n = Extend
-  (forall l. (Foil.Distinct n, Foil.DExt n l) =>
+-- one for each scoped position of a node with 'extendScopedWith'. The
+-- extension receives the language's 'Eval' instance from the core, so that
+-- an instance whose extension evaluates does not refer to itself, and its
+-- 'extendScopedWith' stays inlinable.
+newtype Extend ctx binder sig n = Extend
+  (forall l. (Eval ctx binder sig, Foil.Distinct n, Foil.DExt n l) =>
     Foil.Scope n -> binder n l -> Foil.Scope l -> ctx n -> ctx l)
 
 -- | The context under a binder that adds nothing but its names: the same
 -- context, sunk.
-sinkExtend :: Foil.Sinkable ctx => Extend ctx binder n
+sinkExtend :: Foil.Sinkable ctx => Extend ctx binder sig n
 {-# INLINE sinkExtend #-}
 sinkExtend = Extend (\_ _ _ -> Foil.sink)
 
 -- * η
 
 -- | The observer of a term position of an introduction form: the eliminator
--- of that position, from the context and any value to the component. The two
--- observers of a pair are @fst@ and @snd@.
+-- of that position, from the scope, the context and any value to the
+-- component. The two observers of a pair are @fst@ and @snd@. Like an
+-- 'Extend', an observer receives the language's 'Eval' instance from the
+-- core.
 newtype EtaTerm ctx binder sig n =
-  EtaTerm (Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n)
+  EtaTerm (Eval ctx binder sig => Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n)
 
 -- | The observer of a scoped position of an introduction form: from the
 -- context under the position's refreshed binder, that binder, and the other
@@ -188,7 +194,7 @@ newtype EtaTerm ctx binder sig n =
 -- binder's names.
 newtype EtaScoped ctx binder sig n =
   EtaScoped
-    (forall l. (Foil.Distinct n, Foil.DExt n l) =>
+    (forall l. (Eval ctx binder sig, Foil.Distinct n, Foil.DExt n l) =>
       Foil.Scope l -> ctx l -> binder n l -> Value binder sig l -> Value binder sig l)
 
 -- * Evaluation
@@ -222,7 +228,7 @@ class (Bifunctor sig, Bifoldable sig) => Eval ctx binder sig where
   -- style of 'Data.ZipMatchK.zipMatchWith2':
   --
   -- > etaMatchWith _ term = \case
-  -- >   PairSig a b -> Just (PairSig (term a (EtaTerm (const fstValue))) (term b (EtaTerm (const sndValue))))
+  -- >   PairSig a b -> Just (PairSig (term a (EtaTerm (\_ _ -> fstValue))) (term b (EtaTerm (\_ _ -> sndValue))))
   -- >   _ -> Nothing
   --
   -- A constructor with an η law combines each of its positions with the
@@ -255,13 +261,13 @@ class (Bifunctor sig, Bifoldable sig) => Eval ctx binder sig where
   -- @INLINE@, so that readback and conversion build no intermediate node.
   extendScopedWith ::
     Foil.Distinct n =>
-    (a -> Extend ctx binder n -> c) ->
+    (a -> Extend ctx binder sig n -> c) ->
     (Value binder sig n -> d) ->
     sig a (Value binder sig n) ->
     sig c d
   default extendScopedWith ::
     (Foil.Sinkable ctx, Foil.Distinct n) =>
-    (a -> Extend ctx binder n -> c) ->
+    (a -> Extend ctx binder sig n -> c) ->
     (Value binder sig n -> d) ->
     sig a (Value binder sig n) ->
     sig c d
@@ -360,7 +366,7 @@ quoteScoped ::
   ctx n ->
   Foil.Substitution (Value binder sig) i n ->
   ScopedAST binder sig i ->
-  Extend ctx binder n ->
+  Extend ctx binder sig n ->
   ScopedAST binder sig n
 {-# INLINE quoteScoped #-}
 quoteScoped scope ctx env (ScopedAST binder body) (Extend extend) =
