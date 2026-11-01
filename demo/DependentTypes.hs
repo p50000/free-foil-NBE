@@ -245,10 +245,20 @@ secondValue ann p = case p of
 -- | The projections for η of pairs. Like the elaborated ones, they carry
 -- their types.
 firstOf :: HasTypes ctx => Scope n -> ctx n -> Value n -> Value n
-firstOf _ ctx p = firstValue (HasType (sigmaDomain (typeOfValue ctx p))) p
+firstOf _ ctx p = case typeOfValue ctx p of
+  NbE.VSuspended _ (AnnSig _ (SigmaSig a _)) -> firstValue (HasType a) p
+  _ -> notOfPairType
 
 secondOf :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> Value n -> Value n
-secondOf scope ctx p = secondValue (HasType (codomainAt scope ctx (typeOfValue ctx p) (firstOf scope ctx p))) p
+secondOf scope ctx p = case typeOfValue ctx p of
+  NbE.VSuspended env (AnnSig _ (SigmaSig _ cod)) ->
+    secondValue (HasType (codomainAt scope ctx env cod (firstOf scope ctx p))) p
+  _ -> notOfPairType
+
+-- | Impossible: conversion compares two values of one type, so the value
+-- that η compares with a pair has the pair's type, which is a Σ.
+notOfPairType :: a
+notOfPairType = error "DependentTypes: impossible: η for a pair against a value whose type is not a Σ"
 
 -- | The type of a value: of a variable from the context, of a node from its
 -- annotation.
@@ -258,49 +268,42 @@ typeOfValue ctx = \case
   NbE.VNode (AnnSig ann _) -> annotatedType ann
   NbE.VSuspended _ (AnnSig ann _) -> annotatedType ann
 
--- | The domain of a Σ type.
-sigmaDomain :: TypeValue n -> TypeValue n
-sigmaDomain = \case
-  NbE.VSuspended _ (AnnSig _ (SigmaSig a _)) -> a
-  _ -> error "DependentTypes: not a Σ type"
-
 -- | The binder of one name of a type.
 assumeVar :: HasTypes ctx => TypeValue n -> Extend ctx FFPattern Sig n
 assumeVar ty = Extend $ \_ pat _ ctx -> case pat of
   FFPatternVar x -> assume x ty ctx
 
--- | The codomain of a Π or Σ type at a value.
-codomainAt :: forall ctx n. (Eval ctx FFPattern Sig, Distinct n) => Scope n -> ctx n -> TypeValue n -> Value n -> TypeValue n
-codomainAt scope ctx ty arg = case ty of
-  NbE.VSuspended env (AnnSig _ (PiSig _ (ScopedAST (FFPatternVar b) cod))) -> at env b cod
-  NbE.VSuspended env (AnnSig _ (SigmaSig _ (ScopedAST (FFPatternVar b) cod))) -> at env b cod
-  _ -> error "DependentTypes: not a Π or Σ type"
-  where
-    at :: forall i l. Distinct i => Substitution Value i n -> NameBinder i l -> Elaborated l -> TypeValue n
-    at env b cod = case assertDistinct b of
-      Distinct -> NbE.eval scope ctx (addSubst env b arg) cod
+-- | The codomain of a Π or Σ type at a value, from the environment and the
+-- codomain of the type's value.
+codomainAt ::
+  (Eval ctx FFPattern Sig, Distinct n, Distinct i) =>
+  Scope n -> ctx n -> Substitution Value i n -> ScopedAST FFPattern Sig i -> Value n -> TypeValue n
+codomainAt scope ctx env (ScopedAST (FFPatternVar b) cod) arg = case assertDistinct b of
+  Distinct -> NbE.eval scope ctx (addSubst env b arg) cod
 
 -- | η-expand a neutral at its type.
 expandAt :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> Value n -> TypeValue n -> Value n
 expandAt scope ctx value ty = case ty of
   NbE.VNode (AnnSig _ UnitSig) -> NbE.VNode (AnnSig (HasType unitType) TTSig)
-  NbE.VSuspended _ (AnnSig _ (PiSig dom _)) -> expandFunction scope ctx value ty dom
+  NbE.VSuspended env (AnnSig _ (PiSig dom cod)) -> expandFunction scope ctx value ty dom env cod
   _ -> value
 
 -- | A neutral @f : (x : A) -> B@ as the value of @\\(x : A). f x@, whose
 -- application is annotated with @B@. The value of @f@ sits in the
--- environment under a fresh name @g@.
+-- environment under a fresh name @g@. The type comes whole and in parts:
+-- its domain, and the environment and codomain of its value.
 expandFunction ::
-  (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) =>
-  Scope n -> ctx n -> Value n -> TypeValue n -> TypeValue n -> Value n
-expandFunction scope ctx fun ty dom =
+  (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n, Distinct i) =>
+  Scope n -> ctx n -> Value n -> TypeValue n -> TypeValue n ->
+  Substitution Value i n -> ScopedAST FFPattern Sig i -> Value n
+expandFunction scope ctx fun ty dom env codomain =
   withFresh scope $ \g ->
     let scopeG = extendScope g scope
         ctxG = assume g ty ctx
     in withFresh scopeG $ \x ->
          let scopeX = extendScope x scopeG
              ctxX = assume x (sink dom) ctxG
-             cod = NbE.quote scopeX ctxX (codomainAt scopeX ctxX (sink ty) (NbE.VVar (nameOf x)))
+             cod = NbE.quote scopeX ctxX (codomainAt scopeX ctxX (sink env) codomain (NbE.VVar (nameOf x)))
              body = Node (AnnSig (HasType cod) (AppSig (Var (sink (nameOf g))) (Var (nameOf x))))
          in NbE.VSuspended (addSubst identitySubst g fun)
               (AnnSig (HasType ty) (LamSig dom (ScopedAST (FFPatternVar x) body)))
