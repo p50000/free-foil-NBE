@@ -287,21 +287,28 @@ eval ::
   Value binder sig o
 {-# INLINABLE eval #-}
 eval scope ctx !env = \case
-  -- A name that the environment does not map is a name of the scope where
-  -- the environment started as 'Foil.identitySubst', or a binder kept
-  -- because it is fresh for the output scope (the substitution invariant of
-  -- Maclaurin, Radul and Paszke 2022, Definition 4.1). Either way the output
-  -- scope has the same name, which is what 'Foil.lookupSubst' assumes too.
-  -- A name bound in the term never gets here unmapped: β maps it with
-  -- 'Foil.addSubst', and readback and conversion refresh it against the
-  -- output scope, so it cannot be mistaken for a defined name with the same
-  -- raw name. The map is read directly, so that 'definition' sees only the
-  -- names it does not map.
-  Var x -> case env of
-    Foil.UnsafeSubstitution values -> case IntMap.lookup (Foil.nameId x) values of
-      Just v  -> v
-      Nothing -> definition scope ctx (Foil.UnsafeName (Foil.nameId x))
+  -- Only a name the environment does not map goes to 'definition'. A name
+  -- bound in the term never gets there: β maps it with 'Foil.addSubst', and
+  -- readback and conversion refresh it against the output scope, so it is
+  -- not mistaken for a defined name with the same raw name.
+  Var x -> lookupSubstWith (definition scope ctx) id env x
   Node node -> evalSig scope ctx env node
+
+-- | Look a name up in a substitution: its image, given to the second
+-- function, if the substitution maps it, and otherwise the same name in the
+-- output scope, given to the first. This is 'Foil.lookupSubst' with the
+-- unmapped case left to the caller, and it relies on the same invariant
+-- (Maclaurin, Radul and Paszke 2022, Definition 4.1): a name the
+-- substitution does not map is a name of the scope where it started as
+-- 'Foil.identitySubst', or a binder kept because it is fresh for the output
+-- scope, so the output scope has the same name. The function belongs in
+-- free-foil, where 'Foil.lookupSubst' is @lookupSubstWith injectName id@.
+lookupSubstWith :: (Foil.Name o -> r) -> (e o -> r) -> Foil.Substitution e i o -> Foil.Name i -> r
+{-# INLINE lookupSubstWith #-}
+lookupSubstWith unmapped mapped (Foil.UnsafeSubstitution values) (Foil.UnsafeName name) =
+  case IntMap.lookup name values of
+    Just value -> mapped value
+    Nothing    -> unmapped (Foil.UnsafeName name)
 
 -- | Evaluate a node that has no elimination rule: suspend it whole under the
 -- environment if it has scoped subterms, otherwise evaluate its term
