@@ -552,7 +552,7 @@ eliminate ::
   Value binder sig n
 {-# INLINE eliminate #-}
 eliminate v rule = case v of
-  VGlued_ folded unfolded -> VGlued_ (eliminateLoop folded rule) (eliminateLoop unfolded rule)
+  VGlued_ name folded unfolded -> VGlued_ name (eliminateLoop folded rule) (eliminateLoop unfolded rule)
   _ -> inline rule (coerce v)
 
 -- | The loop of 'eliminate' under the first glue, out of line.
@@ -562,13 +562,13 @@ eliminateLoop ::
   Value binder sig n
 {-# NOINLINE eliminateLoop #-}
 eliminateLoop v rule = case v of
-  VGlued_ folded unfolded -> VGlued_ (eliminateLoop folded rule) (eliminateLoop unfolded rule)
+  VGlued_ name folded unfolded -> VGlued_ name (eliminateLoop folded rule) (eliminateLoop unfolded rule)
   _ -> rule (coerce v)
 
 -- | The unfolded head of a value: peel every layer of glue off its root.
 force :: Value binder sig n -> Whnf binder sig n
 force = \case
-  VGlued_ _ unfolded -> force unfolded
+  VGlued_ _ _ unfolded -> force unfolded
   v                  -> coerce v
 
 -- * Readback
@@ -584,7 +584,7 @@ refine scope ctx value = case value of
   VVar_ x            -> refineVar scope ctx x
   VNode_ node        -> refineSig scope ctx value node
   VSuspended_ _ node -> refineSig scope ctx value node
-  VGlued_ _ _        -> value
+  VGlued_ {}         -> value
 
 -- | Read a value back into a term. Term subterms recurse directly; scoped
 -- subterms are read back under their binder by 'quoteScoped'. A glued value
@@ -602,7 +602,7 @@ quote ::
   AST binder sig n
 {-# INLINABLE quote #-}
 quote scope ctx = \case
-  VGlued_ folded unfolded -> quote scope ctx (unfolding scope ctx folded unfolded)
+  VGlued_ _ folded unfolded -> quote scope ctx (unfolding scope ctx folded unfolded)
   value -> readHead scope ctx (refine scope ctx value)
   where
     -- Local, so that a specialisation of 'quote' covers it, and closed, so
@@ -627,7 +627,7 @@ readHeadWith hd scope ctx = \case
   VNode_ node -> Node $! bimap absurd id (headsWith hd (quote scope ctx) node)
   VSuspended_ env node ->
     Node $! headsWith hd (quote scope ctx) (extendScopedWith (quoteScoped scope ctx env) id node)
-  VGlued_ folded unfolded -> hd (unfolding scope ctx folded unfolded)
+  VGlued_ _ folded unfolded -> hd (unfolding scope ctx folded unfolded)
 
 -- | Read back one scoped subterm of a suspended node: refresh the binder,
 -- extend the context with the position's 'Extend' and the captured
@@ -689,7 +689,7 @@ quoteWhnf scope ctx value = case refine scope ctx value of
   VNode_ node -> Node $ bimap absurd id (headsWith (readHead scope ctx) (quote scope ctx) node)
   VSuspended_ env node ->
     Node $ bimap (freezeScoped (readHead scope ctx) scope env) id (headsWith (readHead scope ctx) (quote scope ctx) node)
-  VGlued_ folded unfolded -> quoteWhnf scope ctx (unfolding scope ctx folded unfolded)
+  VGlued_ _ folded unfolded -> quoteWhnf scope ctx (unfolding scope ctx folded unfolded)
   where
     -- As in 'quote', so that a specialisation of 'quoteWhnf' covers it.
     readHead :: Foil.Distinct l => Foil.Scope l -> ctx l -> Value binder sig l -> AST binder sig l
