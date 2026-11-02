@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
--- | Tests of the dependent types language: the normal forms and conversions
--- of the examples in a context of types, and elaboration errors.
+-- | Tests of the dependent types language: the normal forms, conversions and
+-- subtypings of the examples in a context of types, and elaboration errors.
 module Test.DependentTypes (tests) where
 
 import Test.Tasty
@@ -9,7 +9,7 @@ import Test.Tasty.HUnit
 import Control.Monad.Foil
 import Control.Monad.Free.Foil (alphaEquiv)
 
-import DependentTypes (convertible, emptyTyping, fullyAnnotated, nf)
+import DependentTypes (convertible, emptyTyping, eval, fullyAnnotated, isSubtype, nf)
 import DependentTypes.Elaborate (elaborate)
 import DependentTypes.Examples
 
@@ -39,6 +39,13 @@ tests =
             convertible emptyScope emptyTyping t u @?= expected
         | (name, Conversion ty t0 u0 expected) <- conversions
         ]
+    , testGroup "subtyping in a context of types"
+        [ testCase name $ do
+            (a, _) <- elaborated a0 "U 3"
+            (b, _) <- elaborated b0 "U 3"
+            isSubtype emptyScope emptyTyping (evalType a) (evalType b) @?= expected
+        | (name, Subtyping a0 b0 expected) <- subtypings
+        ]
     , testGroup "elaboration rejects"
         [ testCase "a term of another type" $
             rejects "\\(x : Unit). x" "(x : U 0) -> U 0"
@@ -46,10 +53,17 @@ tests =
             rejects "tt tt" "Unit"
         , testCase "a projection of a value that is not of a Σ type" $
             rejects "\\(x : Unit). first x" "(x : Unit) -> Unit"
+        , testCase "a universe in itself" $
+            rejects "U 0" "U 0"
+        , testCase "a type of a higher universe as one of a lower" $
+            rejects "\\(A : U 1). A" "(A : U 1) -> U 0"
+        , testCase "a function on a lower universe as one on a higher" $
+            rejects "\\(f : (X : U 0) -> U 0). f" "(f : (X : U 0) -> U 0) -> (X : U 1) -> U 0"
         ]
     ]
   where
     elaborated term ty = either assertFailure pure (elaborate term ty)
+    evalType = eval emptyScope emptyTyping identitySubst
     rejects term ty = case elaborate term ty of
       Left _ -> pure ()
       Right (t, _) -> assertFailure ("elaborated to " ++ show t)

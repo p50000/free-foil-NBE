@@ -1,7 +1,8 @@
 -- | Example terms of the dependent types language: closed terms with their
--- types and normal forms, and pairs of terms of one type that are
--- convertible or not, all in a context of types. The examples are strings,
--- elaborated by "DependentTypes.Elaborate".
+-- types and normal forms, pairs of terms of one type that are convertible or
+-- not, and pairs of types of which the first is a subtype of the second or
+-- not, all in a context of types. The examples are strings, elaborated by
+-- "DependentTypes.Elaborate".
 module DependentTypes.Examples
   ( Example (..)
   , unitVariable
@@ -11,9 +12,13 @@ module DependentTypes.Examples
   , secondComponent
   , firstOfPair
   , redexInDomain
+  , cumulativity
+  , contravariantDomain
   , examples
   , Conversion (..)
   , conversions
+  , Subtyping (..)
+  , subtypings
   ) where
 
 -- | A closed term, its type, and its normal form in a context of types.
@@ -76,6 +81,19 @@ redexInDomain =
     "(x : Unit) -> Unit"
     "\\(x : Unit). tt"
 
+-- | A type of a lower universe is a type of a higher one.
+cumulativity :: Example
+cumulativity = Example "\\(A : U 0). A" "(A : U 0) -> U 1" "\\(A : U 0). A"
+
+-- | A function on a higher universe is a function on a lower one, into a
+-- higher universe.
+contravariantDomain :: Example
+contravariantDomain =
+  Example
+    "\\(f : (X : U 1) -> U 0). f"
+    "(f : (X : U 1) -> U 0) -> (X : U 0) -> U 1"
+    "\\(f : (X : U 1) -> U 0). f"
+
 -- | The examples with their names.
 examples :: [(String, Example)]
 examples =
@@ -86,6 +104,8 @@ examples =
   , ("secondComponent", secondComponent)
   , ("firstOfPair",     firstOfPair)
   , ("redexInDomain",   redexInDomain)
+  , ("cumulativity",    cumulativity)
+  , ("contravariantDomain", contravariantDomain)
   ]
 
 -- | Two closed terms of one type, and whether they are convertible in a
@@ -153,4 +173,27 @@ conversions =
         "\\(A : U 0). \\(p : (x : A) * A). p"
         "\\(A : U 0). \\(p : (x : A) * A). (second p, first p)"
         False )
+  ]
+
+-- | Two closed types, and whether the first is a subtype of the second in a
+-- context of types.
+data Subtyping = Subtyping String String Bool
+
+-- | The subtyping examples with their names.
+subtypings :: [(String, Subtyping)]
+subtypings =
+  [ ("a universe and the next", Subtyping "U 0" "U 1" True)
+  , ("a universe and the previous", Subtyping "U 1" "U 0" False)
+  , ( "a Π, contravariant in its domain and covariant in its codomain"
+    , Subtyping "(X : U 1) -> U 1" "(X : U 0) -> U 2" True )
+  , ( "a Π whose domains are the wrong way round"
+    , Subtyping "(X : U 0) -> U 0" "(X : U 1) -> U 0" False )
+  , ( "a dependent Π"
+    , Subtyping "(X : U 1) -> (x : X) -> X" "(X : U 0) -> (x : X) -> X" True )
+  , ( "a Σ, covariant in both"
+    , Subtyping "(X : U 0) * U 0" "(X : U 1) * U 1" True )
+  , ( "a Σ whose domains are the wrong way round"
+    , Subtyping "(X : U 1) * U 0" "(X : U 0) * U 0" False )
+  , ( "the arguments of an application, compared invariantly"
+    , Subtyping "(F : (X : U 2) -> U 0) -> F (U 0)" "(F : (X : U 2) -> U 0) -> F (U 1)" False )
   ]
