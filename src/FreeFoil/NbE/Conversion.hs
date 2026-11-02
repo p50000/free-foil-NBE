@@ -36,6 +36,12 @@
 -- whose context records the direction of the check, as Rzk's does, makes it a
 -- check of subtyping.
 --
+-- A glued value is compared folded first: two glued values are convertible
+-- if their folded sides are, as two applications of one defined name to
+-- convertible arguments are, and otherwise their unfolded sides are
+-- compared. A glued value against any other value is unfolded. This is the
+-- folded-first conversion of Kovács's smalltt.
+--
 -- Like the normaliser, the check is untyped and intensional: it decides β,
 -- the language's own reductions, and η for the forms the language marks,
 -- and it is specified on well-typed terms. η evaluates a lambda's body
@@ -54,7 +60,8 @@ import           Data.Bifoldable             (biall, biand)
 import           Data.Monoid                 (All (..))
 import           Data.Void                   (absurd)
 
-import           FreeFoil.NbE                (EtaScoped (..), EtaTerm (..), Eval (..), Extend (..), Value (..), eval, refine)
+import           FreeFoil.NbE                (EtaScoped (..), EtaTerm (..), Eval (..), Extend (..), Value, eval, refine)
+import           FreeFoil.NbE.Internal.Value (Value' (..))
 
 -- | Two values are convertible: their normal forms are equal up to renaming
 -- of bound variables and η. Nodes match when 'relateWith' matches them, by
@@ -69,7 +76,7 @@ conv ::
   Value binder sig n ->
   Bool
 {-# INLINABLE conv #-}
-conv scope ctx l0 r0 = sameHead scope ctx (refine scope ctx l0) (refine scope ctx r0)
+conv scope ctx = foldedFirst (conv scope ctx) (\l r -> sameHead scope ctx (refine scope ctx l) (refine scope ctx r))
   where
     -- Two values compared without refining them: heads ('headsWith'), or
     -- values refined already. Their heads are compared the same way, every
@@ -77,14 +84,14 @@ conv scope ctx l0 r0 = sameHead scope ctx (refine scope ctx l0) (refine scope ct
     -- specialisation of 'conv' covers it. It closes over nothing, so that it
     -- is not allocated at every call.
     sameHead :: Foil.Distinct l => Foil.Scope l -> ctx l -> Value binder sig l -> Value binder sig l -> Bool
-    sameHead scope' ctx' l r = case (l, r) of
-      (VVar x, VVar y) -> x == y
-      (VNode a, VNode b)
+    sameHead scope' ctx' = foldedFirst (sameHead scope' ctx') $ \l r -> case (l, r) of
+      (VVar_ x, VVar_ y) -> x == y
+      (VNode_ a, VNode_ b)
         | Just (All same) <- relateWith scope' ctx' (\v _ _ -> absurd v) (other scope') (heads scope') a b -> same
       -- The language pairs the positions of the two nodes, gives each
       -- scoped pair its extension of the context and each term pair its
       -- context.
-      (VSuspended envL a, VSuspended envR b)
+      (VSuspended_ envL a, VSuspended_ envR b)
         | Just (All same) <- relateWith scope' ctx'
             (\x y extend -> All (convScoped scope' ctx' envL envR x extend y)) (other scope') (heads scope') a b -> same
       -- Nodes that do not match are compared by η. A node goes to 'VNode'
@@ -99,6 +106,25 @@ conv scope ctx l0 r0 = sameHead scope ctx (refine scope ctx l0) (refine scope ct
     heads scope' l r ctx' = All (sameHead scope' ctx' l r)
     {-# INLINE other #-}
     other scope' l r ctx' = All (conv scope' ctx' l r)
+
+-- | Compare two values glued first: the folded sides of two glued values,
+-- and if they differ the unfolded sides, by the first function, and a glued
+-- value against another one unfolded. Two values that are not glued go to
+-- the second function.
+foldedFirst ::
+  (Value binder sig n -> Value binder sig n -> Bool) ->
+  (Value binder sig n -> Value binder sig n -> Bool) ->
+  Value binder sig n ->
+  Value binder sig n ->
+  Bool
+{-# INLINE foldedFirst #-}
+foldedFirst again compare' l r = case l of
+  VGlued_ foldedL unfoldedL -> case r of
+    VGlued_ foldedR unfoldedR -> again foldedL foldedR || again unfoldedL unfoldedR
+    _ -> again unfoldedL r
+  _ -> case r of
+    VGlued_ _ unfoldedR -> again l unfoldedR
+    _ -> compare' l r
 
 -- | The side of the comparison on which the introduction form of η stands.
 data Side = OnLeft | OnRight
@@ -116,11 +142,12 @@ convEta ::
   Bool
 {-# INLINE convEta #-}
 convEta scope ctx side intro other = case intro of
-  VNode node ->
+  VNode_ node ->
     maybe False (biall absurd id) (etaMatchWith (\v _ -> absurd v) observedTerm node)
-  VSuspended env node ->
+  VSuspended_ env node ->
     maybe False biand (etaMatchWith ($) observedTerm (extendScopedWith (convObserved scope ctx side env other) id node))
-  VVar _ -> False
+  VVar_ _ -> False
+  VGlued_ _ _ -> False
   where
     observedTerm v (EtaTerm observe) = sides side (conv scope ctx) v (observe scope ctx other)
 
@@ -180,7 +207,7 @@ convScoped scope ctx envL envR (ScopedAST binderL bodyL) (Extend extend) (Scoped
         case (Foil.assertDistinct binderL, Foil.assertDistinct binderR) of
           (Foil.Distinct, Foil.Distinct) ->
             let ctx'  = extend scope binderL' scope' ctx
-                fresh = map VVar (Foil.namesOfPattern binderL')
+                fresh = map VVar_ (Foil.namesOfPattern binderL')
                 envR' = Foil.addSubstPattern (Foil.sink envR) binderR fresh
             in convertibleUnder scope' ctx' (extendL envL) envR' bodyL bodyR
 

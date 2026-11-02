@@ -28,7 +28,7 @@ import Data.Bifunctor (bimap)
 import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor, deriveBitraversable)
 import Data.ZipMatchK.TH (deriveZipMatchK)
 
-import FreeFoil.NbE (Eval (evalSig), HasDefinitions, HasHeads (..), Value (VNode), eval, evalNode)
+import FreeFoil.NbE (Eval (evalSig), HasDefinitions, HasHeads (..), Value' (Stuck, VNode), eliminate, eval, evalNode, vnode)
 import qualified FreeFoil.NbE as NbE
 
 -- | Two introduction forms and one eliminator; no scoped positions.
@@ -72,10 +72,10 @@ instance HasHeads BoolSig where
 instance (Sinkable ctx, HasDefinitions ctx NameBinder BoolSig) => Eval ctx NameBinder BoolSig where
   {-# INLINABLE evalSig #-}
   evalSig scope ctx env = \case
-    IfSig cond t f -> case eval scope ctx env cond of
+    IfSig cond t f -> eliminate (eval scope ctx env cond) $ \case
       VNode TrueSig  -> eval scope ctx env t
       VNode FalseSig -> eval scope ctx env f
-      cond'          -> VNode (IfSig cond' (eval scope ctx env t) (eval scope ctx env f))
+      Stuck cond'    -> vnode (IfSig cond' (eval scope ctx env t) (eval scope ctx env f))
     node -> evalNode scope ctx env node
 
 -- | Normal form, inherited from the generic 'NbE.nf'.

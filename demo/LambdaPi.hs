@@ -105,7 +105,7 @@ instance (Sinkable ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPatt
   {-# INLINE etaMatchWith #-}
   etaMatchWith scoped _ = \case
     LamSig body -> Just (LamSig (scoped body (NbE.EtaScoped (\scope ctx (FFPatternVar x) other ->
-      appValue scope ctx other (NbE.VVar (nameOf x))))))
+      appValue scope ctx other (NbE.vvar (nameOf x))))))
     _ -> Nothing
 
 -- | Apply a function value to an argument value: a suspended lambda is
@@ -116,11 +116,11 @@ appValue :: (Eval ctx FFPattern TermSig, Distinct n) => Scope n -> ctx n -> Valu
 -- specialised with them at every context. A call with a bound 'Distinct'
 -- dictionary is not specialised on its own.
 {-# INLINE appValue #-}
-appValue scope ctx fun arg = case fun of
+appValue scope ctx fun arg = NbE.eliminate fun $ \case
   NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
     case assertDistinct binder of
       Distinct -> NbE.eval scope ctx (addSubst env' binder arg) body
-  _ -> NbE.VNode (AppSig fun arg)
+  NbE.Stuck fun' -> NbE.vnode (AppSig fun' arg)
 
 -- | Evaluation in a scope, with no other context.
 eval :: (Distinct o, Distinct i) => Scope o -> Substitution Value i o -> LambdaPi i -> Value o
