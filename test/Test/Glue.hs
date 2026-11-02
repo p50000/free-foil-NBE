@@ -44,6 +44,8 @@ tests = testGroup "glue (composed language)"
       [ convertibleCase "a name and its unfolding" arith "four" plusTwoTwo True
       , convertibleCase "a name and its normal form" arith "four" (natural 4) True
       , convertibleCase "two different names" arith "four" "two" False
+      , convertibleCase "one name on different arguments with equal unfoldings" constant "k zero two" "k zero four" True
+      , convertibleCase "one name on different arguments with different unfoldings" constant "k two zero" "k four zero" False
       , testCase "compares folded sides without unfolding" $
           withFree $ \scope0 env0 ->
             withDefined scope0 env0 omega $ \ctx scope env -> do
@@ -67,6 +69,11 @@ plusTwoTwo = "plus two two"
 
 recTwo :: String
 recTwo = "natrec two { zero -> zero ; suc (k, r) -> suc r }"
+
+-- | A constant function over the arithmetic definitions, whose
+-- applications agree folded only on equal arguments.
+constant :: [(String, String)]
+constant = arith ++ [("k", "\\x. \\y. x")]
 
 -- | A definition whose body has no normal form.
 omega :: [(String, String)]
