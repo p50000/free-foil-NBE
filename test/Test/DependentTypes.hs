@@ -24,7 +24,7 @@ tests =
             assertBool (show result) (alphaEquiv emptyScope result normal)
         | (name, Example term0 ty normal0) <- examples
         ]
-    , testGroup "every node but the universe carries its type, before and after normalisation"
+    , testGroup "every node but a universe carries its type, before and after normalisation"
         [ testCase name $ do
             (term, _) <- elaborated term0 ty
             assertBool (show term) (fullyAnnotated term)
@@ -41,7 +41,7 @@ tests =
         ]
     , testGroup "elaboration rejects"
         [ testCase "a term of another type" $
-            rejects "\\(x : Unit). x" "(x : U) -> U"
+            rejects "\\(x : Unit). x" "(x : U 0) -> U 0"
         , testCase "an application of a non-function" $
             rejects "tt tt" "Unit"
         , testCase "a projection of a value that is not of a Σ type" $

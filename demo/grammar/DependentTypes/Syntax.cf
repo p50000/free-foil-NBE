@@ -1,5 +1,5 @@
 -- LBNF grammar for the dependent types demonstration language: dependent
--- functions and pairs over a universe, with a unit type. Every binder is
+-- functions and pairs over a hierarchy of universes, with a unit type. Every binder is
 -- annotated with its type, as in the output of elaboration.
 -- Generated modules live under DependentTypes.Syntax.* (see ../../../grammar-regen.sh).
 
@@ -9,7 +9,7 @@ comment "{-" "-}" ;
 token VarIdent letter (letter | digit | '_' | '\'')* ;
 
 Var.      Term2 ::= VarIdent ;
-Universe. Term2 ::= "U" ;
+Universe. Term2 ::= "U" Integer ;
 Unit.     Term2 ::= "Unit" ;
 TT.       Term2 ::= "tt" ;
 Pair.     Term2 ::= "(" Term "," Term ")" ;
