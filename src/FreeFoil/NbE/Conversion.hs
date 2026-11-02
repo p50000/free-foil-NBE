@@ -90,7 +90,7 @@ conv scope ctx l0 r0 = sameHead scope ctx (refine scope ctx l0) (refine scope ct
       -- Nodes that do not match are compared by η. A node goes to 'VNode'
       -- exactly when it has no scoped subterms, so a 'VNode' and a
       -- 'VSuspended' never have the same constructor.
-      _ -> convEta scope' ctx' True l r || convEta scope' ctx' False r l
+      _ -> convEta scope' ctx' OnLeft l r || convEta scope' ctx' OnRight r l
 
     -- A pair of term positions in its context: a head ('headsWith') or
     -- another position.
@@ -100,33 +100,36 @@ conv scope ctx l0 r0 = sameHead scope ctx (refine scope ctx l0) (refine scope ct
     {-# INLINE other #-}
     other scope' l r ctx' = All (conv scope' ctx' l r)
 
+-- | The side of the comparison on which the introduction form of η stands.
+data Side = OnLeft | OnRight
+
 -- | One step of η: each position of an introduction form with an η law
 -- against the other value observed at that position, on the side of the
--- introduction form ('True' for the left). 'False' for any other value.
+-- introduction form. 'False' for any other value.
 convEta ::
   (Eval ctx binder sig, Foil.Distinct n, Foil.UnifiablePattern binder) =>
   Foil.Scope n ->
   ctx n ->
-  Bool ->
+  Side ->
   Value binder sig n ->
   Value binder sig n ->
   Bool
 {-# INLINE convEta #-}
-convEta scope ctx onLeft intro other = case intro of
+convEta scope ctx side intro other = case intro of
   VNode node ->
     maybe False (biall absurd id) (etaMatchWith (\v _ -> absurd v) observedTerm node)
   VSuspended env node ->
-    maybe False biand (etaMatchWith ($) observedTerm (extendScopedWith (convObserved scope ctx onLeft env other) id node))
+    maybe False biand (etaMatchWith ($) observedTerm (extendScopedWith (convObserved scope ctx side env other) id node))
   VVar _ -> False
   where
-    observedTerm v (EtaTerm observe) = sides onLeft (conv scope ctx) v (observe scope ctx other)
+    observedTerm v (EtaTerm observe) = sides side (conv scope ctx) v (observe scope ctx other)
 
 -- | A comparison with the introduction form's position on the given side.
-sides :: Bool -> (a -> a -> b) -> a -> a -> b
+sides :: Side -> (a -> a -> b) -> a -> a -> b
 {-# INLINE sides #-}
-sides onLeft compare' intro observed
-  | onLeft    = compare' intro observed
-  | otherwise = compare' observed intro
+sides side compare' intro observed = case side of
+  OnLeft  -> compare' intro observed
+  OnRight -> compare' observed intro
 
 -- | A scoped position of an introduction form against the other value
 -- observed under the position's refreshed binder, in the context of the
@@ -136,7 +139,7 @@ convObserved ::
   (Eval ctx binder sig, Foil.Distinct n, Foil.Distinct i, Foil.UnifiablePattern binder) =>
   Foil.Scope n ->
   ctx n ->
-  Bool ->
+  Side ->
   Foil.Substitution (Value binder sig) i n ->
   Value binder sig n ->
   ScopedAST binder sig i ->
@@ -144,12 +147,12 @@ convObserved ::
   EtaScoped ctx binder sig n ->
   Bool
 {-# INLINE convObserved #-}
-convObserved scope ctx onLeft env other (ScopedAST binder body) (Extend extend) (EtaScoped observe) =
+convObserved scope ctx side env other (ScopedAST binder body) (Extend extend) (EtaScoped observe) =
   Foil.withRefreshedPattern scope binder $ \extendEnv binder' scope' ->
     case Foil.assertDistinct binder of
       Foil.Distinct ->
         let ctx' = extend scope binder' scope' ctx
-        in sides onLeft (conv scope' ctx')
+        in sides side (conv scope' ctx')
              (eval scope' ctx' (extendEnv env) body)
              (observe scope' ctx' binder' (Foil.sink other))
 
