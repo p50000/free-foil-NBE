@@ -36,8 +36,9 @@
 -- whose context records the direction of the check, as Rzk's does, makes it a
 -- check of subtyping.
 --
--- Glued values are compared as the context says ('FreeFoil.NbE.speculation',
--- 'FreeFoil.NbE.unfoldAgainst'): their folded sides first, as two
+-- Glued values are compared as the context says
+-- ('FreeFoil.NbE.glueSpeculation', 'FreeFoil.NbE.unfoldGlued'): their folded
+-- sides first, as two
 -- applications of one defined name to convertible arguments are
 -- convertible, or their unfolded sides. This is the approximate conversion
 -- checking of smalltt (Kovács, @unify@ in @src/Unification.hs@, and the
@@ -63,7 +64,7 @@ import           Data.Bifoldable             (biall, biand)
 import           Data.Monoid                 (All (..))
 import           Data.Void                   (absurd)
 
-import           FreeFoil.NbE                (EtaScoped (..), EtaTerm (..), Eval (..), Extend (..), Speculation (..), Value, eval, refine)
+import           FreeFoil.NbE                (EtaScoped (..), EtaTerm (..), Eval (..), Extend (..), GlueSpeculation (..), Value, eval, refine)
 import           FreeFoil.NbE.Internal.Value (Value' (..))
 
 -- | Two values are convertible: their normal forms are equal up to renaming
@@ -106,14 +107,14 @@ conv = convIn
       -- context says. Its sides are compared again as values of the same
       -- position: a term position by 'convIn', which refines them, a head
       -- as a head.
-      (VGlued_ x foldedL unfoldedL, VGlued_ y foldedR unfoldedR) -> case speculation scope' ctx' x foldedL y foldedR of
-        Speculate ctxF ctxU ->
+      (VGlued_ x foldedL unfoldedL, VGlued_ y foldedR unfoldedR) -> case glueSpeculation scope' ctx' x foldedL y foldedR of
+        TryFolded ctxF ctxU ->
           again pos scope' ctxF foldedL foldedR
             || maybe False (\c -> again pos scope' c unfoldedL unfoldedR) ctxU
-        Unfold ctxU -> again pos scope' ctxU unfoldedL unfoldedR
+        CompareUnfolded ctxU -> again pos scope' ctxU unfoldedL unfoldedR
         Unrelated -> False
-      (VGlued_ x _ unfoldedL, _) -> maybe False (\c -> again pos scope' c unfoldedL r') (unfoldAgainst scope' ctx' x r')
-      (_, VGlued_ y _ unfoldedR) -> maybe False (\c -> again pos scope' c l' unfoldedR) (unfoldAgainst scope' ctx' y l')
+      (VGlued_ x _ unfoldedL, _) -> maybe False (\c -> again pos scope' c unfoldedL r') (unfoldGlued scope' ctx' x r')
+      (_, VGlued_ y _ unfoldedR) -> maybe False (\c -> again pos scope' c l' unfoldedR) (unfoldGlued scope' ctx' y l')
       -- Nodes that do not match are compared by η. A node goes to 'VNode'
       -- exactly when it has no scoped subterms, so a 'VNode' and a
       -- 'VSuspended' never have the same constructor.
