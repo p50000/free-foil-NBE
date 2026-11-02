@@ -8,8 +8,10 @@
 {-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE ViewPatterns          #-}
 -- | Normalisation by evaluation, generic in the signature of the object
 -- language. A language is a signature bifunctor @sig@ and a binder type, as
 -- in "Control.Monad.Free.Foil"; to normalise its terms it supplies one 'Eval'
@@ -68,7 +70,12 @@
 -- @INLINE@ too, so that it is specialised with the rules at every context.
 module FreeFoil.NbE
   ( -- * Semantic domain
-    Value (..)
+    Value
+  , Whnf
+  , Value' (VVar, VNode, VSuspended, Stuck)
+  , vvar
+  , vnode
+  , vsuspended
     -- * Context
   , NoContext (..)
   , HasDefinitions (..)
@@ -81,6 +88,8 @@ module FreeFoil.NbE
   , relateExtended
   , eval
   , evalNode
+  , eliminate
+  , force
     -- * η
   , EtaTerm (..)
   , EtaScoped (..)
@@ -101,53 +110,65 @@ import           Control.Monad.Free.Foil.Annotated (AnnSig (..))
 import           Data.Bifoldable             (Bifoldable (..))
 import           Data.Bifunctor              (Bifunctor (..))
 import           Data.Bifunctor.Sum          (Sum (..))
+import           Data.Coerce                 (coerce)
 import qualified Data.IntMap                 as IntMap
 import           Data.Monoid                 (Any (..))
 import           Data.Void                   (Void, absurd)
 import           Data.ZipMatchK              (ZipMatchFoldK, zipMatchFold2)
+import           GHC.Exts                    (inline)
 import           Unsafe.Coerce               (unsafeCoerce)
+
+import           FreeFoil.NbE.Internal.Value
 
 -- * Semantic domain
 
--- | A semantic value in scope @n@. Term subterms are values already; only
--- scoped subterms, the bodies under binders, are suspended. A 'VSuspended'
--- node keeps its term subterms as values, its scoped subterms as syntax, and
--- one captured environment for them all: a @Pi@ holds its domain as a value
--- while its codomain waits, unevaluated, for the environment. Since 'eval'
--- and 'quote' each visit every subterm exactly once, readback is linear in
--- the size of the term, and nested @Pi@ types do not re-normalise their
--- codomains.
---
--- /Invariant./ Every value 'eval' produces is weak-head normal at every
--- position: no node is an eliminator applied to the introduction form it
--- eliminates. The type cannot enforce this, as it does not know which
--- constructors of @sig@ eliminate; the language's 'evalSig' establishes it,
--- and every function here preserves it.
-data Value binder sig n where
-  -- | A neutral variable.
-  VVar :: {-# UNPACK #-} !(Foil.Name n) -> Value binder sig n
-  -- | A node without scoped subterms.
-  VNode :: sig Void (Value binder sig n) -> Value binder sig n
-  -- | A node with scoped subterms, suspended under its environment; the
-  -- environment sits in the constructor, so the node costs one heap object
-  -- beside its @sig@ cell.
-  VSuspended ::
-    Foil.Distinct i =>
-    Foil.Substitution (Value binder sig) i n ->
-    sig (ScopedAST binder sig i) (Value binder sig n) ->
-    Value binder sig n
+-- | A neutral variable.
+pattern VVar :: Foil.Name n -> Whnf binder sig n
+pattern VVar x <- (fromWhnf -> VVar_ x)
 
-instance Foil.InjectName (Value binder sig) where
-  injectName = VVar
+-- | A node without scoped subterms.
+pattern VNode :: sig Void (Value binder sig n) -> Whnf binder sig n
+pattern VNode node <- (fromWhnf -> VNode_ node)
 
-instance Bifunctor sig => Foil.Sinkable (Value binder sig) where
-  sinkabilityProof :: (Foil.Name n -> Foil.Name l) -> Value binder sig n -> Value binder sig l
-  sinkabilityProof rename (VVar x) =
-    VVar (rename x)
-  sinkabilityProof rename (VNode node) =
-    VNode (bimap id (Foil.sinkabilityProof rename) node)
-  sinkabilityProof rename (VSuspended env node) =
-    VSuspended (Foil.sinkabilityProof rename env) (bimap id (Foil.sinkabilityProof rename) node)
+-- | A node with scoped subterms, suspended under its environment.
+pattern VSuspended ::
+  () => Foil.Distinct i =>
+  Foil.Substitution (Value binder sig) i n ->
+  sig (ScopedAST binder sig i) (Value binder sig n) ->
+  Whnf binder sig n
+pattern VSuspended env node <- (fromWhnf -> VSuspended_ env node)
+
+{-# COMPLETE VVar, VNode, VSuspended #-}
+
+-- | Any head, as a value: the stuck case of a rule.
+pattern Stuck :: Value binder sig n -> Whnf binder sig n
+pattern Stuck v <- (fromWhnf -> v)
+
+{-# COMPLETE Stuck #-}
+
+-- | The synonyms match a 'Whnf' as the 'Value' it was cast from.
+fromWhnf :: Whnf binder sig n -> Value binder sig n
+{-# INLINE fromWhnf #-}
+fromWhnf = coerce
+
+-- | A neutral variable, as a value.
+vvar :: Foil.Name n -> Value binder sig n
+{-# INLINE vvar #-}
+vvar = VVar_
+
+-- | A node without scoped subterms, as a value.
+vnode :: sig Void (Value binder sig n) -> Value binder sig n
+{-# INLINE vnode #-}
+vnode = VNode_
+
+-- | A node with scoped subterms suspended under an environment, as a value.
+vsuspended ::
+  Foil.Distinct i =>
+  Foil.Substitution (Value binder sig) i n ->
+  sig (ScopedAST binder sig i) (Value binder sig n) ->
+  Value binder sig n
+{-# INLINE vsuspended #-}
+vsuspended = VSuspended_
 
 -- * Context
 
@@ -157,18 +178,26 @@ data NoContext (n :: Foil.S) = NoContext
 instance Foil.Sinkable NoContext where
   sinkabilityProof _ NoContext = NoContext
 
--- | The values a context gives to free names, the default of 'definition'.
--- 'NoContext' defines nothing. A language generic in the context requires
--- this class of it in its 'Eval' instance, which needs
+-- | The values a context gives to free names, the default of 'definition',
+-- and the side of a glued value that readback follows, the default of
+-- 'unfolding'. 'NoContext' defines nothing. A language generic in the
+-- context requires this class of it in its 'Eval' instance, which needs
 -- @UndecidableInstances@.
 class HasDefinitions ctx binder sig where
   -- | The value of a free name, or the name itself if the context does not
-  -- define it.
+  -- define it. A defined name may be glued to its value, so that readback
+  -- and conversion can keep it folded.
   contextDefinition :: Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n
+
+  -- | The side of a glued value that readback follows, from the folded and
+  -- the unfolded side. By default the unfolded one.
+  contextUnfolding :: Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n -> Value binder sig n
+  {-# INLINE contextUnfolding #-}
+  contextUnfolding _ _ _ unfolded = unfolded
 
 instance HasDefinitions NoContext binder sig where
   {-# INLINE contextDefinition #-}
-  contextDefinition _ _ = VVar
+  contextDefinition _ _ = vvar
 
 -- | The context under the binder of a scoped position: from the scope, the
 -- binder, refreshed for the scope, the scope under it, which free-foil
@@ -245,14 +274,23 @@ instance (Functor ann, HasHeads sig) => HasHeads (AnnSig ann sig) where
 
 -- * Evaluation
 
--- | A language becomes an NbE instance by giving its elimination rules:
--- 'evalSig' receives a raw node and the environment, matches the
--- eliminators, evaluates the principal subterm and either reduces or, on a
--- neutral, rebuilds the node as a 'VNode'. Every other node falls through to
--- 'evalNode'. The node arrives raw so that a redex never builds the
--- interpreted node it would discard. The instance upholds the 'Value'
--- invariant; "LambdaPi" is a one-rule example. An instance comes with the
--- pragmas described in the module header.
+-- | A language becomes an NbE instance by giving its elimination rules. An
+-- eliminator evaluates its principal subterm and matches the value through
+-- 'eliminate', as β does in "LambdaPi":
+--
+-- > evalSig scope ctx env = \case
+-- >   AppSig fun arg ->
+-- >     NbE.eliminate (eval scope ctx env fun) $ \case
+-- >       NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
+-- >         case assertDistinct binder of
+-- >           Distinct -> eval scope ctx (addSubst env' binder (eval scope ctx env arg)) body
+-- >       NbE.Stuck fun' -> NbE.vnode (AppSig fun' (eval scope ctx env arg))
+-- >   node -> NbE.evalNode scope ctx env node
+--
+-- Every other node falls through to 'evalNode'. The node arrives raw, so
+-- that a redex never builds the interpreted node it would discard. The
+-- instance upholds the 'Value' invariant, and it comes with the pragmas
+-- described in the module header.
 class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   -- | The value of a free name, or the name itself if it has none. By
   -- default the context's 'contextDefinition'.
@@ -260,6 +298,13 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   default definition :: HasDefinitions ctx binder sig => Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n
   {-# INLINE definition #-}
   definition = contextDefinition
+
+  -- | The side of a glued value that readback follows, from the folded and
+  -- the unfolded side. By default the context's 'contextUnfolding'.
+  unfolding :: Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n -> Value binder sig n
+  default unfolding :: HasDefinitions ctx binder sig => Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n -> Value binder sig n
+  {-# INLINE unfolding #-}
+  unfolding = contextUnfolding
 
   evalSig ::
     (Foil.Distinct o, Foil.Distinct i) =>
@@ -369,7 +414,7 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   -- read back.
   refineVar :: Foil.Distinct n => Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n
   {-# INLINE refineVar #-}
-  refineVar _ _ = VVar
+  refineVar _ _ = vvar
 
   -- | Refine a node by the context, like 'refineVar'. The method sees the
   -- constructor and the term positions, but not the scoped ones. The value
@@ -471,8 +516,8 @@ evalNode ::
 {-# INLINE evalNode #-}
 evalNode scope ctx env node =
   case ensureBivacuousFirst node of
-    Just node' -> VNode (bimap absurd (eval scope ctx env) node')
-    Nothing -> VSuspended env $ case ensureBivacuousSecond node of
+    Just node' -> VNode_ (bimap absurd (eval scope ctx env) node')
+    Nothing -> VSuspended_ env $ case ensureBivacuousSecond node of
       -- Nothing to evaluate either (a lambda, say): reuse the cell as it is.
       Just node' -> vacuous node'
       Nothing    -> bimap id (eval scope ctx env) node
@@ -498,21 +543,56 @@ ensureBivacuousSecond x
   | getAny (bifoldMap (const (Any False)) (const (Any True)) x) = Nothing
   | otherwise = Just (unsafeCoerce x)
 
+-- | Match the value of a principal subterm: an elimination rule sees it as a
+-- 'Whnf', through the synonyms 'VVar', 'VNode', 'VSuspended' and 'Stuck'. On
+-- a glued value the rule applies to both sides: the folded side is a
+-- neutral, so the rule leaves it stuck, and the unfolded side may be glued
+-- again. The results are glued again, so that readback can still choose. On
+-- any other value the rule applies directly, and it is a closure only on a
+-- glued value.
+eliminate ::
+  Value binder sig n ->
+  (Whnf binder sig n -> Value binder sig n) ->
+  Value binder sig n
+{-# INLINE eliminate #-}
+eliminate v rule = case v of
+  VGlued_ folded unfolded -> VGlued_ (eliminateLoop folded rule) (eliminateLoop unfolded rule)
+  _ -> inline rule (coerce v)
+
+-- | The loop of 'eliminate' under the first glue, out of line.
+eliminateLoop ::
+  Value binder sig n ->
+  (Whnf binder sig n -> Value binder sig n) ->
+  Value binder sig n
+{-# NOINLINE eliminateLoop #-}
+eliminateLoop v rule = case v of
+  VGlued_ folded unfolded -> VGlued_ (eliminateLoop folded rule) (eliminateLoop unfolded rule)
+  _ -> rule (coerce v)
+
+-- | The unfolded head of a value: peel every layer of glue off its root.
+force :: Value binder sig n -> Whnf binder sig n
+force = \case
+  VGlued_ _ unfolded -> force unfolded
+  v                  -> coerce v
+
 -- * Readback
 
 -- | Refine a value by the context: a variable by 'refineVar', a node by
--- 'refineSig'.
+-- 'refineSig'. A glued value stays as it is: readback and conversion refine
+-- the side they follow.
 refine ::
   (Eval ctx binder sig, Foil.Distinct n) =>
   Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n
 {-# INLINE refine #-}
 refine scope ctx value = case value of
-  VVar x            -> refineVar scope ctx x
-  VNode node        -> refineSig scope ctx value node
-  VSuspended _ node -> refineSig scope ctx value node
+  VVar_ x            -> refineVar scope ctx x
+  VNode_ node        -> refineSig scope ctx value node
+  VSuspended_ _ node -> refineSig scope ctx value node
+  VGlued_ _ _        -> value
 
 -- | Read a value back into a term. Term subterms recurse directly; scoped
--- subterms are read back under their binder by 'quoteScoped'.
+-- subterms are read back under their binder by 'quoteScoped'. A glued value
+-- is read back on the side the context chooses ('unfolding').
 --
 -- Every constraint here is used. An unused dictionary would make GHC split
 -- 'quote' into a wrapper and a worker, and a @SPECIALIZE@ pragma would then
@@ -525,7 +605,9 @@ quote ::
   Value binder sig n ->
   AST binder sig n
 {-# INLINABLE quote #-}
-quote scope ctx value = readHead scope ctx (refine scope ctx value)
+quote scope ctx = \case
+  VGlued_ folded unfolded -> quote scope ctx (unfolding scope ctx folded unfolded)
+  value -> readHead scope ctx (refine scope ctx value)
   where
     -- Local, so that a specialisation of 'quote' covers it, and closed, so
     -- that no call allocates it.
@@ -544,10 +626,11 @@ readHeadWith ::
   AST binder sig n
 {-# INLINE readHeadWith #-}
 readHeadWith hd scope ctx = \case
-  VVar x -> Var x
-  VNode node -> Node $! bimap absurd id (headsWith hd (quote scope ctx) node)
-  VSuspended env node ->
+  VVar_ x -> Var x
+  VNode_ node -> Node $! bimap absurd id (headsWith hd (quote scope ctx) node)
+  VSuspended_ env node ->
     Node $! headsWith hd (quote scope ctx) (extendScopedWith (quoteScoped scope ctx env) id node)
+  VGlued_ folded unfolded -> hd (unfolding scope ctx folded unfolded)
 
 -- | Read back one scoped subterm of a suspended node: refresh the binder,
 -- extend the context with the position's 'Extend' and the captured
@@ -605,10 +688,11 @@ quoteWhnf ::
   Value binder sig n ->
   AST binder sig n
 quoteWhnf scope ctx value = case refine scope ctx value of
-  VVar x -> Var x
-  VNode node -> Node $ bimap absurd id (headsWith (readHead scope ctx) (quote scope ctx) node)
-  VSuspended env node ->
+  VVar_ x -> Var x
+  VNode_ node -> Node $ bimap absurd id (headsWith (readHead scope ctx) (quote scope ctx) node)
+  VSuspended_ env node ->
     Node $ bimap (freezeScoped scope ctx env) id (headsWith (readHead scope ctx) (quote scope ctx) node)
+  VGlued_ folded unfolded -> quoteWhnf scope ctx (unfolding scope ctx folded unfolded)
   where
     -- As in 'quote'.
     readHead :: Foil.Distinct l => Foil.Scope l -> ctx l -> Value binder sig l -> AST binder sig l

@@ -30,7 +30,7 @@ import Data.Bifunctor.TH       (deriveBifoldable, deriveBifunctor, deriveBitrave
 import Data.ZipMatchK.TH       (deriveZipMatchK)
 import GHC.Generics            (Generic)
 
-import FreeFoil.NbE            (EtaTerm (..), HasHeads (..), Value (..), eval, evalNode)
+import FreeFoil.NbE            (EtaTerm (..), HasHeads (..), Value, Value' (..), eliminate, eval, evalNode, vnode, vsuspended)
 import FreeFoil.NbE.Sum
 
 -- | Pairs: @(t, u)@, @fst t@, @snd t@ and @split t as (x, y) in u@.
@@ -63,11 +63,11 @@ instance (Sinkable ctx, CoSinkable binder) => EvalF ctx binder PairF where
     FstF p -> fstValue pos (eval scope ctx env p)
     SndF p -> sndValue pos (eval scope ctx env p)
     SplitF p (ScopedAST binder body) ->
-      case eval scope ctx env p of
+      eliminate (eval scope ctx env p) $ \case
         VNode node | Just (PairF a b) <- prj pos node ->
           case assertDistinct binder of
             Distinct -> eval scope ctx (addSubstPattern env binder [a, b]) body
-        p' -> VSuspended env (inj pos (SplitF p' (ScopedAST binder body)))
+        Stuck p' -> vsuspended env (inj pos (SplitF p' (ScopedAST binder body)))
     node -> evalNode scope ctx env (inj pos node)
 
   {-# INLINE etaMatchWithF #-}
@@ -79,14 +79,14 @@ instance (Sinkable ctx, CoSinkable binder) => EvalF ctx binder PairF where
 -- else.
 fstValue :: Inj PairF sig -> Value binder sig n -> Value binder sig n
 {-# INLINE fstValue #-}
-fstValue pos p = case p of
+fstValue pos p = eliminate p $ \case
   VNode node | Just (PairF a _) <- prj pos node -> a
-  _                                             -> VNode (inj pos (FstF p))
+  Stuck p'                                      -> vnode (inj pos (FstF p'))
 
 -- | The second component of a pair value of the fragment; stuck on anything
 -- else.
 sndValue :: Inj PairF sig -> Value binder sig n -> Value binder sig n
 {-# INLINE sndValue #-}
-sndValue pos p = case p of
+sndValue pos p = eliminate p $ \case
   VNode node | Just (PairF _ b) <- prj pos node -> b
-  _                                             -> VNode (inj pos (SndF p))
+  Stuck p'                                      -> vnode (inj pos (SndF p'))
