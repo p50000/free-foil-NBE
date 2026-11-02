@@ -45,13 +45,13 @@ instance Sinkable Functions where
   sinkabilityProof rename (Functions xs) = Functions (map rename xs)
 
 instance NbE.HasDefinitions Functions Pat sig where
-  contextDefinition _ _ = NbE.VVar
+  contextDefinition _ _ = NbE.vvar
 
 -- | Functions on their own: a free name of function type is η-expanded to
 -- @λy. f y@, with @f@ bound to it in the environment.
 instance NbE.Eval Functions Pat LamF where
   evalSig = evalF root
-  refineVar scope ctx x = fromMaybe (NbE.VVar x) (expandFunction root scope ctx x)
+  refineVar scope ctx x = fromMaybe (NbE.vvar x) (expandFunction root scope ctx x)
 
 -- | Functions as a fragment that refines: the rules of 'LamF', and the same
 -- η-expansion.
@@ -73,7 +73,7 @@ expandFunction :: Distinct n => Inj LamF sig -> Scope n -> Functions n -> Name n
 expandFunction pos scope (Functions fs) x
   | x `elem` fs = Just $ withFresh scope $ \f ->
       withFresh (extendScope f scope) $ \y ->
-        NbE.VSuspended (addSubst identitySubst f (NbE.VVar x)) (lamNode pos y (sink (nameOf f)))
+        NbE.vsuspended (addSubst identitySubst f (NbE.vvar x)) (lamNode pos y (sink (nameOf f)))
   | otherwise = Nothing
 
 -- | @λy. f y@ at a position.

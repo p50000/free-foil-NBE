@@ -32,7 +32,7 @@ import           Control.Monad.Free.Foil.Annotated (AnnSig (..))
 import           Data.Bifunctor                    (Bifunctor)
 import           Data.Maybe                        (fromMaybe)
 
-import           FreeFoil.NbE                      (Eval (..), HasDefinitions, Value (VVar))
+import           FreeFoil.NbE                      (Eval (..), HasDefinitions, vvar)
 import           FreeFoil.NbE.Sum                  (EvalF (..), Inj (..))
 
 -- | An annotation with a blank, for the nodes that evaluation builds.
@@ -54,7 +54,7 @@ instance {-# OVERLAPPABLE #-} (HasDefinitions ctx binder (AnnSig ann sig), EvalF
   {-# INLINE extendScopedWith #-}
   extendScopedWith scoped term (AnnSig ann node) = AnnSig (fmap term ann) (extendScopedWithF ignoring scoped term node)
   {-# INLINE refineVar #-}
-  refineVar scope ctx x = fromMaybe (VVar x) (refineVarF ignoring scope ctx x)
+  refineVar scope ctx x = fromMaybe (vvar x) (refineVarF ignoring scope ctx x)
   {-# INLINE refineSig #-}
   refineSig scope ctx value node = fromMaybe value (refineSigF ignoring scope ctx value node)
   {-# INLINE relateWith #-}

@@ -117,10 +117,10 @@ instance (Sinkable ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPatt
       case assertDistinct (FFPatternRec k r) of
         Distinct ->
           let zeroCase = NbE.eval scope ctx env z
-              recurse m = case m of
+              recurse m = NbE.eliminate m $ \case
                 NbE.VNode ZeroSig    -> zeroCase
                 NbE.VNode (SucSig p) -> NbE.eval scope ctx (addSubst (addSubst env k p) r (recurse p)) s
-                m' -> NbE.VSuspended env (NatRecSig m' zeroCase (ScopedAST (FFPatternRec k r) s))
+                NbE.Stuck m' -> NbE.vsuspended env (NatRecSig m' zeroCase (ScopedAST (FFPatternRec k r) s))
           in recurse (NbE.eval scope ctx env n)
     node -> NbE.evalNode scope ctx env node
 
