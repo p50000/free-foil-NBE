@@ -13,10 +13,20 @@
 {-# LANGUAGE UndecidableInstances  #-}
 -- The Show instance of a synonym over library types.
 {-# OPTIONS_GHC -Wno-orphans #-}
--- | Dependent functions and pairs over a universe, with a unit type: a
--- language whose context holds types. Its terms are elaborated (see
--- "DependentTypes.Elaborate"). Every node carries its type as free-foil's
--- annotation ('TypeAnn'), except the universe, whose type is itself.
+-- | Dependent functions and pairs over a cumulative hierarchy of universes
+-- @U 0@, @U 1@, …, with a unit type: a language whose context holds types.
+-- Its terms are elaborated (see "DependentTypes.Elaborate"). Every node
+-- carries its type as free-foil's annotation ('TypeAnn'), except a universe,
+-- whose type is the next universe.
+--
+-- Conversion checks subtyping when the context says so ('Variance', as in
+-- Rzk): @U i@ is a subtype of @U j@ for @i ≤ j@, a Π is contravariant in its
+-- domain and covariant in its codomain, a Σ is covariant in both, and every
+-- other position is compared invariantly ('NbE.relateWith'). Under the binder
+-- of a Π or Σ, the bound name has the smaller of the two domains. This is the
+-- cumulativity of Rocq's kernel (@ccnv@ in @kernel/conversion.ml@), except
+-- that Rocq's Π is invariant in its domain, whereas here it is
+-- contravariant, as for Rzk's shape-indexed functions.
 --
 -- η for functions and pairs goes by shape ('NbE.etaMatchWith'): conversion
 -- compares a λ or a pair with another value through application or the
@@ -50,10 +60,12 @@ module DependentTypes
   , fullyAnnotated
   , universe
   , unitType
+  , typeOfNode
   , typeAnnotation
   , isSingletonType
     -- * Contexts of types
   , HasTypes (..)
+  , Variance (..)
   , Typing
   , emptyTyping
   , typeOf
@@ -63,6 +75,7 @@ module DependentTypes
   , nf
   , whnf
   , convertible
+  , isSubtype
   ) where
 
 import Control.Monad.Foil
@@ -83,15 +96,17 @@ import qualified FreeFoil.NbE.Conversion as Conv
 import DependentTypes.Generated (FFPattern (..), FFTerm, TermSig (..))
 
 -- | The annotation of an elaborated node: its type, and for a type whether it
--- is a singleton. Only the universe has no type, since its type is itself.
+-- is a singleton. Only a universe has no type, since its type is the next
+-- universe.
 data TypeAnn ty
   = HasType ty
-    -- ^ The type of a term, or the universe as the type of a type that is
-    -- not a singleton.
-  | IsSingletonType
-    -- ^ A singleton type, whose type is the universe: @Unit@, a Π into a
-    -- singleton, or a Σ of two.
+    -- ^ The type of a term, or the universe of a type that is not a
+    -- singleton.
+  | IsSingletonType ty
+    -- ^ A singleton type, with its universe: @Unit@, a Π into a singleton,
+    -- or a Σ of two.
   | IsUniverse
+    -- ^ A universe @U i@, whose type @U (i + 1)@ is read from the node.
   deriving (Functor, Foldable, Traversable)
 
 deriveGenericK ''TypeAnn
@@ -104,7 +119,7 @@ deriveGenericK ''TypeAnn
 instance ZipMatchK TypeAnn where
   zipMatchWithK (f :^: M0) l r = Just $ case (l, r) of
     (HasType a, HasType b) | Just c <- f a b -> HasType c
-    (IsSingletonType, IsSingletonType) -> IsSingletonType
+    (IsSingletonType a, IsSingletonType b) | Just c <- f a b -> IsSingletonType c
     (IsUniverse, IsUniverse) -> IsUniverse
     _ -> error "DependentTypes: impossible: the paired types of a match are never used"
 
@@ -130,7 +145,7 @@ type TypeValue = Value
 unannotated :: Elaborated n -> Raw n
 unannotated = hoistAST (\(AnnSig _ node) -> node)
 
--- | Whether every node but the universe carries its type, also inside the
+-- | Whether every node but a universe carries its type, also inside the
 -- annotations, as elaboration and normalisation produce them.
 fullyAnnotated :: Elaborated n -> Bool
 fullyAnnotated = getAll . getConst . foldAST (\_ -> mempty) (\_ (Const body) -> Const body) node
@@ -138,75 +153,99 @@ fullyAnnotated = getAll . getConst . foldAST (\_ -> mempty) (\_ (Const body) -> 
     node :: forall (m :: S). AnnSig TypeAnn TermSig (Const All m) (Const All m) -> Const All m
     node (AnnSig ann t) = Const (All (fits ann t)) <> fold ann <> bifold t
     fits :: TypeAnn a -> TermSig b c -> Bool
-    fits IsUniverse UniverseSig      = True
-    fits IsUniverse _                = False
-    fits IsSingletonType UnitSig     = True
-    fits IsSingletonType PiSig {}    = True
-    fits IsSingletonType SigmaSig {} = True
-    fits IsSingletonType _           = False
-    fits (HasType _) UniverseSig     = False
-    fits (HasType _) UnitSig         = False
-    fits (HasType _) _               = True
+    fits IsUniverse UniverseSig {}       = True
+    fits IsUniverse _                    = False
+    fits (IsSingletonType _) UnitSig     = True
+    fits (IsSingletonType _) PiSig {}    = True
+    fits (IsSingletonType _) SigmaSig {} = True
+    fits (IsSingletonType _) _           = False
+    fits (HasType _) UniverseSig {}      = False
+    fits (HasType _) UnitSig             = False
+    fits (HasType _) _                   = True
 
 -- | Terms print without their annotations.
 instance Show (AST FFPattern Sig n) where
   show = show . unannotated
 
--- | The universe, whose type is itself.
-universe :: TypeValue n
-universe = NbE.VNode (AnnSig IsUniverse UniverseSig)
+-- | The universe of a level, whose type is the next universe.
+universe :: Integer -> TypeValue n
+universe i = NbE.VNode (AnnSig IsUniverse (UniverseSig i))
 
--- | The unit type.
+-- | The unit type, in the lowest universe.
 unitType :: TypeValue n
-unitType = NbE.VNode (AnnSig IsSingletonType UnitSig)
+unitType = NbE.VNode (AnnSig (IsSingletonType (universe 0)) UnitSig)
 
--- | The annotation of a type, given the universe and whether the type is a
+-- | The annotation of a type, given its universe and whether the type is a
 -- singleton.
 typeAnnotation :: ty -> Bool -> TypeAnn ty
 {-# INLINE typeAnnotation #-}
 typeAnnotation u singleton
-  | singleton = IsSingletonType
+  | singleton = IsSingletonType u
   | otherwise = HasType u
 
 -- | Whether a type value is a singleton type.
 isSingletonType :: TypeValue n -> Bool
 {-# INLINE isSingletonType #-}
 isSingletonType = \case
-  NbE.VNode (AnnSig IsSingletonType _) -> True
-  NbE.VSuspended _ (AnnSig IsSingletonType _) -> True
+  NbE.VNode (AnnSig (IsSingletonType _) _) -> True
+  NbE.VSuspended _ (AnnSig (IsSingletonType _) _) -> True
   _ -> False
 
--- | The type in an annotation.
-annotatedType :: TypeAnn (TypeValue n) -> TypeValue n
-{-# INLINE annotatedType #-}
-annotatedType = \case
+-- | The type of a node, from its annotation, or for a universe from its
+-- level.
+typeOfNode :: TypeAnn (TypeValue n) -> TermSig a b -> TypeValue n
+{-# INLINE typeOfNode #-}
+typeOfNode ann node = case ann of
   HasType ty -> ty
-  IsSingletonType -> universe
-  IsUniverse -> universe
+  IsSingletonType ty -> ty
+  IsUniverse -> case node of
+    UniverseSig i -> universe (i + 1)
+    _ -> error "DependentTypes: impossible: a node annotated as a universe that is not one"
 
 -- * Contexts of types
 
--- | What the language needs of a context: the type of every name in scope.
+-- | What the language needs of a context: the type of every name in scope,
+-- and the direction in which conversion compares types.
 class HasTypes ctx where
   -- | The context under a binder of one name of a type.
   assume :: DExt n l => NameBinder n l -> TypeValue n -> ctx n -> ctx l
   -- | The type of a name.
   typeOfName :: ctx n -> Name n -> TypeValue n
+  -- | The direction of the comparison.
+  variance :: ctx n -> Variance
+  -- | The context with another direction.
+  withVariance :: Variance -> ctx n -> ctx n
 
--- | A type for every name in scope.
-newtype Typing n = Typing (NameMap n (TypeValue n))
+-- | The direction in which conversion compares two types, as in Rzk: under
+-- 'Covariant' the left one is a subtype of the right one, under
+-- 'Contravariant' a supertype, and under 'Invariant' the two are
+-- convertible.
+data Variance = Covariant | Contravariant | Invariant
+  deriving (Eq, Show)
 
--- | The context of the empty scope.
+-- | The direction of the domain of a Π.
+opposite :: Variance -> Variance
+opposite = \case
+  Covariant     -> Contravariant
+  Contravariant -> Covariant
+  Invariant     -> Invariant
+
+-- | A type for every name in scope, and the direction of the comparison.
+data Typing n = Typing Variance (NameMap n (TypeValue n))
+
+-- | The context of the empty scope, for conversion.
 emptyTyping :: Typing VoidS
-emptyTyping = Typing emptyNameMap
+emptyTyping = Typing Invariant emptyNameMap
 
 -- | The type of a name.
 typeOf :: Name n -> Typing n -> TypeValue n
-typeOf x (Typing types) = lookupName x types
+typeOf x (Typing _ types) = lookupName x types
 
 instance HasTypes Typing where
-  assume x ty (Typing types) = Typing (addNameBinder x (sink ty) (sink1 types))
-  typeOfName (Typing types) x = lookupName x types
+  assume x ty (Typing v types) = Typing v (addNameBinder x (sink ty) (sink1 types))
+  typeOfName (Typing _ types) x = lookupName x types
+  variance (Typing v _) = v
+  withVariance v (Typing _ types) = Typing v types
 
 instance HasDefinitions Typing FFPattern Sig where
   contextDefinition _ _ = NbE.VVar
@@ -245,8 +284,8 @@ instance (HasTypes ctx, HasDefinitions ctx FFPattern Sig) => Eval ctx FFPattern 
     SigmaSig {} | not (isSingleton ann) -> singletonFlag scope ctx (NbE.evalNode scope ctx env (AnnSig ann node))
     _ -> NbE.evalNode scope ctx env (AnnSig ann node)
     where
-      isSingleton IsSingletonType = True
-      isSingleton _               = False
+      isSingleton (IsSingletonType _) = True
+      isSingleton _                   = False
 
   -- The observers of a λ apply the other value to the bound name, those of a
   -- pair project it. Each carries its type, so that it is refined as well.
@@ -269,9 +308,24 @@ instance (HasTypes ctx, HasDefinitions ctx FFPattern Sig) => Eval ctx FFPattern 
     FirstSig p        -> FirstSig (term p)
     SecondSig p       -> SecondSig (term p)
     PairSig a b       -> PairSig (term a) (term b)
-    UniverseSig       -> UniverseSig
+    UniverseSig i     -> UniverseSig i
     UnitSig           -> UnitSig
     TTSig             -> TTSig
+
+  -- U i is a subtype of U j for i ≤ j, a Π is contravariant in its domain,
+  -- and a Σ is covariant in both. The bound name of a Π or Σ has the smaller
+  -- domain. Every other position is compared invariantly.
+  {-# INLINE relateWith #-}
+  relateWith scope ctx scoped term hd l@(AnnSig _ nodeL) r@(AnnSig _ nodeR) = case (nodeL, nodeR) of
+    (UniverseSig i, UniverseSig j)
+      | below (variance ctx) i j -> Just mempty
+      | otherwise                -> Nothing
+    (PiSig domL codL, PiSig domR codR) -> Just $
+      term domL domR (withVariance (opposite (variance ctx)) ctx)
+        <> scoped codL codR (assumeVar (smaller (opposite (variance ctx)) domL domR))
+    (SigmaSig domL codL, SigmaSig domR codR) -> Just $
+      term domL domR ctx <> scoped codL codR (assumeVar (smaller (variance ctx) domL domR))
+    _ -> NbE.relateNodes scope (withVariance Invariant ctx) (\a a' extend -> scoped a a' (invariantly extend)) term hd l r
 
   {-# INLINABLE refineVar #-}
   refineVar scope ctx x = refineAt scope ctx (NbE.VVar x) (typeOfName ctx x)
@@ -279,9 +333,9 @@ instance (HasTypes ctx, HasDefinitions ctx FFPattern Sig) => Eval ctx FFPattern 
   -- A node in a value is a neutral only if it is an eliminator.
   {-# INLINABLE refineSig #-}
   refineSig scope ctx value (AnnSig ann node) = case node of
-    AppSig {}    -> refineAt scope ctx value (annotatedType ann)
-    FirstSig {}  -> refineAt scope ctx value (annotatedType ann)
-    SecondSig {} -> refineAt scope ctx value (annotatedType ann)
+    AppSig {}    -> refineAt scope ctx value (typeOfNode ann node)
+    FirstSig {}  -> refineAt scope ctx value (typeOfNode ann node)
+    SecondSig {} -> refineAt scope ctx value (typeOfNode ann node)
     _            -> value
 
 -- | Apply a function value to an argument value: a suspended lambda is
@@ -360,8 +414,28 @@ typeOfValue :: HasTypes ctx => ctx n -> Value n -> TypeValue n
 {-# INLINE typeOfValue #-}
 typeOfValue ctx = \case
   NbE.VVar x -> typeOfName ctx x
-  NbE.VNode (AnnSig ann _) -> annotatedType ann
-  NbE.VSuspended _ (AnnSig ann _) -> annotatedType ann
+  NbE.VNode (AnnSig ann node) -> typeOfNode ann node
+  NbE.VSuspended _ (AnnSig ann node) -> typeOfNode ann node
+
+-- | Whether two universe levels are related in a direction.
+below :: Variance -> Integer -> Integer -> Bool
+{-# INLINE below #-}
+below = \case
+  Covariant     -> (<=)
+  Contravariant -> (>=)
+  Invariant     -> (==)
+
+-- | The smaller of two types compared in a direction.
+smaller :: Variance -> a -> a -> a
+{-# INLINE smaller #-}
+smaller = \case
+  Contravariant -> \_ r -> r
+  _             -> \l _ -> l
+
+-- | An extension of the context for invariant comparison.
+invariantly :: HasTypes ctx => Extend ctx FFPattern Sig n -> Extend ctx FFPattern Sig n
+{-# INLINE invariantly #-}
+invariantly (Extend extend) = Extend $ \scope pat scope' ctx -> withVariance Invariant (extend scope pat scope' ctx)
 
 -- | The binder of one name of a type.
 assumeVar :: HasTypes ctx => TypeValue n -> Extend ctx FFPattern Sig n
@@ -385,10 +459,10 @@ codomainAt scope ctx env (ScopedAST (FFPatternVar b) cod) arg = case assertDisti
 singletonFlag :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> TypeValue n -> TypeValue n
 {-# INLINE singletonFlag #-}
 singletonFlag scope ctx = \case
-  NbE.VSuspended env (AnnSig _ node@(PiSig dom cod)) ->
-    NbE.VSuspended env (AnnSig (typeAnnotation universe (singletonCodomain scope ctx dom env cod)) node)
-  NbE.VSuspended env (AnnSig _ node@(SigmaSig dom cod)) ->
-    NbE.VSuspended env (AnnSig (typeAnnotation universe (isSingletonType dom && singletonCodomain scope ctx dom env cod)) node)
+  NbE.VSuspended env (AnnSig ann node@(PiSig dom cod)) ->
+    NbE.VSuspended env (AnnSig (typeAnnotation (typeOfNode ann node) (singletonCodomain scope ctx dom env cod)) node)
+  NbE.VSuspended env (AnnSig ann node@(SigmaSig dom cod)) ->
+    NbE.VSuspended env (AnnSig (typeAnnotation (typeOfNode ann node) (isSingletonType dom && singletonCodomain scope ctx dom env cod)) node)
   value -> value
 
 -- | Whether the codomain of a Π or Σ type is a singleton at a fresh name.
@@ -444,3 +518,8 @@ whnf = NbE.whnf
 convertible :: Distinct n => Scope n -> Typing n -> Elaborated n -> Elaborated n -> Bool
 {-# INLINE convertible #-}
 convertible = Conv.convertible
+
+-- | Whether the first type is a subtype of the second.
+isSubtype :: Distinct n => Scope n -> Typing n -> TypeValue n -> TypeValue n -> Bool
+{-# INLINE isSubtype #-}
+isSubtype scope typing = Conv.conv scope (withVariance Covariant typing)
