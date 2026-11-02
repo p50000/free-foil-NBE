@@ -29,6 +29,7 @@ module FreeFoil.NbE.Sum
   , inL
   , inR
   , EvalF (..)
+  , relateNodesF
   ) where
 
 import qualified Control.Monad.Foil      as Foil
@@ -38,7 +39,7 @@ import           Data.Bifunctor          (Bifunctor (..))
 import           Data.Bifunctor.Sum      (Sum (..))
 import           Data.ZipMatchK          (ZipMatchFoldK)
 
-import           FreeFoil.NbE            (EtaScoped, EtaTerm, Eval (..), Extend, HasDefinitions, HasHeads, Value, evalNode, relateNodes, sinkExtend)
+import           FreeFoil.NbE            (EtaScoped, EtaTerm, Eval (..), Extend, HasDefinitions, HasHeads, Value, evalNode, relateExtended, sinkExtend)
 
 -- | The position of a fragment @f@ in a language @sig@: how to build one of
 -- its nodes in the language and how to recognise one. This is Swierstra's
@@ -146,8 +147,24 @@ class (Bifunctor f, Bifoldable f, HasHeads f) => EvalF ctx binder f where
     f a' (Value binder sig n) ->
     Maybe m
   {-# INLINE relateWithF #-}
-  relateWithF pos _ ctx scoped term hd l r =
-    relateNodes ctx term hd (extendScopedWithF pos (\a extend a' -> scoped a a' extend) id l) r
+  relateWithF pos scope ctx scoped term hd l r = relateNodesF pos scope ctx scoped term hd l r
+
+-- | The default of 'relateWithF', as 'FreeFoil.NbE.relateNodes' is for a
+-- language: a fragment's own cases fall back on it.
+relateNodesF ::
+  (EvalF ctx binder f, ZipMatchFoldK f, Monoid m, Foil.Distinct n) =>
+  Inj f sig ->
+  Foil.Scope n ->
+  ctx n ->
+  (a -> a' -> Extend ctx binder sig n -> m) ->
+  (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
+  (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
+  f a (Value binder sig n) ->
+  f a' (Value binder sig n) ->
+  Maybe m
+{-# INLINE relateNodesF #-}
+relateNodesF pos _ ctx scoped term hd l r =
+  relateExtended ctx term hd (extendScopedWithF pos (\a extend a' -> scoped a a' extend) id l) r
 
 -- | The rules of a sum are the rules of its summands.
 instance (EvalF ctx binder f, EvalF ctx binder g) => EvalF ctx binder (Sum f g) where
