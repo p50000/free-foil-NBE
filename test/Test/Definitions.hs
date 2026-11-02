@@ -7,7 +7,7 @@
 -- inlined, and with evaluating it under an environment that maps each
 -- defined name to the value of its body. The composed language unfolds its
 -- definitions through the rules of its fragments.
-module Test.Definitions (tests) where
+module Test.Definitions (tests, withDefined) where
 
 import           Data.Map.Strict          (Map)
 import qualified Data.Map.Strict          as Map
