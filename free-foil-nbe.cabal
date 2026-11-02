@@ -314,6 +314,7 @@ test-suite free-foil-nbe-test
                     , Test.Definitions
                     , Test.DependentTypes
                     , Test.Fragments
+                    , Test.Glue
                     , Test.LambdaLet
                     , Test.LambdaNWays
                     , Test.LambdaPi
