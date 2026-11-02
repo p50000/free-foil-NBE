@@ -76,15 +76,15 @@ conv ::
   Value binder sig n ->
   Bool
 {-# INLINABLE conv #-}
-conv scope ctx = foldedFirst (conv scope ctx) (\l r -> sameHead scope ctx (refine scope ctx l) (refine scope ctx r))
+conv scope ctx l0 r0 = sameHead Term scope ctx (refine scope ctx l0) (refine scope ctx r0)
   where
     -- Two values compared without refining them: heads ('headsWith'), or
     -- values refined already. Their heads are compared the same way, every
     -- other position with 'conv'. The function is local, so that a
     -- specialisation of 'conv' covers it. It closes over nothing, so that it
     -- is not allocated at every call.
-    sameHead :: Foil.Distinct l => Foil.Scope l -> ctx l -> Value binder sig l -> Value binder sig l -> Bool
-    sameHead scope' ctx' = foldedFirst (sameHead scope' ctx') $ \l r -> case (l, r) of
+    sameHead :: Foil.Distinct l => Position -> Foil.Scope l -> ctx l -> Value binder sig l -> Value binder sig l -> Bool
+    sameHead pos scope' ctx' l r = case (l, r) of
       (VVar_ x, VVar_ y) -> x == y
       (VNode_ a, VNode_ b)
         | Just (All same) <- relateWith scope' ctx' (\v _ _ _ -> absurd v) (other scope') (heads scope') a b -> same
@@ -94,18 +94,33 @@ conv scope ctx = foldedFirst (conv scope ctx) (\l r -> sameHead scope ctx (refin
       (VSuspended_ envL a, VSuspended_ envR b)
         | Just (All same) <- relateWith scope' ctx'
             (\x y ctx'' extend -> All (convScoped scope' ctx'' envL envR x extend y)) (other scope') (heads scope') a b -> same
-      -- Nodes that do not match are compared by η. A node goes to 'VNode'
+      -- A glued value matches no node, so it is compared here, folded
+      -- first, its sides again as values of the same position: a term
+      -- position by 'conv', which refines them, a head as a head. Nodes
+      -- that do not match are compared by η. A node goes to 'VNode'
       -- exactly when it has no scoped subterms, so a 'VNode' and a
       -- 'VSuspended' never have the same constructor.
-      _ -> convEta scope' ctx' OnLeft l r || convEta scope' ctx' OnRight r l
+      _ -> foldedFirst (\a b -> again pos scope' ctx' a b)
+             (\l' r' -> convEta scope' ctx' OnLeft l' r' || convEta scope' ctx' OnRight r' l') l r
+
+    -- The sides of glued values, compared again at their position.
+    again :: Foil.Distinct l => Position -> Foil.Scope l -> ctx l -> Value binder sig l -> Value binder sig l -> Bool
+    {-# INLINE again #-}
+    again pos scope' ctx' a b = case pos of
+      Term -> conv scope' ctx' a b
+      Head -> sameHead Head scope' ctx' a b
 
     -- A pair of term positions in its context: a head ('headsWith') or
     -- another position.
     heads, other :: Foil.Distinct l => Foil.Scope l -> Value binder sig l -> Value binder sig l -> ctx l -> All
     {-# INLINE heads #-}
-    heads scope' l r ctx' = All (sameHead scope' ctx' l r)
+    heads scope' l r ctx' = All (sameHead Head scope' ctx' l r)
     {-# INLINE other #-}
     other scope' l r ctx' = All (conv scope' ctx' l r)
+
+-- | Whether the values that 'conv' compares stand at a term position,
+-- refined already, or at a head, which is not refined.
+data Position = Term | Head
 
 -- | Compare two values glued first: the folded sides of two glued values,
 -- and if they differ the unfolded sides, by the first function, and a glued
