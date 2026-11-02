@@ -211,7 +211,8 @@ compareNormalisers name t =
 -- * Definitions
 
 -- | Definitions of the composed language, specialised as a client of the
--- library would.
+-- library would. Without the pragma for 'Conv.convertible', the conversion
+-- rows run the unspecialised check.
 type DefinedComposed = Defined Composed.Pat Composed.Sig
 
 {-# SPECIALIZE NbE.nf :: Distinct n => Scope n -> DefinedComposed n -> Composed.Combined n -> Composed.Combined n #-}
@@ -220,6 +221,7 @@ type DefinedComposed = Defined Composed.Pat Composed.Sig
       Scope o -> DefinedComposed o -> Substitution Composed.Value i o -> Composed.Combined i -> Composed.Value o #-}
 {-# SPECIALIZE NbE.quote :: Distinct n => Scope n -> DefinedComposed n -> Composed.Value n -> Composed.Combined n #-}
 {-# SPECIALIZE Conv.conv :: Distinct n => Scope n -> DefinedComposed n -> Composed.Value n -> Composed.Value n -> Bool #-}
+{-# SPECIALIZE Conv.convertible :: Distinct n => Scope n -> DefinedComposed n -> Composed.Combined n -> Composed.Combined n -> Bool #-}
 
 -- | A program of definitions of the composed language over the empty scope,
 -- each body parsed in the scope of the names before it.
