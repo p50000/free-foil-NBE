@@ -11,7 +11,8 @@
 -- at most once, and only when its name is used.
 --
 -- A defined name evaluates to a glued value: the name beside the lazy value
--- of its body, as in Kovács's glued evaluation. Readback follows the
+-- of its body. This follows the glued evaluation of Kovács (smalltt, and
+-- @GluedEval@ of the elaboration zoo). Readback follows the
 -- context's 'Unfolding': 'Unfolded' gives the normal form, 'Folded' keeps
 -- the defined names. Conversion compares defined names folded first either
 -- way.
