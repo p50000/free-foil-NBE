@@ -6,13 +6,13 @@
 
 module DependentTypes.Syntax.Abs where
 
-import Prelude (String)
+import Prelude (Integer, String)
 import qualified Prelude as C (Eq, Ord, Show, Read)
 import qualified Data.String
 
 data Term
     = Var VarIdent
-    | Universe
+    | Universe Integer
     | Unit
     | TT
     | Pair Term Term
