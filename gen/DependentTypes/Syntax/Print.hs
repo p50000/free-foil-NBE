@@ -139,7 +139,7 @@ instance Print DependentTypes.Syntax.Abs.VarIdent where
 instance Print DependentTypes.Syntax.Abs.Term where
   prt i = \case
     DependentTypes.Syntax.Abs.Var varident -> prPrec i 2 (concatD [prt 0 varident])
-    DependentTypes.Syntax.Abs.Universe -> prPrec i 2 (concatD [doc (showString "U")])
+    DependentTypes.Syntax.Abs.Universe n -> prPrec i 2 (concatD [doc (showString "U"), prt 0 n])
     DependentTypes.Syntax.Abs.Unit -> prPrec i 2 (concatD [doc (showString "Unit")])
     DependentTypes.Syntax.Abs.TT -> prPrec i 2 (concatD [doc (showString "tt")])
     DependentTypes.Syntax.Abs.Pair term1 term2 -> prPrec i 2 (concatD [doc (showString "("), prt 0 term1, doc (showString ","), prt 0 term2, doc (showString ")")])

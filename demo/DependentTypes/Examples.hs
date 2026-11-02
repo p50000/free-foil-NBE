@@ -28,18 +28,18 @@ unitVariable = Example "\\(x : Unit). x" "(x : Unit) -> Unit" "\\(x : Unit). tt"
 unitResult :: Example
 unitResult =
   Example
-    "\\(f : (A : U) -> Unit). \\(A : U). f A"
-    "(f : (A : U) -> Unit) -> (A : U) -> Unit"
-    "\\(f : (A : U) -> Unit). \\(A : U). tt"
+    "\\(f : (A : U 0) -> Unit). \\(A : U 0). f A"
+    "(f : (A : U 0) -> Unit) -> (A : U 0) -> Unit"
+    "\\(f : (A : U 0) -> Unit). \\(A : U 0). tt"
 
 -- | A variable of a function type that is not a singleton stays as it is:
 -- η for functions goes by shape, in conversion.
 functionEta :: Example
 functionEta =
   Example
-    "\\(A : U). \\(f : (x : A) -> A). f"
-    "(A : U) -> (f : (x : A) -> A) -> (x : A) -> A"
-    "\\(A : U). \\(f : (x : A) -> A). f"
+    "\\(A : U 0). \\(f : (x : A) -> A). f"
+    "(A : U 0) -> (f : (x : A) -> A) -> (x : A) -> A"
+    "\\(A : U 0). \\(f : (x : A) -> A). f"
 
 -- | A function into the unit type is constant: its type is a singleton, so
 -- @f@ becomes @\\(x : Unit). tt@.
@@ -55,24 +55,24 @@ unitFunctionEta =
 secondComponent :: Example
 secondComponent =
   Example
-    "\\(A : U). \\(p : (a : A) * ((\\(z : A). Unit) a)). second p"
-    "(A : U) -> (p : (a : A) * ((\\(z : A). Unit) a)) -> Unit"
-    "\\(A : U). \\(p : (a : A) * Unit). tt"
+    "\\(A : U 0). \\(p : (a : A) * ((\\(z : A). Unit) a)). second p"
+    "(A : U 0) -> (p : (a : A) * ((\\(z : A). Unit) a)) -> Unit"
+    "\\(A : U 0). \\(p : (a : A) * Unit). tt"
 
 -- | A projection of a pair reduces.
 firstOfPair :: Example
 firstOfPair =
   Example
-    "\\(A : U). \\(a : A). (\\(p : (x : A) * Unit). first p) (a, tt)"
-    "(A : U) -> (a : A) -> A"
-    "\\(A : U). \\(a : A). a"
+    "\\(A : U 0). \\(a : A). (\\(p : (x : A) * Unit). first p) (a, tt)"
+    "(A : U 0) -> (a : A) -> A"
+    "\\(A : U 0). \\(a : A). a"
 
 -- | A redex in the type of a binder is reduced, and the name gets the
 -- reduced type.
 redexInDomain :: Example
 redexInDomain =
   Example
-    "\\(x : (\\(A : U). A) Unit). x"
+    "\\(x : (\\(A : U 0). A) Unit). x"
     "(x : Unit) -> Unit"
     "\\(x : Unit). tt"
 
@@ -97,25 +97,25 @@ conversions :: [(String, Conversion)]
 conversions =
   [ ( "a function and its η-expansion"
     , Conversion
-        "(A : U) -> (f : (x : A) -> A) -> (x : A) -> A"
-        "\\(A : U). \\(f : (x : A) -> A). f"
-        "\\(A : U). \\(f : (x : A) -> A). \\(x : A). f x"
+        "(A : U 0) -> (f : (x : A) -> A) -> (x : A) -> A"
+        "\\(A : U 0). \\(f : (x : A) -> A). f"
+        "\\(A : U 0). \\(f : (x : A) -> A). \\(x : A). f x"
         True )
   , ( "two variables of the unit type"
     , Conversion "(x : Unit) -> (y : Unit) -> Unit" "\\(x : Unit). \\(y : Unit). x" "\\(x : Unit). \\(y : Unit). y" True )
   , ( "two functions into the unit type"
     , Conversion
-        "(A : U) -> (f : (x : A) -> Unit) -> (g : (x : A) -> Unit) -> (x : A) -> Unit"
-        "\\(A : U). \\(f : (x : A) -> Unit). \\(g : (x : A) -> Unit). f"
-        "\\(A : U). \\(f : (x : A) -> Unit). \\(g : (x : A) -> Unit). g"
+        "(A : U 0) -> (f : (x : A) -> Unit) -> (g : (x : A) -> Unit) -> (x : A) -> Unit"
+        "\\(A : U 0). \\(f : (x : A) -> Unit). \\(g : (x : A) -> Unit). f"
+        "\\(A : U 0). \\(f : (x : A) -> Unit). \\(g : (x : A) -> Unit). g"
         True )
   , ( "two variables of a type variable"
-    , Conversion "(A : U) -> (x : A) -> (y : A) -> A" "\\(A : U). \\(x : A). \\(y : A). x" "\\(A : U). \\(x : A). \\(y : A). y" False )
+    , Conversion "(A : U 0) -> (x : A) -> (y : A) -> A" "\\(A : U 0). \\(x : A). \\(y : A). x" "\\(A : U 0). \\(x : A). \\(y : A). y" False )
   , ( "a pair variable and the pair of its projections"
     , Conversion
-        "(A : U) -> (B : (x : A) -> U) -> (p : (x : A) * B x) -> (x : A) * B x"
-        "\\(A : U). \\(B : (x : A) -> U). \\(p : (x : A) * B x). p"
-        "\\(A : U). \\(B : (x : A) -> U). \\(p : (x : A) * B x). (first p, second p)"
+        "(A : U 0) -> (B : (x : A) -> U 0) -> (p : (x : A) * B x) -> (x : A) * B x"
+        "\\(A : U 0). \\(B : (x : A) -> U 0). \\(p : (x : A) * B x). p"
+        "\\(A : U 0). \\(B : (x : A) -> U 0). \\(p : (x : A) * B x). (first p, second p)"
         True )
   , ( "a pair variable of unit components and the pair of units"
     , Conversion
@@ -131,26 +131,26 @@ conversions =
         True )
   , ( "two pair variables whose first components are not of a singleton type"
     , Conversion
-        "(A : U) -> (p : (x : A) * Unit) -> (q : (x : A) * Unit) -> (x : A) * Unit"
-        "\\(A : U). \\(p : (x : A) * Unit). \\(q : (x : A) * Unit). p"
-        "\\(A : U). \\(p : (x : A) * Unit). \\(q : (x : A) * Unit). q"
+        "(A : U 0) -> (p : (x : A) * Unit) -> (q : (x : A) * Unit) -> (x : A) * Unit"
+        "\\(A : U 0). \\(p : (x : A) * Unit). \\(q : (x : A) * Unit). p"
+        "\\(A : U 0). \\(p : (x : A) * Unit). \\(q : (x : A) * Unit). q"
         False )
   , ( "a pair variable and its first component paired with tt"
     , Conversion
-        "(A : U) -> (p : (x : A) * Unit) -> (x : A) * Unit"
-        "\\(A : U). \\(p : (x : A) * Unit). p"
-        "\\(A : U). \\(p : (x : A) * Unit). (first p, tt)"
+        "(A : U 0) -> (p : (x : A) * Unit) -> (x : A) * Unit"
+        "\\(A : U 0). \\(p : (x : A) * Unit). p"
+        "\\(A : U 0). \\(p : (x : A) * Unit). (first p, tt)"
         True )
   , ( "two functions whose type becomes a singleton by β"
     , Conversion
-        "(A : U) -> (f : (y : A) -> Unit) -> (g : (y : A) -> Unit) -> (y : A) -> Unit"
-        "\\(A : U). (\\(B : (x : A) -> U). \\(f : (y : A) -> B y). \\(g : (y : A) -> B y). f) (\\(x : A). Unit)"
-        "\\(A : U). (\\(B : (x : A) -> U). \\(f : (y : A) -> B y). \\(g : (y : A) -> B y). g) (\\(x : A). Unit)"
+        "(A : U 0) -> (f : (y : A) -> Unit) -> (g : (y : A) -> Unit) -> (y : A) -> Unit"
+        "\\(A : U 0). (\\(B : (x : A) -> U 0). \\(f : (y : A) -> B y). \\(g : (y : A) -> B y). f) (\\(x : A). Unit)"
+        "\\(A : U 0). (\\(B : (x : A) -> U 0). \\(f : (y : A) -> B y). \\(g : (y : A) -> B y). g) (\\(x : A). Unit)"
         True )
   , ( "a pair variable and its components swapped"
     , Conversion
-        "(A : U) -> (p : (x : A) * A) -> (x : A) * A"
-        "\\(A : U). \\(p : (x : A) * A). p"
-        "\\(A : U). \\(p : (x : A) * A). (second p, first p)"
+        "(A : U 0) -> (p : (x : A) * A) -> (x : A) * A"
+        "\\(A : U 0). \\(p : (x : A) * A). p"
+        "\\(A : U 0). \\(p : (x : A) * A). (second p, first p)"
         False )
   ]
