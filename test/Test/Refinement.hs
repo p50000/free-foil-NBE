@@ -19,7 +19,7 @@ import Data.Bifoldable          (Bifoldable)
 import Data.Bifunctor           (Bifunctor)
 import Data.Bifunctor.Sum       (Sum (..))
 import Data.Maybe               (fromMaybe)
-import Data.ZipMatchK           (ZipMatchK (..))
+import Data.ZipMatchK           (ZipMatchFoldK, ZipMatchK (..))
 import Data.ZipMatchK.Bifunctor ()
 
 import Test.Tasty
@@ -59,6 +59,7 @@ newtype FunF scope term = FunF (LamF scope term)
   deriving newtype (Functor, Bifunctor, Bifoldable, HasHeads)
 
 deriving newtype instance ZipMatchK FunF
+deriving newtype instance ZipMatchFoldK FunF
 
 lamAt :: Inj FunF sig -> Inj LamF sig
 lamAt (Inj i p) = Inj (i . FunF) (fmap (\(FunF node) -> node) . p)

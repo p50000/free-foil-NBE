@@ -21,7 +21,8 @@
 -- own reductions, not η, and it keeps one signature for terms and values, so
 -- neutral and normal values are not told apart by type (see 'Value').
 -- Conversion checking adds η for the introduction forms a language describes
--- with 'etaMatchWith'.
+-- with 'etaMatchWith'. With 'relateWith' a language may also make it a
+-- check of subtyping.
 --
 -- A language's signature must be a 'Bifunctor' and a 'Bifoldable', both
 -- derivable, and representational in both parameters (see 'evalNode'). It
@@ -60,8 +61,8 @@
 --
 -- A client with a context of its own gives the same pragmas at its context.
 -- For them to reach the rules, the instance marks 'evalSig' @INLINABLE@,
--- and 'etaMatchWith' and 'extendScopedWith', if it gives them, @INLINE@, as
--- well as 'headsWith' of its 'HasHeads' instance.
+-- and 'etaMatchWith', 'extendScopedWith' and 'relateWith', if it gives
+-- them, @INLINE@, as well as 'headsWith' of its 'HasHeads' instance.
 -- Otherwise every node runs the unspecialised evaluator, and conversion and
 -- readback build the nodes these two methods return. A helper of the
 -- language that takes the context, such as lambda-pi's @appValue@, is
@@ -77,6 +78,7 @@ module FreeFoil.NbE
     -- * Evaluation
   , HasHeads (..)
   , Eval (..)
+  , relateNodes
   , eval
   , evalNode
     -- * η
@@ -102,6 +104,7 @@ import           Data.Bifunctor.Sum          (Sum (..))
 import qualified Data.IntMap                 as IntMap
 import           Data.Monoid                 (Any (..))
 import           Data.Void                   (Void, absurd)
+import           Data.ZipMatchK              (ZipMatchFoldK, zipMatchFold2)
 
 -- * Semantic domain
 
@@ -316,6 +319,49 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   {-# INLINE extendScopedWith #-}
   extendScopedWith scoped term = bimap (\a -> scoped a sinkExtend) term
 
+  -- | How conversion compares two nodes of the same constructor, in the
+  -- style of free-foil's 'Data.ZipMatchK.zipMatchFoldK': each pair of
+  -- scoped positions under one binder, with the context under it, and each
+  -- pair of term positions in a context of its own, a head ('headsWith') by
+  -- the last function. 'Nothing' if the nodes do not match. A language whose
+  -- context records the direction of the check makes conversion a check of
+  -- subtyping, here with a contravariant domain:
+  --
+  -- > relateWith _ ctx scoped term hd l r = case (l, r) of
+  -- >   (PiSig domL codL, PiSig domR codR) -> Just $
+  -- >     term domL domR (flipped ctx) <> scoped codL codR (assumeVar (smaller ctx domL domR))
+  -- >   (UniverseSig i, UniverseSig j) | below ctx i j -> Just mempty
+  -- >   _ -> relateNodes ctx term hd (extendScopedWith (\a extend a' -> scoped a a' extend) id l) r
+  --
+  -- By default every node is compared that way ('relateNodes'): the nodes
+  -- match by free-foil's 'ZipMatchFoldK', every scoped position extends the
+  -- context as the left node's 'extendScopedWith' says, and every term
+  -- position keeps the context. The method is @INLINE@, like
+  -- 'extendScopedWith'.
+  relateWith ::
+    (Monoid m, Foil.Distinct n) =>
+    Foil.Scope n ->
+    ctx n ->
+    (a -> a' -> Extend ctx binder sig n -> m) ->
+    (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
+    (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
+    sig a (Value binder sig n) ->
+    sig a' (Value binder sig n) ->
+    Maybe m
+  default relateWith ::
+    (ZipMatchFoldK sig, Monoid m, Foil.Distinct n) =>
+    Foil.Scope n ->
+    ctx n ->
+    (a -> a' -> Extend ctx binder sig n -> m) ->
+    (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
+    (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
+    sig a (Value binder sig n) ->
+    sig a' (Value binder sig n) ->
+    Maybe m
+  {-# INLINE relateWith #-}
+  relateWith _ ctx scoped term hd l r =
+    relateNodes ctx term hd (extendScopedWith (\a extend a' -> scoped a a' extend) id l) r
+
   -- | Refine a variable by the context, in readback and conversion
   -- ('refine'). For example, a language whose context knows types
   -- η-expands @f@ of a function type to @λx. f x@. By default a variable
@@ -347,6 +393,23 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
     Foil.Scope n -> ctx n -> Value binder sig n -> sig a (Value binder sig n) -> Value binder sig n
   {-# INLINE refineSig #-}
   refineSig _ _ value _ = value
+
+-- | Compare two nodes position by position, if they match by free-foil's
+-- 'ZipMatchFoldK': the scoped positions of the left node, as functions of the
+-- right ones, and the term positions in the context, the heads
+-- ('headsWith') by the last function. The default of 'relateWith', also for
+-- a fragment @f@ of a language @sig@.
+relateNodes ::
+  (HasHeads f, ZipMatchFoldK f, Monoid m) =>
+  ctx n ->
+  (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
+  (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
+  f (a' -> m) (Value binder sig n) ->
+  f a' (Value binder sig n) ->
+  Maybe m
+{-# INLINE relateNodes #-}
+relateNodes ctx term hd l r =
+  zipMatchFold2 ($) ($) (headsWith (\v v' -> hd v v' ctx) (\v v' -> term v v' ctx) l) r
 
 -- | Evaluate a term under an environment: look variables up, hand nodes to
 -- 'evalSig'. A variable that the environment does not map is a free name,
