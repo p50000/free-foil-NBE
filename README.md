@@ -25,9 +25,11 @@ baseline of the generic normaliser, which runs within 1.25× of it on the
 lambda-n-ways factorial term and 1.4× on its random corpora. The interface
 is documented in the haddocks of `FreeFoil.NbE`. Evaluation, readback and
 conversion carry, beside the scope, a context the client supplies, which
-may give free names values. Top-level definitions are unfolded this way
-(`FreeFoil.NbE.Definitions`). The demonstration languages use `NoContext`,
-which knows nothing beyond the scope.
+may give free names values. Top-level definitions are such values
+(`FreeFoil.NbE.Definitions`), glued to their names, so that readback can
+keep them folded and conversion compares them folded first. The
+demonstration languages use `NoContext`, which knows nothing beyond the
+scope.
 
 ## Limitations
 
@@ -42,8 +44,9 @@ which knows nothing beyond the scope.
   reading them back and decides η for the introduction forms a language
   marks with `etaMatchWith`, lambdas and pairs in the demos. Readback does
   not.
-- Top-level definitions (`FreeFoil.NbE.Definitions`) are non-recursive and
-  always unfolded: no readback keeps the defined names.
+- Top-level definitions (`FreeFoil.NbE.Definitions`) are non-recursive, and
+  their readback keeps every defined name or none. A context of its own
+  may choose per name (`unfolding`).
 - Annotated terms (free-foil's `AnnSig`) evaluate through the rules of a
   language of fragments, ignoring the annotations. Values and normal forms
   carry the annotation's blank, so conversion ignores the annotations too.
@@ -83,7 +86,7 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 | `src/FreeFoil/NbE.hs` | The core: `Value`, the `Eval` class, the client's context (`NoContext`, `HasDefinitions`, `extendScopedWith`), generic `eval` and `quote`, `nf` and `whnf`. |
 | `src/FreeFoil/NbE/Conversion.hs` | Conversion checking on values: `conv`, `convertible` and `convertibleUnder`. |
 | `src/FreeFoil/NbE/Annotated.hs` | Evaluation of annotated terms, ignoring the annotations: the `Eval` instance of `AnnSig` over a language of fragments. |
-| `src/FreeFoil/NbE/Definitions.hs` | Top-level definitions: a context that gives free names the values of their bodies. |
+| `src/FreeFoil/NbE/Definitions.hs` | Top-level definitions: a context that gives free names the values of their bodies, glued to the names. |
 | `src/FreeFoil/NbE/Sum.hs` | Elimination rules à la carte: `EvalF` for a fragment, the `Eval` instance of a `Sum` of fragments. |
 | `demo/grammar/<Lang>/Syntax.cf`, `gen/<Lang>/` | The LBNF grammar of each demo language and the committed BNFC output. |
 | `demo/<Lang>/Raw.hs`, `Generated.hs` | free-foil's Template Haskell: the configuration and the generated scope-safe syntax. |
