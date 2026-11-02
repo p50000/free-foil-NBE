@@ -16,6 +16,7 @@ import Test.Tasty.QuickCheck
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil (alphaEquiv)
+import FreeFoil.NbE (NoContext (..))
 import FreeFoil.NbE.Conversion (convertible)
 import Naturals (Naturals, nf, nfSubst, numeral, whnf)
 import Naturals.Examples
@@ -87,7 +88,7 @@ propAgreesOpen (OpenTerm raw) =
 
 propConvNf :: OpenTerm -> Bool
 propConvNf (OpenTerm raw) =
-  withOpen raw $ \scope t -> convertible scope t (nfSubst scope t)
+  withOpen raw $ \scope t -> convertible scope NoContext t (nfSubst scope t)
 
 -- | Most random pairs differ, so this mainly checks the negative answers.
 propConvPairs :: OpenTerm -> OpenTerm -> Bool
@@ -95,7 +96,7 @@ propConvPairs (OpenTerm rawT) (OpenTerm rawU) =
   withFreeVars emptyScope Map.empty freeVars $ \scope env ->
     let t = resolve scope env rawT
         u = resolve scope env rawU
-    in convertible scope t u == alphaEquiv scope (nfSubst scope t) (nfSubst scope u)
+    in convertible scope NoContext t u == alphaEquiv scope (nfSubst scope t) (nfSubst scope u)
 
 -- | Resolve a raw term over 'freeVars' and continue in its scope.
 withOpen :: Term -> (forall n. Distinct n => Scope n -> Naturals n -> r) -> r

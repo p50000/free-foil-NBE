@@ -6,6 +6,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE UndecidableInstances  #-}
 -- The Eval instance is an orphan on purpose: it belongs with the language's
 -- dynamics, next to the reference normaliser.
 {-# OPTIONS_GHC -Wno-orphans #-}
@@ -31,7 +32,7 @@ module LambdaPi
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Context, Eval (..), eval, nf, whnf)
+import FreeFoil.NbE (Eval (..), HasDefinitions)
 import qualified FreeFoil.NbE as NbE
 import qualified FreeFoil.NbE.Conversion as Conv
 
@@ -50,19 +51,20 @@ type LambdaPi n = FFTerm n
 -- Specialise the generic loop to this signature. Each recursive function
 -- needs its own pragma, since the nf one alone leaves eval and quote passing
 -- dictionaries.
-{-# SPECIALIZE NbE.nf :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n #-}
+{-# SPECIALIZE NbE.nf :: Distinct n => Scope n -> NbE.NoContext n -> LambdaPi n -> LambdaPi n #-}
 {-# SPECIALIZE NbE.eval ::
       (Distinct o, Distinct i) =>
       Scope o ->
+      NbE.NoContext o ->
       Substitution (NbE.Value FFPattern TermSig) i o ->
       LambdaPi i ->
       NbE.Value FFPattern TermSig o #-}
 {-# SPECIALIZE NbE.quote ::
-      Distinct n => Scope n -> NbE.Value FFPattern TermSig n -> LambdaPi n #-}
+      Distinct n => Scope n -> NbE.NoContext n -> NbE.Value FFPattern TermSig n -> LambdaPi n #-}
 {-# SPECIALIZE Conv.conv ::
       Distinct n =>
-      Scope n -> NbE.Value FFPattern TermSig n -> NbE.Value FFPattern TermSig n -> Bool #-}
-{-# SPECIALIZE Conv.convertible :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n -> Bool #-}
+      Scope n -> NbE.NoContext n -> NbE.Value FFPattern TermSig n -> NbE.Value FFPattern TermSig n -> Bool #-}
+{-# SPECIALIZE Conv.convertible :: Distinct n => Scope n -> NbE.NoContext n -> LambdaPi n -> LambdaPi n -> Bool #-}
 
 -- | Application.
 pattern App :: LambdaPi n -> LambdaPi n -> LambdaPi n
@@ -86,29 +88,46 @@ type Value = NbE.Value FFPattern TermSig
 -- under its captured environment extended with the argument; a neutral head
 -- rebuilds the application. @Lam@ and @Pi@ fall through to the default, so a
 -- @Pi@ keeps its domain as a value and its codomain suspended.
-instance Context ctx => Eval ctx FFPattern TermSig where
-  evalSig ctx env = \case
-    AppSig fun arg -> appValue ctx (eval ctx env fun) (eval ctx env arg)
-    node -> NbE.evalNode ctx env node
+instance (Sinkable ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPattern TermSig where
+  {-# INLINABLE evalSig #-}
+  evalSig scope ctx env = \case
+    AppSig fun arg -> appValue scope ctx (NbE.eval scope ctx env fun) (NbE.eval scope ctx env arg)
+    node -> NbE.evalNode scope ctx env node
 
+  {-# INLINE etaMatchWith #-}
   etaMatchWith scoped _ = \case
-    LamSig body -> Just (LamSig (scoped body (NbE.EtaScoped (\ctx (FFPatternVar x) other ->
-      appValue ctx other (NbE.VVar (nameOf x))))))
+    LamSig body -> Just (LamSig (scoped body (NbE.EtaScoped (\scope ctx (FFPatternVar x) other ->
+      appValue scope ctx other (NbE.VVar (nameOf x))))))
     _ -> Nothing
 
 -- | Apply a function value to an argument value: a suspended lambda is
 -- entered under its environment extended with the argument, any other
 -- function is a stuck application.
-appValue :: (Context ctx, Distinct n) => ctx n -> Value n -> Value n -> Value n
--- The helper takes the context, so it needs the pragma as 'eval' does; a
--- call with the context's dictionary and a bound 'Distinct' one is not
--- specialised on its own, and the β path would pass dictionaries.
-{-# SPECIALIZE appValue :: Distinct n => Scope n -> Value n -> Value n -> Value n #-}
-appValue ctx fun arg = case fun of
+appValue :: (Eval ctx FFPattern TermSig, Distinct n) => Scope n -> ctx n -> Value n -> Value n -> Value n
+-- The helper takes the context, so it is inlined into the rules and
+-- specialised with them at every context. A call with a bound 'Distinct'
+-- dictionary is not specialised on its own.
+{-# INLINE appValue #-}
+appValue scope ctx fun arg = case fun of
   NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
     case assertDistinct binder of
-      Distinct -> eval ctx (addSubst env' binder arg) body
+      Distinct -> NbE.eval scope ctx (addSubst env' binder arg) body
   _ -> NbE.VNode (AppSig fun arg)
+
+-- | Evaluation in a scope, with no other context.
+eval :: (Distinct o, Distinct i) => Scope o -> Substitution Value i o -> LambdaPi i -> Value o
+{-# INLINE eval #-}
+eval scope = NbE.eval scope NbE.NoContext
+
+-- | Normal form in a scope, with no other context.
+nf :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n
+{-# INLINE nf #-}
+nf scope = NbE.nf scope NbE.NoContext
+
+-- | Weak-head normal form in a scope, with no other context.
+whnf :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n
+{-# INLINE whnf #-}
+whnf scope = NbE.whnf scope NbE.NoContext
 
 -- | Weak-head normal form by substitution, the reference for the tests.
 whnfSubst :: Distinct n => Scope n -> LambdaPi n -> LambdaPi n

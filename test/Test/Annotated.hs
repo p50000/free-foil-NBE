@@ -31,6 +31,7 @@ import Fragments.Combined (Combined, Pat, Sig, nf, whnf)
 import qualified FreeFoil.NbE as NbE
 import FreeFoil.NbE.Annotated
 import FreeFoil.NbE.Conversion (convertible)
+import FreeFoil.NbE.Definitions (Defined, define, noDefinitions)
 import Test.Fragments (Mixed (..), budgeted, parseIn, resolve, withFree)
 
 -- | A position, which ignores the term. Matching ignores positions.
@@ -60,10 +61,17 @@ annotations = \case
     a : bifoldMap (\(ScopedAST _ body) -> annotations body) annotations node
 
 nfAnnotated :: Distinct n => Scope n -> Annotated n -> Annotated n
-nfAnnotated = NbE.nf
+nfAnnotated scope = NbE.nf scope NbE.NoContext
 
 whnfAnnotated :: Distinct n => Scope n -> Annotated n -> Annotated n
-whnfAnnotated = NbE.whnf
+whnfAnnotated scope = NbE.whnf scope NbE.NoContext
+
+-- | Contexts of definitions over the annotated and the plain signature.
+noAnnotatedDefinitions :: Defined Pat (AnnSig Loc Sig) n
+noAnnotatedDefinitions = noDefinitions
+
+noPlainDefinitions :: Defined Pat Sig n
+noPlainDefinitions = noDefinitions
 
 tests :: TestTree
 tests =
@@ -90,10 +98,21 @@ tests =
                  Nothing : rest -> any isJust rest @?= True
                  other          -> assertFailure ("the lambda is not blank: " ++ show other)
         ]
+    , testGroup "definitions"
+        [ testCase "a definition unfolds through annotations" $ withFree $ \scope env ->
+            withFresh scope $ \d ->
+              let body = parseIn scope env "\\x. (x, x)"
+                  scope' = extendScope d scope
+                  env' = Map.insert "d" (nameOf d) (Map.map sink env)
+                  term = parseIn scope' env' "d a"
+                  annotated = define scope d (annotatedAt 1 body) noAnnotatedDefinitions
+                  plain = define scope d body noPlainDefinitions
+              in alphaEquiv scope' (unannotated (NbE.nf scope' annotated (annotatedAt 2 term))) (NbE.nf scope' plain term) @?= True
+        ]
     , testGroup "conversion"
         [ testCase "η through an annotation" $
             let closed = parseIn emptyScope Map.empty
-            in convertible emptyScope (annotatedAt 1 (closed "\\f. \\x. f x")) (annotatedAt 2 (closed "\\f. f")) @?= True
+            in convertible emptyScope NbE.NoContext (annotatedAt 1 (closed "\\f. \\x. f x")) (annotatedAt 2 (closed "\\f. f")) @?= True
         , testProperty "agrees with the unannotated language" propConv
         , testProperty "two annotations of one term are convertible" propBlind
         ]
@@ -136,10 +155,10 @@ propConv (Mixed raw1) (Mixed raw2) = withFree $ \scope env ->
   let t1 = resolve scope env raw1
       t2 = resolve scope env raw2
   in ioProperty $ budgeted (nf scope t1, nf scope t2) $ \_ ->
-       convertible scope (annotatedAt 1 t1) (annotatedAt 2 t2) == convertible scope t1 t2
+       convertible scope NbE.NoContext (annotatedAt 1 t1) (annotatedAt 2 t2) == convertible scope NbE.NoContext t1 t2
 
 propBlind :: Mixed -> Property
 propBlind (Mixed raw) = withFree $ \scope env ->
   let t = resolve scope env raw
   in ioProperty $ budgeted (nf scope t) $ \_ ->
-       convertible scope (annotatedAt 1 t) (annotatedAt 2 t)
+       convertible scope NbE.NoContext (annotatedAt 1 t) (annotatedAt 2 t)

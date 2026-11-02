@@ -23,8 +23,10 @@ its baseline and lends it a parser. A hand-written monomorphic NbE is the
 baseline of the generic normaliser, which runs within 1.25× of it on the
 lambda-n-ways factorial term and 1.4× on its random corpora. The interface
 is documented in the haddocks of `FreeFoil.NbE`. Evaluation, readback and
-conversion carry a context the client supplies. The demonstration
-languages use a free-foil `Scope`.
+conversion carry, beside the scope, a context the client supplies, which
+may give free names values. Top-level definitions are unfolded this way
+(`FreeFoil.NbE.Definitions`). The demonstration languages use `NoContext`,
+which knows nothing beyond the scope.
 
 ## Limitations
 
@@ -61,7 +63,7 @@ BNFC-generated parsers are committed, so nothing else is needed.
 
 ```sh
 cabal build all
-cabal test            # 238 tests; --test-show-details=direct lists them
+cabal test            # 247 tests; --test-show-details=direct lists them
 cabal bench nbe-bench
 ```
 
@@ -75,10 +77,10 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 
 | Path | What it is |
 |------|-----------|
-| `src/FreeFoil/NbE.hs` | The core: `Value`, the `Eval` class, the client's `Context`, generic `eval` and `quote`, `nf` and `whnf`. |
+| `src/FreeFoil/NbE.hs` | The core: `Value`, the `Eval` class, the client's context (`NoContext`, `HasDefinitions`, `extendScopedWith`), generic `eval` and `quote`, `nf` and `whnf`. |
 | `src/FreeFoil/NbE/Conversion.hs` | Conversion checking on values: `conv`, `convertible` and `convertibleUnder`. |
 | `src/FreeFoil/NbE/Annotated.hs` | Evaluation of annotated terms, ignoring the annotations: the `Eval` instance of `AnnSig` over a language of fragments. |
-| `src/FreeFoil/NbE/Definitions.hs` | Top-level definitions: a telescope and the environment it gives to `eval`. |
+| `src/FreeFoil/NbE/Definitions.hs` | Top-level definitions: a context that gives free names the values of their bodies. |
 | `src/FreeFoil/NbE/Sum.hs` | Elimination rules à la carte: `EvalF` for a fragment, the `Eval` instance of a `Sum` of fragments. |
 | `demo/grammar/<Lang>/Syntax.cf`, `gen/<Lang>/` | The LBNF grammar of each demo language and the committed BNFC output. |
 | `demo/<Lang>/Raw.hs`, `Generated.hs` | free-foil's Template Haskell: the configuration and the generated scope-safe syntax. |

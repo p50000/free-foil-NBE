@@ -2,10 +2,19 @@
 
 ## Unreleased
 
-- Evaluation, readback and conversion take a context the client supplies
-  (`Context`) where they took a scope. A language's `Eval` instance states
-  what it needs of the context, and the demonstration languages use a
-  free-foil `Scope`.
+- Evaluation, readback and conversion take, beside the scope, a context the
+  client supplies. A language's `Eval` instance states what it needs of the
+  context, and the demonstration languages use `NoContext`, which knows
+  nothing beyond the scope. Under a binder the language says what the
+  context learns (`extendScopedWith`, in the style of `etaMatchWith`). By
+  default a binder only adds its names, so any sinkable context works with
+  any language.
+- A context may give the free names of a language values (`definition`,
+  by default from `HasDefinitions`),
+  which `eval` unfolds where the names are used. `NoContext` gives none.
+  Top-level definitions (`FreeFoil.NbE.Definitions`) are such a context,
+  built one definition at a time, and a term is normalised in it with
+  plain `nf`.
 - Evaluation of annotated terms (`FreeFoil.NbE.Annotated`): a language
   whose rules are fragments evaluates terms over free-foil's `AnnSig`,
   ignoring the annotations. Values carry the annotation's blank.

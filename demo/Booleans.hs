@@ -8,6 +8,7 @@
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE UndecidableInstances  #-}
 -- | Booleans with @if@: a second object language, without binders, showing
 -- that the core is generic in the signature. The language is this signature
 -- plus one 'Eval' instance; evaluation and normalisation are inherited.
@@ -26,7 +27,7 @@ import Control.Monad.Free.Foil
 import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor, deriveBitraversable)
 import Data.ZipMatchK.TH (deriveZipMatchK)
 
-import FreeFoil.NbE (Context, Eval (evalSig), Value (VNode), eval, evalNode)
+import FreeFoil.NbE (Eval (evalSig), HasDefinitions, Value (VNode), eval, evalNode)
 import qualified FreeFoil.NbE as NbE
 
 -- | Two introduction forms and one eliminator; no scoped positions.
@@ -60,14 +61,15 @@ pattern If c t f = Node (IfSig c t f)
 
 -- | The one elimination rule: a canonical condition selects a branch, a
 -- neutral condition leaves the @if@ stuck.
-instance Context ctx => Eval ctx NameBinder BoolSig where
-  evalSig ctx env = \case
-    IfSig cond t f -> case eval ctx env cond of
-      VNode TrueSig  -> eval ctx env t
-      VNode FalseSig -> eval ctx env f
-      cond'          -> VNode (IfSig cond' (eval ctx env t) (eval ctx env f))
-    node -> evalNode ctx env node
+instance (Sinkable ctx, HasDefinitions ctx NameBinder BoolSig) => Eval ctx NameBinder BoolSig where
+  {-# INLINABLE evalSig #-}
+  evalSig scope ctx env = \case
+    IfSig cond t f -> case eval scope ctx env cond of
+      VNode TrueSig  -> eval scope ctx env t
+      VNode FalseSig -> eval scope ctx env f
+      cond'          -> VNode (IfSig cond' (eval scope ctx env t) (eval scope ctx env f))
+    node -> evalNode scope ctx env node
 
 -- | Normal form, inherited from the generic 'NbE.nf'.
 nf :: Distinct n => Scope n -> BoolTm n -> BoolTm n
-nf = NbE.nf
+nf scope = NbE.nf scope NbE.NoContext

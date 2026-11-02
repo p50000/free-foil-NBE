@@ -12,6 +12,7 @@ module Main (main) where
 import Test.Tasty.Bench hiding (nf)
 
 import Control.Monad.Foil
+import FreeFoil.NbE (NoContext (..))
 import FreeFoil.NbE.Conversion (convertible)
 import LambdaPi hiding (whnf)
 import qualified LambdaPi.Monomorphic as Mono
@@ -162,7 +163,7 @@ etaPair d = "\\p. " ++ go "p" d
 compareConvertible :: String -> LambdaPi VoidS -> LambdaPi VoidS -> Benchmark
 compareConvertible name t u =
   bgroup name
-    [ bench "generic" $ whnf (uncurry (convertible emptyScope)) (t, u)
+    [ bench "generic" $ whnf (uncurry (convertible emptyScope NoContext)) (t, u)
     , bench "mono"    $ whnf (uncurry (Mono.convertible emptyScope)) (t, u)
     ]
 
@@ -171,9 +172,9 @@ compareConvertible name t u =
 compareComposedConversion :: String -> LambdaPi VoidS -> LambdaPi VoidS -> Benchmark
 compareComposedConversion name t u =
   bgroup name
-    [ bench "lambda-pi" $ whnf (uncurry (convertible emptyScope)) (t, u)
-    , bench "monolith"  $ whnf (uncurry (convertible emptyScope)) (tm, um)
-    , bench "composed"  $ whnf (uncurry (convertible emptyScope)) (Composed.fromMonolith tm, Composed.fromMonolith um)
+    [ bench "lambda-pi" $ whnf (uncurry (convertible emptyScope NoContext)) (t, u)
+    , bench "monolith"  $ whnf (uncurry (convertible emptyScope NoContext)) (tm, um)
+    , bench "composed"  $ whnf (uncurry (convertible emptyScope NoContext)) (Composed.fromMonolith tm, Composed.fromMonolith um)
     ]
   where
     tm = monolithic t
@@ -183,8 +184,8 @@ compareComposedConversion name t u =
 compareFullConversion :: String -> Monolith.Monolith VoidS -> Monolith.Monolith VoidS -> Benchmark
 compareFullConversion name t u =
   bgroup name
-    [ bench "monolith" $ whnf (uncurry (convertible emptyScope)) (t, u)
-    , bench "composed" $ whnf (uncurry (convertible emptyScope)) (Composed.fromMonolith t, Composed.fromMonolith u)
+    [ bench "monolith" $ whnf (uncurry (convertible emptyScope NoContext)) (t, u)
+    , bench "composed" $ whnf (uncurry (convertible emptyScope NoContext)) (Composed.fromMonolith t, Composed.fromMonolith u)
     ]
 
 -- | Normalise @t@ three ways and force each result fully.
@@ -248,10 +249,10 @@ main =
         ]
     , bgroup "Conversion: η, lambda-pi vs composed"
         [ bgroup "eta, 1000 arguments"
-            [ bench "lambda-pi" $ whnf (uncurry (convertible emptyScope)) (fromString (etaFunction 1000) :: LambdaPi VoidS, "\\f. f")
-            , bench "composed"  $ whnf (uncurry (convertible emptyScope)) (Composed.fromMonolith (fromString (etaFunction 1000)), Composed.fromMonolith "\\f. f")
+            [ bench "lambda-pi" $ whnf (uncurry (convertible emptyScope NoContext)) (fromString (etaFunction 1000) :: LambdaPi VoidS, "\\f. f")
+            , bench "composed"  $ whnf (uncurry (convertible emptyScope NoContext)) (Composed.fromMonolith (fromString (etaFunction 1000)), Composed.fromMonolith "\\f. f")
             ]
         , bench "pair eta, depth 10 (composed)" $
-            whnf (uncurry (convertible emptyScope)) (Composed.fromMonolith (fromString (etaPair 10)), Composed.fromMonolith "\\p. p")
+            whnf (uncurry (convertible emptyScope NoContext)) (Composed.fromMonolith (fromString (etaPair 10)), Composed.fromMonolith "\\p. p")
         ]
     ]

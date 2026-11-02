@@ -29,7 +29,7 @@ import Data.Bifunctor.TH       (deriveBifoldable, deriveBifunctor, deriveBitrave
 import Data.ZipMatchK.TH       (deriveZipMatchK)
 import GHC.Generics            (Generic)
 
-import FreeFoil.NbE            (Context, EtaTerm (..), Value (..), eval, evalNode)
+import FreeFoil.NbE            (EtaTerm (..), Value (..), eval, evalNode)
 import FreeFoil.NbE.Sum
 
 -- | Pairs: @(t, u)@, @fst t@, @snd t@ and @split t as (x, y) in u@.
@@ -47,22 +47,22 @@ deriveBitraversable ''PairF
 deriveZipMatchK ''PairF
 instance (NFData scope, NFData term) => NFData (PairF scope term)
 
-instance (Context ctx, CoSinkable binder) => EvalF ctx binder PairF where
+instance (Sinkable ctx, CoSinkable binder) => EvalF ctx binder PairF where
   {-# INLINE evalF #-}
-  evalF pos ctx env = \case
-    FstF p -> fstValue pos (eval ctx env p)
-    SndF p -> sndValue pos (eval ctx env p)
+  evalF pos scope ctx env = \case
+    FstF p -> fstValue pos (eval scope ctx env p)
+    SndF p -> sndValue pos (eval scope ctx env p)
     SplitF p (ScopedAST binder body) ->
-      case eval ctx env p of
+      case eval scope ctx env p of
         VNode node | Just (PairF a b) <- prj pos node ->
           case assertDistinct binder of
-            Distinct -> eval ctx (addSubstPattern env binder [a, b]) body
+            Distinct -> eval scope ctx (addSubstPattern env binder [a, b]) body
         p' -> VSuspended env (inj pos (SplitF p' (ScopedAST binder body)))
-    node -> evalNode ctx env (inj pos node)
+    node -> evalNode scope ctx env (inj pos node)
 
   {-# INLINE etaMatchWithF #-}
   etaMatchWithF pos _ term = \case
-    PairF a b -> Just (PairF (term a (EtaTerm (const (fstValue pos)))) (term b (EtaTerm (const (sndValue pos)))))
+    PairF a b -> Just (PairF (term a (EtaTerm (\_ _ -> (fstValue pos)))) (term b (EtaTerm (\_ _ -> (sndValue pos)))))
     _ -> Nothing
 
 -- | The first component of a pair value of the fragment; stuck on anything

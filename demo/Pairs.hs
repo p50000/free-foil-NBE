@@ -6,6 +6,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE UndecidableInstances  #-}
 -- The Eval instance is an orphan on purpose: it belongs with the language's
 -- dynamics, next to the reference normaliser.
 {-# OPTIONS_GHC -Wno-orphans #-}
@@ -37,7 +38,7 @@ module Pairs
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Context, Eval (..), eval, nf, whnf)
+import FreeFoil.NbE (Eval (..), HasDefinitions)
 import qualified FreeFoil.NbE as NbE
 
 import Pairs.Generated
@@ -54,15 +55,16 @@ import Pairs.Generated
 type Pairs n = FFTerm n
 
 -- Specialise the generic loop to this signature, as in "LambdaPi".
-{-# SPECIALIZE NbE.nf :: Distinct n => Scope n -> Pairs n -> Pairs n #-}
+{-# SPECIALIZE NbE.nf :: Distinct n => Scope n -> NbE.NoContext n -> Pairs n -> Pairs n #-}
 {-# SPECIALIZE NbE.eval ::
       (Distinct o, Distinct i) =>
       Scope o ->
+      NbE.NoContext o ->
       Substitution (NbE.Value FFPattern TermSig) i o ->
       Pairs i ->
       NbE.Value FFPattern TermSig o #-}
 {-# SPECIALIZE NbE.quote ::
-      Distinct n => Scope n -> NbE.Value FFPattern TermSig n -> Pairs n #-}
+      Distinct n => Scope n -> NbE.NoContext n -> NbE.Value FFPattern TermSig n -> Pairs n #-}
 
 -- | @(a, b)@.
 pattern Pair :: Pairs n -> Pairs n -> Pairs n
@@ -92,20 +94,22 @@ type Value = NbE.Value FFPattern TermSig
 -- evaluated, so readback normalises under its two names. A pair falls
 -- through to the default and becomes a 'NbE.VNode' whose components are
 -- lazy values.
-instance Context ctx => Eval ctx FFPattern TermSig where
-  evalSig ctx env = \case
-    FstSig p -> fstValue (eval ctx env p)
-    SndSig p -> sndValue (eval ctx env p)
+instance (Sinkable ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPattern TermSig where
+  {-# INLINABLE evalSig #-}
+  evalSig scope ctx env = \case
+    FstSig p -> fstValue (NbE.eval scope ctx env p)
+    SndSig p -> sndValue (NbE.eval scope ctx env p)
     SplitSig p (ScopedAST (FFPatternPair x y) body) ->
-      case eval ctx env p of
+      case NbE.eval scope ctx env p of
         NbE.VNode (PairSig a b) ->
           case assertDistinct (FFPatternPair x y) of
-            Distinct -> eval ctx (addSubst (addSubst env x a) y b) body
+            Distinct -> NbE.eval scope ctx (addSubst (addSubst env x a) y b) body
         p' -> NbE.VSuspended env (SplitSig p' (ScopedAST (FFPatternPair x y) body))
-    node -> NbE.evalNode ctx env node
+    node -> NbE.evalNode scope ctx env node
 
+  {-# INLINE etaMatchWith #-}
   etaMatchWith _ term = \case
-    PairSig a b -> Just (PairSig (term a (NbE.EtaTerm (const fstValue))) (term b (NbE.EtaTerm (const sndValue))))
+    PairSig a b -> Just (PairSig (term a (NbE.EtaTerm (\_ _ -> fstValue))) (term b (NbE.EtaTerm (\_ _ -> sndValue))))
     _ -> Nothing
 
 -- | The first component of a pair value; stuck on anything else.
@@ -119,6 +123,21 @@ sndValue :: Value n -> Value n
 sndValue p = case p of
   NbE.VNode (PairSig _ b) -> b
   _                       -> NbE.VNode (SndSig p)
+
+-- | Evaluation in a scope, with no other context.
+eval :: (Distinct o, Distinct i) => Scope o -> Substitution Value i o -> Pairs i -> Value o
+{-# INLINE eval #-}
+eval scope = NbE.eval scope NbE.NoContext
+
+-- | Normal form in a scope, with no other context.
+nf :: Distinct n => Scope n -> Pairs n -> Pairs n
+{-# INLINE nf #-}
+nf scope = NbE.nf scope NbE.NoContext
+
+-- | Weak-head normal form in a scope, with no other context.
+whnf :: Distinct n => Scope n -> Pairs n -> Pairs n
+{-# INLINE whnf #-}
+whnf scope = NbE.whnf scope NbE.NoContext
 
 -- | Weak-head normal form by substitution, the reference for the tests.
 whnfSubst :: Distinct n => Scope n -> Pairs n -> Pairs n

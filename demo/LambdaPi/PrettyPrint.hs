@@ -15,7 +15,7 @@ import Control.Monad.Foil.Internal (Substitution (UnsafeSubstitution))
 import Control.Monad.Free.Foil
 import qualified Data.IntMap as IntMap
 import Data.Void (absurd)
-import FreeFoil.NbE (quote)
+import FreeFoil.NbE (NoContext (..), quote)
 import qualified FreeFoil.NbE as NbE
 import LambdaPi (Value)
 import LambdaPi.Generated (TermSig (AppSig, LamSig, PiSig), FFPattern (FFPatternVar), fromTerm)
@@ -23,7 +23,7 @@ import LambdaPi.Syntax.Print (printTree)
 
 -- | Quote a value back to a term and print it.
 ppValue :: Distinct n => Scope n -> Value n -> String
-ppValue scope = printTree . fromTerm . quote scope
+ppValue scope = printTree . fromTerm . quote scope NoContext
 
 -- | Print the structure of a value: @#n@ for a neutral variable, @{node}@ for
 -- a node, and @body |env=[...]@ for a suspended body with its environment.

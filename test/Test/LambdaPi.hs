@@ -17,6 +17,7 @@ import Test.Tasty.QuickCheck
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
+import FreeFoil.NbE (NoContext (..))
 import FreeFoil.NbE.Conversion (convertible)
 import LambdaPi
 import LambdaPi.Examples
@@ -224,7 +225,7 @@ conversionTests =
 convertibleAs :: Bool -> TestName -> String -> String -> TestTree
 convertibleAs expected name t u =
   testCase name $ do
-    convertible emptyScope (parseClosed t) (parseClosed u) @?= expected
+    convertible emptyScope NoContext (parseClosed t) (parseClosed u) @?= expected
     Mono.convertible emptyScope (parseClosed t) (parseClosed u) @?= expected
   where
     parseClosed = either error id . parseLambdaPi
@@ -235,7 +236,7 @@ propConvNf :: Closed -> Property
 propConvNf (Closed t) =
   ioProperty $
     agreesWithin "convertible" (==)
-      (normal `deepseq` True) (convertible emptyScope t normal)
+      (normal `deepseq` True) (convertible emptyScope NoContext t normal)
   where
     normal = nfSubst emptyScope t
 
@@ -245,7 +246,7 @@ propConvEtaNf :: Closed -> Property
 propConvEtaNf (Closed t) =
   ioProperty $
     agreesWithin "convertible" (==)
-      (normal `deepseq` True) (convertible emptyScope t normal)
+      (normal `deepseq` True) (convertible emptyScope NoContext t normal)
   where
     normal = betaEtaNormal t
 
@@ -256,7 +257,7 @@ propConvPairs (Closed t) (Closed u) =
   ioProperty $
     agreesWithin "convertible" (==)
       (alphaEquiv emptyScope (betaEtaNormal t) (betaEtaNormal u))
-      (convertible emptyScope t u)
+      (convertible emptyScope NoContext t u)
 
 -- | The generic and the monomorphic conversion check agree.
 propConvMono :: Closed -> Closed -> Property
@@ -264,7 +265,7 @@ propConvMono (Closed t) (Closed u) =
   ioProperty $
     agreesWithin "convertible" (==)
       (Mono.convertible emptyScope t u)
-      (convertible emptyScope t u)
+      (convertible emptyScope NoContext t u)
 
 -- | The βη-normal form of a closed term: its reference normal form with every
 -- η-redex contracted. Contraction keeps a β-normal term β-normal, and βη is

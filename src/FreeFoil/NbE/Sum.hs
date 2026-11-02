@@ -1,8 +1,10 @@
+{-# LANGUAGE DefaultSignatures     #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE UndecidableInstances  #-}
 -- The Eval instance for a sum of fragments is an orphan on purpose: it
 -- belongs with 'EvalF', which the core does not know.
 {-# OPTIONS_GHC -Wno-orphans #-}
@@ -32,10 +34,10 @@ module FreeFoil.NbE.Sum
 import qualified Control.Monad.Foil      as Foil
 import           Control.Monad.Free.Foil (AST, ScopedAST)
 import           Data.Bifoldable         (Bifoldable)
-import           Data.Bifunctor          (Bifunctor)
+import           Data.Bifunctor          (Bifunctor (..))
 import           Data.Bifunctor.Sum      (Sum (..))
 
-import           FreeFoil.NbE            (Context, EtaScoped, EtaTerm, Eval (..), Value, evalNode)
+import           FreeFoil.NbE            (EtaScoped, EtaTerm, Eval (..), Extend, HasDefinitions, Value, evalNode, sinkExtend)
 
 -- | The position of a fragment @f@ in a language @sig@: how to build one of
 -- its nodes in the language and how to recognise one. This is Swierstra's
@@ -76,20 +78,20 @@ inR (Inj i p) = Inj (i . R2) (\node -> p node >>= \case
 -- forms in the result with 'prj' and rebuilds a stuck node with 'inj'. Every
 -- other node falls through to 'evalNode' on the injected node, which is the
 -- default for a fragment without eliminators.
-class (Context ctx, Bifunctor f, Bifoldable f) => EvalF ctx binder f where
+class (Bifunctor f, Bifoldable f) => EvalF ctx binder f where
   evalF ::
     (Eval ctx binder sig, Foil.Distinct o, Foil.Distinct i) =>
     Inj f sig ->
+    Foil.Scope o ->
     ctx o ->
     Foil.Substitution (Value binder sig) i o ->
     f (ScopedAST binder sig i) (AST binder sig i) ->
     Value binder sig o
-  evalF pos ctx env node = evalNode ctx env (inj pos node)
+  evalF pos scope ctx env node = evalNode scope ctx env (inj pos node)
 
   -- | The η laws of the fragment's introduction forms at a position, as
   -- 'etaMatchWith'. By default there are none.
   etaMatchWithF ::
-    Eval ctx binder sig =>
     Inj f sig ->
     (a -> EtaScoped ctx binder sig n -> c) ->
     (b -> EtaTerm ctx binder sig n -> d) ->
@@ -98,21 +100,47 @@ class (Context ctx, Bifunctor f, Bifoldable f) => EvalF ctx binder f where
   {-# INLINE etaMatchWithF #-}
   etaMatchWithF _ _ _ _ = Nothing
 
+  -- | The context under the binders of the fragment's scoped positions at a
+  -- position, as 'extendScopedWith'. By default a binder only adds its
+  -- names.
+  extendScopedWithF ::
+    Foil.Distinct n =>
+    Inj f sig ->
+    (a -> Extend ctx binder sig n -> c) ->
+    (Value binder sig n -> d) ->
+    f a (Value binder sig n) ->
+    f c d
+  default extendScopedWithF ::
+    (Foil.Sinkable ctx, Foil.Distinct n) =>
+    Inj f sig ->
+    (a -> Extend ctx binder sig n -> c) ->
+    (Value binder sig n -> d) ->
+    f a (Value binder sig n) ->
+    f c d
+  {-# INLINE extendScopedWithF #-}
+  extendScopedWithF _ scoped term = bimap (\a -> scoped a sinkExtend) term
+
 -- | The rules of a sum are the rules of its summands.
 instance (EvalF ctx binder f, EvalF ctx binder g) => EvalF ctx binder (Sum f g) where
   {-# INLINE evalF #-}
-  evalF pos ctx env = \case
-    L2 node -> evalF (inL pos) ctx env node
-    R2 node -> evalF (inR pos) ctx env node
+  evalF pos scope ctx env = \case
+    L2 node -> evalF (inL pos) scope ctx env node
+    R2 node -> evalF (inR pos) scope ctx env node
   {-# INLINE etaMatchWithF #-}
   etaMatchWithF pos scoped term = \case
     L2 node -> L2 <$> etaMatchWithF (inL pos) scoped term node
     R2 node -> R2 <$> etaMatchWithF (inR pos) scoped term node
+  {-# INLINE extendScopedWithF #-}
+  extendScopedWithF pos scoped term = \case
+    L2 node -> L2 (extendScopedWithF (inL pos) scoped term node)
+    R2 node -> R2 (extendScopedWithF (inR pos) scoped term node)
 
 -- | A sum of fragments is a language: its rules are those of the sum at the
 -- root position.
-instance (EvalF ctx binder f, EvalF ctx binder g) => Eval ctx binder (Sum f g) where
+instance (HasDefinitions ctx binder (Sum f g), EvalF ctx binder f, EvalF ctx binder g) => Eval ctx binder (Sum f g) where
   {-# INLINE evalSig #-}
   evalSig = evalF root
   {-# INLINE etaMatchWith #-}
   etaMatchWith scoped term = etaMatchWithF root scoped term
+  {-# INLINE extendScopedWith #-}
+  extendScopedWith scoped term = extendScopedWithF root scoped term
