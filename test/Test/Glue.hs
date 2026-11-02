@@ -1,11 +1,14 @@
 {-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 -- | Definitions with glue, on the composed language: the folded readback
 -- keeps the defined names, the unfolded readback gives the normal form, and
 -- conversion compares defined names folded first, without unfolding them.
--- The tests follow those of #29.
+-- The tests follow those of #29. A context that never speculates decides
+-- conversion as the definitions do.
 module Test.Glue (tests) where
 
 import           System.Timeout           (timeout)
@@ -14,9 +17,13 @@ import           Test.Tasty.HUnit
 import           Test.Tasty.QuickCheck
 
 import           Control.Monad.Free.Foil  (alphaEquiv)
+import           Control.Monad.Foil       (Sinkable (..))
 import qualified FreeFoil.NbE             as NbE
+import           FreeFoil.NbE             (HasDefinitions (..))
 import           FreeFoil.NbE.Conversion  (convertible)
-import           FreeFoil.NbE.Definitions (Unfolding (..), withUnfolding)
+import           FreeFoil.NbE.Definitions (Defined, Unfolding (..), withUnfolding)
+
+import           Fragments.Combined       (Pat, Sig)
 
 import           Test.Definitions         (withDefined)
 import           Test.Fragments           (budgeted, natural, parseIn, resolve, withFree)
@@ -52,8 +59,37 @@ tests = testGroup "glue (composed language)"
               let t = parseIn scope env "a omega"
               result <- timeout 1000000 (pure $! convertible scope ctx t t)
               result @?= Just True
+      , testProperty "agrees with a context that never speculates" propNoSpeculation
       ]
   ]
+
+-- | The definitions with the default strategy of conversion: every glued
+-- value is unfolded, and no folded sides are compared.
+newtype NoSpeculation n = NoSpeculation (Defined Pat Sig n)
+
+instance Sinkable NoSpeculation where
+  sinkabilityProof rename (NoSpeculation defined) = NoSpeculation (sinkabilityProof rename defined)
+
+instance HasDefinitions NoSpeculation Pat Sig where
+  contextDefinition scope (NoSpeculation defined) = contextDefinition scope defined
+  contextUnfolding scope (NoSpeculation defined) = contextUnfolding scope defined
+
+-- | On random pairs of mixed terms over the definitions, and on a term and
+-- itself, conversion with smalltt's strategy agrees with conversion that
+-- unfolds every definition. A case is discarded when a check does not
+-- finish.
+propNoSpeculation :: Property
+propNoSpeculation =
+  forAll (sized (genTerm names)) $ \rawT ->
+  forAll (oneof [pure rawT, sized (genTerm names)]) $ \rawU ->
+    withFree $ \scope0 env0 ->
+      withDefined scope0 env0 constant $ \ctx scope env ->
+        let t = resolve scope env rawT
+            u = resolve scope env rawU
+        in ioProperty $ budgeted (convertible scope ctx t u, convertible scope (NoSpeculation ctx) t u) $
+             \(speculating, unfolding) -> speculating == unfolding
+  where
+    names = map fst constant ++ ["a", "b"]
 
 -- * Programs
 
