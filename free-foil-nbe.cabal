@@ -35,6 +35,7 @@ library
         , FreeFoil.NbE.Conversion
         , FreeFoil.NbE.Definitions
         , FreeFoil.NbE.Sum
+    other-modules:    FreeFoil.NbE.Internal.Value
     build-depends:    base >=4.19 && <4.23
         , bifunctors
         , free-foil ^>=0.6.1

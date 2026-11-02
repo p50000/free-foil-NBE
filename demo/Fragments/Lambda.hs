@@ -29,7 +29,7 @@ import Data.Bifunctor.TH       (deriveBifoldable, deriveBifunctor, deriveBitrave
 import Data.ZipMatchK.TH       (deriveZipMatchK)
 import GHC.Generics            (Generic)
 
-import FreeFoil.NbE            (EtaScoped (..), Eval, HasHeads (..), Value (..), eval, evalNode)
+import FreeFoil.NbE            (EtaScoped (..), Eval, HasHeads (..), Value, Value' (..), eliminate, eval, evalNode, vnode, vvar)
 import FreeFoil.NbE.Sum
 
 -- | Functions: @λx. t@, @t u@ and @Π (x : a). b@.
@@ -63,7 +63,7 @@ instance (Sinkable ctx, CoSinkable binder) => EvalF ctx binder LamF where
   etaMatchWithF pos scoped _ = \case
     LamF body -> Just (LamF (scoped body (EtaScoped (\scope ctx binder other ->
       case namesOfPattern binder of
-        [x] -> appValue pos scope ctx other (VVar x)
+        [x] -> appValue pos scope ctx other (vvar x)
         _   -> error "Fragments.Lambda: the η law of a lambda needs a pattern that binds one name"))))
     _ -> Nothing
 
@@ -75,9 +75,9 @@ appValue ::
   (Eval ctx binder sig, CoSinkable binder, Distinct n) =>
   Inj LamF sig -> Scope n -> ctx n -> Value binder sig n -> Value binder sig n -> Value binder sig n
 {-# INLINE appValue #-}
-appValue pos scope ctx fun arg = case fun of
+appValue pos scope ctx fun arg = eliminate fun $ \case
   VSuspended env' node
     | Just (LamF (ScopedAST binder body)) <- prj pos node ->
         case assertDistinct binder of
           Distinct -> eval scope ctx (addSubstPattern env' binder [arg]) body
-  _ -> VNode (inj pos (AppF fun arg))
+  Stuck fun' -> vnode (inj pos (AppF fun' arg))

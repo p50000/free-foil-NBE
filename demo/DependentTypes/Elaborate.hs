@@ -40,14 +40,14 @@ import DependentTypes.Parser (parseOpen)
 -- | Check a term against a type.
 check :: Distinct n => Scope n -> Typing n -> Raw n -> TypeValue n -> Either String (Elaborated n)
 check scope typing term ty = case term of
-  Node (PairSig a b) -> case ty of
+  Node (PairSig a b) -> case NbE.force ty of
     NbE.VSuspended env (AnnSig _ (SigmaSig dom cod)) -> do
       a' <- check scope typing a dom
       b' <- check scope typing b (codomainAt scope typing env cod (evalIn scope typing a'))
       pure (annotated (quoteIn scope typing ty) (PairSig a' b'))
     _ -> Left ("a pair against a type that is not a Σ: " ++ show (quoteIn scope typing ty))
   Node (LamSig dom (ScopedAST pat body))
-    | NbE.VSuspended env (AnnSig _ (PiSig piDom cod)) <- ty -> case pat of
+    | NbE.VSuspended env (AnnSig _ (PiSig piDom cod)) <- NbE.force ty -> case pat of
         FFPatternVar x -> case (assertDistinct x, assertExt x) of
           (Distinct, Ext) -> do
             (dom', _) <- inferType scope typing dom
@@ -56,7 +56,7 @@ check scope typing term ty = case term of
               then do
                 let scope' = extendScope x scope
                     typing' = assume x domV typing
-                body' <- check scope' typing' body (codomainAt scope' typing' (sink env) cod (NbE.VVar (nameOf x)))
+                body' <- check scope' typing' body (codomainAt scope' typing' (sink env) cod (NbE.vvar (nameOf x)))
                 pure (annotated (quoteIn scope typing ty) (LamSig dom' (ScopedAST pat body')))
               else Left ("the domain " ++ show dom' ++ " is not " ++ show (quoteIn scope typing piDom))
   _ -> do
@@ -75,7 +75,7 @@ infer scope typing = \case
   Node TTSig -> pure (annotated unitTerm TTSig, unitType)
   Node (AppSig fun arg) -> do
     (fun', funTy) <- infer scope typing fun
-    case funTy of
+    case NbE.force funTy of
       NbE.VSuspended env (AnnSig _ (PiSig dom cod)) -> do
         arg' <- check scope typing arg dom
         let ty = codomainAt scope typing env cod (evalIn scope typing arg')
@@ -110,7 +110,7 @@ inferPair ::
   Scope n -> Typing n -> Raw n -> Either String (Elaborated n, TypeValue n, Value n -> TypeValue n)
 inferPair scope typing p = do
   (p', ty) <- infer scope typing p
-  case ty of
+  case NbE.force ty of
     NbE.VSuspended env (AnnSig _ (SigmaSig a cod)) -> pure (p', a, codomainAt scope typing env cod)
     _ -> Left ("not a pair: " ++ show p')
 
@@ -118,17 +118,17 @@ inferPair scope typing p = do
 inferType :: Distinct n => Scope n -> Typing n -> Raw n -> Either String (Elaborated n, Integer)
 inferType scope typing ty = do
   (ty', u) <- infer scope typing ty
-  case u of
+  case NbE.force u of
     NbE.VNode (AnnSig _ (UniverseSig i)) -> pure (ty', i)
     _ -> Left ("not a type: " ++ show ty')
 
 -- | The level of the universe of a type value.
 levelOf :: Typing n -> TypeValue n -> Either String Integer
-levelOf typing ty = case universeOf of
+levelOf typing ty = case NbE.force universeOf of
   NbE.VNode (AnnSig _ (UniverseSig i)) -> pure i
   _ -> Left "a type whose type is not a universe"
   where
-    universeOf = case ty of
+    universeOf = case NbE.force ty of
       NbE.VVar x -> typeOf x typing
       NbE.VNode (AnnSig ann node) -> typeOfNode ann node
       NbE.VSuspended _ (AnnSig ann node) -> typeOfNode ann node

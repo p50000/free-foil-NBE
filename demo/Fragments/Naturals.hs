@@ -28,7 +28,7 @@ import Data.Bifunctor.TH       (deriveBifoldable, deriveBifunctor, deriveBitrave
 import Data.ZipMatchK.TH       (deriveZipMatchK)
 import GHC.Generics            (Generic)
 
-import FreeFoil.NbE            (HasHeads (..), Value (..), eval, evalNode)
+import FreeFoil.NbE            (HasHeads (..), Value' (..), eliminate, eval, evalNode, vsuspended)
 import FreeFoil.NbE.Sum
 
 -- | Naturals: @zero@, @suc t@ and @natrec n { zero -> z ; suc k, r -> s }@.
@@ -59,11 +59,11 @@ instance (Sinkable ctx, CoSinkable binder) => EvalF ctx binder NatF where
       case assertDistinct binder of
         Distinct ->
           let zeroCase = eval scope ctx env z
-              recurse m = case m of
+              recurse m = eliminate m $ \case
                 VNode node
                   | Just ZeroF <- prj pos node -> zeroCase
                   | Just (SucF p) <- prj pos node ->
                       eval scope ctx (addSubstPattern env binder [p, recurse p]) s
-                m' -> VSuspended env (inj pos (NatRecF m' zeroCase (ScopedAST binder s)))
+                Stuck m' -> vsuspended env (inj pos (NatRecF m' zeroCase (ScopedAST binder s)))
           in recurse (eval scope ctx env n)
     node -> evalNode scope ctx env (inj pos node)

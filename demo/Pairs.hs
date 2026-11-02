@@ -110,11 +110,11 @@ instance (Sinkable ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPatt
     FstSig p -> fstValue (NbE.eval scope ctx env p)
     SndSig p -> sndValue (NbE.eval scope ctx env p)
     SplitSig p (ScopedAST (FFPatternPair x y) body) ->
-      case NbE.eval scope ctx env p of
+      NbE.eliminate (NbE.eval scope ctx env p) $ \case
         NbE.VNode (PairSig a b) ->
           case assertDistinct (FFPatternPair x y) of
             Distinct -> NbE.eval scope ctx (addSubst (addSubst env x a) y b) body
-        p' -> NbE.VSuspended env (SplitSig p' (ScopedAST (FFPatternPair x y) body))
+        NbE.Stuck p' -> NbE.vsuspended env (SplitSig p' (ScopedAST (FFPatternPair x y) body))
     node -> NbE.evalNode scope ctx env node
 
   {-# INLINE etaMatchWith #-}
@@ -124,15 +124,15 @@ instance (Sinkable ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPatt
 
 -- | The first component of a pair value; stuck on anything else.
 fstValue :: Value n -> Value n
-fstValue p = case p of
+fstValue p = NbE.eliminate p $ \case
   NbE.VNode (PairSig a _) -> a
-  _                       -> NbE.VNode (FstSig p)
+  NbE.Stuck p'            -> NbE.vnode (FstSig p')
 
 -- | The second component of a pair value; stuck on anything else.
 sndValue :: Value n -> Value n
-sndValue p = case p of
+sndValue p = NbE.eliminate p $ \case
   NbE.VNode (PairSig _ b) -> b
-  _                       -> NbE.VNode (SndSig p)
+  NbE.Stuck p'            -> NbE.vnode (SndSig p')
 
 -- | Evaluation in a scope, with no other context.
 eval :: (Distinct o, Distinct i) => Scope o -> Substitution Value i o -> Pairs i -> Value o
