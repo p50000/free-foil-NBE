@@ -36,8 +36,9 @@ import           Control.Monad.Free.Foil (AST, ScopedAST)
 import           Data.Bifoldable         (Bifoldable)
 import           Data.Bifunctor          (Bifunctor (..))
 import           Data.Bifunctor.Sum      (Sum (..))
+import           Data.ZipMatchK          (ZipMatchFoldK)
 
-import           FreeFoil.NbE            (EtaScoped, EtaTerm, Eval (..), Extend, HasDefinitions, HasHeads, Value, evalNode, sinkExtend)
+import           FreeFoil.NbE            (EtaScoped, EtaTerm, Eval (..), Extend, HasDefinitions, HasHeads, Value, evalNode, relateNodes, sinkExtend)
 
 -- | The position of a fragment @f@ in a language @sig@: how to build one of
 -- its nodes in the language and how to recognise one. This is Swierstra's
@@ -120,6 +121,34 @@ class (Bifunctor f, Bifoldable f, HasHeads f) => EvalF ctx binder f where
   {-# INLINE extendScopedWithF #-}
   extendScopedWithF _ scoped term = bimap (\a -> scoped a sinkExtend) term
 
+  -- | How conversion compares two nodes of the fragment at a position, as
+  -- 'relateWith' does for a language.
+  relateWithF ::
+    (Monoid m, Foil.Distinct n) =>
+    Inj f sig ->
+    Foil.Scope n ->
+    ctx n ->
+    (a -> a' -> Extend ctx binder sig n -> m) ->
+    (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
+    (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
+    f a (Value binder sig n) ->
+    f a' (Value binder sig n) ->
+    Maybe m
+  default relateWithF ::
+    (ZipMatchFoldK f, Monoid m, Foil.Distinct n) =>
+    Inj f sig ->
+    Foil.Scope n ->
+    ctx n ->
+    (a -> a' -> Extend ctx binder sig n -> m) ->
+    (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
+    (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
+    f a (Value binder sig n) ->
+    f a' (Value binder sig n) ->
+    Maybe m
+  {-# INLINE relateWithF #-}
+  relateWithF pos _ ctx scoped term hd l r =
+    relateNodes ctx term hd (extendScopedWithF pos (\a extend a' -> scoped a a' extend) id l) r
+
 -- | The rules of a sum are the rules of its summands.
 instance (EvalF ctx binder f, EvalF ctx binder g) => EvalF ctx binder (Sum f g) where
   {-# INLINE evalF #-}
@@ -134,6 +163,11 @@ instance (EvalF ctx binder f, EvalF ctx binder g) => EvalF ctx binder (Sum f g) 
   extendScopedWithF pos scoped term = \case
     L2 node -> L2 (extendScopedWithF (inL pos) scoped term node)
     R2 node -> R2 (extendScopedWithF (inR pos) scoped term node)
+  {-# INLINE relateWithF #-}
+  relateWithF pos scope ctx scoped term hd l r = case (l, r) of
+    (L2 a, L2 b) -> relateWithF (inL pos) scope ctx scoped term hd a b
+    (R2 a, R2 b) -> relateWithF (inR pos) scope ctx scoped term hd a b
+    _            -> Nothing
 
 -- | A sum of fragments is a language: its rules are those of the sum at the
 -- root position.
@@ -144,3 +178,5 @@ instance (HasDefinitions ctx binder (Sum f g), EvalF ctx binder f, EvalF ctx bin
   etaMatchWith scoped term = etaMatchWithF root scoped term
   {-# INLINE extendScopedWith #-}
   extendScopedWith scoped term = extendScopedWithF root scoped term
+  {-# INLINE relateWith #-}
+  relateWith = relateWithF root

@@ -52,6 +52,8 @@ instance {-# OVERLAPPABLE #-} (HasDefinitions ctx binder (AnnSig ann sig), EvalF
   etaMatchWith scoped term (AnnSig _ node) = AnnSig blank <$> etaMatchWithF ignoring scoped term node
   {-# INLINE extendScopedWith #-}
   extendScopedWith scoped term (AnnSig ann node) = AnnSig (fmap term ann) (extendScopedWithF ignoring scoped term node)
+  {-# INLINE relateWith #-}
+  relateWith scope ctx scoped term hd (AnnSig _ l) (AnnSig _ r) = relateWithF ignoring scope ctx scoped term hd l r
 
 -- | A term without its annotations.
 unannotated :: (Functor ann, Bifunctor sig) => AST binder (AnnSig ann sig) n -> AST binder sig n
