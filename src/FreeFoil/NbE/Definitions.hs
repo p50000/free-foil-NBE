@@ -59,7 +59,7 @@ instance Bifunctor sig => HasDefinitions (Defined binder sig) binder sig where
   {-# INLINE contextDefinition #-}
   contextDefinition _ (Defined _ (Foil.UnsafeSubstitution values)) x =
     case IntMap.lookup (Foil.nameId x) values of
-      Just value -> VGlued_ (VVar_ x) value
+      Just value -> VGlued_ x (VVar_ x) value
       Nothing    -> VVar_ x
   {-# INLINE contextUnfolding #-}
   contextUnfolding _ (Defined unfolding _) folded unfolded = case unfolding of
