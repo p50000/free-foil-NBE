@@ -26,7 +26,9 @@
 -- with @f@ applied to @x'@, and @(fst p, snd p)@ against @p@ compares the
 -- components with the projections of @p@. Each step expands one layer, and
 -- the positions are compared by the same check, so η applies again inside
--- them: @λx. λy. f x y@ against @f@ takes two steps.
+-- them: @λx. λy. f x y@ against @f@ takes two steps. The check keeps the
+-- sides: when the introduction form is on the right, each of its positions
+-- is on the right of its comparison.
 --
 -- Like the normaliser, the check is untyped and intensional: it decides β,
 -- the language's own reductions, and η for the forms the language marks,
@@ -82,35 +84,45 @@ conv scope ctx l0 r0 = sameHead scope ctx (refine scope ctx l0) (refine scope ct
       -- Nodes of different constructors are compared by η. A node goes to
       -- 'VNode' exactly when it has no scoped subterms, so a 'VNode' and a
       -- 'VSuspended' never have the same constructor.
-      _ -> convEta scope' ctx' l r || convEta scope' ctx' r l
+      _ -> convEta scope' ctx' True l r || convEta scope' ctx' False r l
 
 -- | One step of η: each position of an introduction form with an η law
--- against the other value observed at that position. 'False' for any other
--- value.
+-- against the other value observed at that position, on the side of the
+-- introduction form ('True' for the left). 'False' for any other value.
 convEta ::
   (Eval ctx binder sig, ZipMatchFoldK sig, Foil.Distinct n, Foil.UnifiablePattern binder) =>
   Foil.Scope n ->
   ctx n ->
+  Bool ->
   Value binder sig n ->
   Value binder sig n ->
   Bool
 {-# INLINE convEta #-}
-convEta scope ctx intro other = case intro of
+convEta scope ctx onLeft intro other = case intro of
   VNode node ->
     maybe False (biall absurd id) (etaMatchWith (\v _ -> absurd v) observedTerm node)
   VSuspended env node ->
-    maybe False biand (etaMatchWith ($) observedTerm (extendScopedWith (convObserved scope ctx env other) id node))
+    maybe False biand (etaMatchWith ($) observedTerm (extendScopedWith (convObserved scope ctx onLeft env other) id node))
   VVar _ -> False
   where
-    observedTerm v (EtaTerm observe) = conv scope ctx v (observe scope ctx other)
+    observedTerm v (EtaTerm observe) = sides onLeft (conv scope ctx) v (observe scope ctx other)
+
+-- | A comparison with the introduction form's position on the given side.
+sides :: Bool -> (a -> a -> b) -> a -> a -> b
+{-# INLINE sides #-}
+sides onLeft compare' intro observed
+  | onLeft    = compare' intro observed
+  | otherwise = compare' observed intro
 
 -- | A scoped position of an introduction form against the other value
 -- observed under the position's refreshed binder, in the context of the
--- position's extension.
+-- position's extension, with the position on the side of the introduction
+-- form.
 convObserved ::
   (Eval ctx binder sig, ZipMatchFoldK sig, Foil.Distinct n, Foil.Distinct i, Foil.UnifiablePattern binder) =>
   Foil.Scope n ->
   ctx n ->
+  Bool ->
   Foil.Substitution (Value binder sig) i n ->
   Value binder sig n ->
   ScopedAST binder sig i ->
@@ -118,12 +130,12 @@ convObserved ::
   EtaScoped ctx binder sig n ->
   Bool
 {-# INLINE convObserved #-}
-convObserved scope ctx env other (ScopedAST binder body) (Extend extend) (EtaScoped observe) =
+convObserved scope ctx onLeft env other (ScopedAST binder body) (Extend extend) (EtaScoped observe) =
   Foil.withRefreshedPattern scope binder $ \extendEnv binder' scope' ->
     case Foil.assertDistinct binder of
       Foil.Distinct ->
         let ctx' = extend scope binder' scope' ctx
-        in conv scope' ctx'
+        in sides onLeft (conv scope' ctx')
              (eval scope' ctx' (extendEnv env) body)
              (observe scope' ctx' binder' (Foil.sink other))
 
