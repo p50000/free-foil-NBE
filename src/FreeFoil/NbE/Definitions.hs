@@ -32,7 +32,7 @@ import           Data.Bifunctor              (Bifunctor)
 
 import qualified Data.IntMap                 as IntMap
 
-import           FreeFoil.NbE                (Eval, HasDefinitions (..), Speculation (..), Value, eval)
+import           FreeFoil.NbE                (Eval, GlueSpeculation (..), HasDefinitions (..), Value, eval)
 import           FreeFoil.NbE.Internal.Value (Value' (..))
 
 -- | Which side of a defined name readback follows.
@@ -79,17 +79,17 @@ instance Bifunctor sig => HasDefinitions (Defined binder sig) binder sig where
   contextUnfolding _ ctx folded unfolded = case definedUnfolding ctx of
     Folded   -> folded
     Unfolded -> unfolded
-  {-# INLINE contextSpeculation #-}
-  contextSpeculation _ ctx x _ y _ = case definedApproximation ctx of
+  {-# INLINE contextGlueSpeculation #-}
+  contextGlueSpeculation _ ctx x _ y _ = case definedApproximation ctx of
     Rigid
-      | x == y    -> Speculate (ctx { definedApproximation = Flex }) (Just (ctx { definedApproximation = Full }))
-      | otherwise -> Unfold ctx
+      | x == y    -> TryFolded (ctx { definedApproximation = Flex }) (Just (ctx { definedApproximation = Full }))
+      | otherwise -> CompareUnfolded ctx
     Flex
-      | x == y    -> Speculate ctx Nothing
+      | x == y    -> TryFolded ctx Nothing
       | otherwise -> Unrelated
-    Full -> Unfold ctx
-  {-# INLINE contextUnfoldAgainst #-}
-  contextUnfoldAgainst _ ctx _ _ = case definedApproximation ctx of
+    Full -> CompareUnfolded ctx
+  {-# INLINE contextUnfoldGlued #-}
+  contextUnfoldGlued _ ctx _ _ = case definedApproximation ctx of
     Flex -> Nothing
     _    -> Just ctx
 
