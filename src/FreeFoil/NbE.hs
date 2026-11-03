@@ -93,6 +93,7 @@ module FreeFoil.NbE
   , evalNode
   , eliminate
   , force
+  , forceFolded
     -- * η
   , EtaTerm (..)
   , EtaScoped (..)
@@ -626,6 +627,16 @@ eliminateLoop v rule = case v of
 force :: Value binder sig n -> Whnf binder sig n
 force = \case
   VGlued_ _ _ unfolded -> force unfolded
+  v                  -> coerce v
+
+-- | The folded head of a value: for a glued value its defined name, or the
+-- neutral headed by it; any other value as 'force' gives it. A language
+-- that reads the type of a value off its head reads it here, so that an
+-- application of a defined name keeps the type its declaration gives it
+-- and not the type its unfolding computes.
+forceFolded :: Value binder sig n -> Whnf binder sig n
+forceFolded = \case
+  VGlued_ _ folded _ -> forceFolded folded
   v                  -> coerce v
 
 -- * Readback
