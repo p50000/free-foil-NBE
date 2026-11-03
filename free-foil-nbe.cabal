@@ -283,6 +283,7 @@ test-suite free-foil-nbe-test
                     , Test.Monolith
                     , Test.Naturals
                     , Test.Pairs
+                    , Test.Refinement
     build-depends:    base ^>=4.20.2.0
         , bifunctors
         , containers ^>=0.7
