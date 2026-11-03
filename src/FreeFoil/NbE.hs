@@ -330,7 +330,12 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   -- only at heads ('HasHeads'), as @f@ in @λx. f x@. Readback refines every
   -- other position again, so the variable anywhere else would be refined
   -- forever. The same holds for 'refineSig' and its node.
-  refineVar :: Foil.Distinct n => Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n
+  --
+  -- Like an 'Extend', the method receives the language's 'Eval' instance
+  -- from the core, so that an instance that refines through other
+  -- instances, as a sum of fragments does, does not refer to itself and
+  -- stays inlinable.
+  refineVar :: (Eval ctx binder sig, Foil.Distinct n) => Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n
   {-# INLINE refineVar #-}
   refineVar _ _ = VVar
 
@@ -339,7 +344,7 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   -- of the node comes first, to embed, as in @λx. f a x@. By default a node
   -- stays as it is.
   refineSig ::
-    Foil.Distinct n =>
+    (Eval ctx binder sig, Foil.Distinct n) =>
     Foil.Scope n -> ctx n -> Value binder sig n -> sig a (Value binder sig n) -> Value binder sig n
   {-# INLINE refineSig #-}
   refineSig _ _ value _ = value
