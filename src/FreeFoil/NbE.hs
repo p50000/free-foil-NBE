@@ -313,14 +313,14 @@ lookupSubstWith unmapped mapped (Foil.UnsafeSubstitution values) (Foil.UnsafeNam
 -- | Evaluate a node that has no elimination rule: suspend it whole under the
 -- environment if it has scoped subterms, otherwise evaluate its term
 -- subterms. The same environment both suspends the node and drives its
--- subterms. A node with no scoped subterms is reused by coercion, which
--- requires the signature to be representational in its first parameter;
--- every ordinary data type is.
+-- subterms.
 --
 -- The term subterms are always mapped, even when the signature's fold finds
 -- none: an annotated signature ("Control.Monad.Free.Foil.Annotated") keeps
 -- its annotation out of 'Bifoldable' but inside 'Bifunctor', so a λ whose
--- annotation is its type has terms to evaluate that no fold sees.
+-- annotation is its type has terms to evaluate that no fold sees. Mapping a
+-- node with no term subterms allocates no new node, since GHC's common
+-- subexpression elimination on STG reuses the old one.
 evalNode ::
   (Eval ctx binder sig, Foil.Distinct o, Foil.Distinct i) =>
   Foil.Scope o ->
@@ -334,12 +334,10 @@ evalNode scope ctx env node =
     Just node' -> VNode (bimap absurd (eval scope ctx env) node')
     Nothing    -> VSuspended env (bimap id (eval scope ctx env) node)
 
--- A node whose scoped positions are provably empty is the same heap object
--- at any first parameter type, so it is reused by coercion rather than
--- rebuilt field by field. The coercion is sound because a signature
--- bifunctor is representational in its parameters; the emptiness test
--- constant-folds per constructor in specialised code.
-
+-- | The node with its scoped positions at 'Void', if 'Bifoldable' finds
+-- none. The coercion is sound because a signature bifunctor is
+-- representational in its parameters, and an annotation holds no scoped
+-- subterms. The test constant-folds per constructor in specialised code.
 ensureBivacuousFirst :: Bifoldable f => f a b -> Maybe (f Void b)
 {-# INLINE ensureBivacuousFirst #-}
 ensureBivacuousFirst x
