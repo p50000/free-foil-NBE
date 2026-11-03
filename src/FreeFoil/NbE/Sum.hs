@@ -35,9 +35,11 @@ import qualified Control.Monad.Foil      as Foil
 import           Control.Monad.Free.Foil (AST, ScopedAST)
 import           Data.Bifoldable         (Bifoldable)
 import           Data.Bifunctor          (Bifunctor (..))
+import           Control.Applicative     ((<|>))
 import           Data.Bifunctor.Sum      (Sum (..))
+import           Data.Maybe              (fromMaybe)
 
-import           FreeFoil.NbE            (EtaScoped, EtaTerm, Eval (..), Extend, HasDefinitions, HasHeads, Value, evalNode, sinkExtend)
+import           FreeFoil.NbE            (EtaScoped, EtaTerm, Eval (..), Extend, HasDefinitions, HasHeads, Value (VVar), evalNode, sinkExtend)
 
 -- | The position of a fragment @f@ in a language @sig@: how to build one of
 -- its nodes in the language and how to recognise one. This is Swierstra's
@@ -78,11 +80,6 @@ inR (Inj i p) = Inj (i . R2) (\node -> p node >>= \case
 -- forms in the result with 'prj' and rebuilds a stuck node with 'inj'. Every
 -- other node falls through to 'evalNode' on the injected node, which is the
 -- default for a fragment without eliminators.
---
--- A fragment does not refine values: the 'Eval' instance of a sum keeps the
--- defaults of 'refineVar' and 'refineSig', as does the one for annotated
--- signatures ("FreeFoil.NbE.Annotated"). A language that refines gives its
--- own 'Eval' instance.
 class (Bifunctor f, Bifoldable f, HasHeads f) => EvalF ctx binder f where
   evalF ::
     (Eval ctx binder sig, Foil.Distinct o, Foil.Distinct i) =>
@@ -125,6 +122,34 @@ class (Bifunctor f, Bifoldable f, HasHeads f) => EvalF ctx binder f where
   {-# INLINE extendScopedWithF #-}
   extendScopedWithF _ scoped term = bimap (\a -> scoped a sinkExtend) term
 
+  -- | Refine a variable of the language, as 'refineVar', or 'Nothing' if
+  -- the fragment has nothing to say about it. Refinement follows types,
+  -- not the fragment of a node: the fragment of the function type
+  -- η-expands every function. So the method sees the variables of the
+  -- whole language, and a sum takes the first summand that refines. By
+  -- default the fragment refines nothing.
+  refineVarF ::
+    (Eval ctx binder sig, Foil.Distinct n) =>
+    Inj f sig ->
+    Foil.Scope n ->
+    ctx n ->
+    Foil.Name n ->
+    Maybe (Value binder sig n)
+  {-# INLINE refineVarF #-}
+  refineVarF _ _ _ _ = Nothing
+
+  -- | Refine a node of the language, as 'refineSig', like 'refineVarF'.
+  refineSigF ::
+    (Eval ctx binder sig, Foil.Distinct n) =>
+    Inj f sig ->
+    Foil.Scope n ->
+    ctx n ->
+    Value binder sig n ->
+    sig a (Value binder sig n) ->
+    Maybe (Value binder sig n)
+  {-# INLINE refineSigF #-}
+  refineSigF _ _ _ _ _ = Nothing
+
 -- | The rules of a sum are the rules of its summands.
 instance (EvalF ctx binder f, EvalF ctx binder g) => EvalF ctx binder (Sum f g) where
   {-# INLINE evalF #-}
@@ -139,6 +164,12 @@ instance (EvalF ctx binder f, EvalF ctx binder g) => EvalF ctx binder (Sum f g) 
   extendScopedWithF pos scoped term = \case
     L2 node -> L2 (extendScopedWithF (inL pos) scoped term node)
     R2 node -> R2 (extendScopedWithF (inR pos) scoped term node)
+  {-# INLINE refineVarF #-}
+  refineVarF pos scope ctx x =
+    refineVarF (inL pos) scope ctx x <|> refineVarF (inR pos) scope ctx x
+  {-# INLINE refineSigF #-}
+  refineSigF pos scope ctx value node =
+    refineSigF (inL pos) scope ctx value node <|> refineSigF (inR pos) scope ctx value node
 
 -- | A sum of fragments is a language: its rules are those of the sum at the
 -- root position.
@@ -149,3 +180,7 @@ instance (HasDefinitions ctx binder (Sum f g), EvalF ctx binder f, EvalF ctx bin
   etaMatchWith scoped term = etaMatchWithF root scoped term
   {-# INLINE extendScopedWith #-}
   extendScopedWith scoped term = extendScopedWithF root scoped term
+  {-# INLINE refineVar #-}
+  refineVar scope ctx x = fromMaybe (VVar x) (refineVarF root scope ctx x)
+  {-# INLINE refineSig #-}
+  refineSig scope ctx value node = fromMaybe value (refineSigF root scope ctx value node)

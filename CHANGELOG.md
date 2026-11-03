@@ -16,8 +16,8 @@
   (`HasHeads`), the positions an elimination rule eliminates. By default
   nothing is refined and no position is a head. `HasHeads` is a superclass
   of `Eval` and `EvalF`, so every language and fragment gives an instance,
-  possibly empty. Fragments do not refine: the `Eval` instances of `Sum`
-  and `AnnSig` keep the defaults.
+  possibly empty. A fragment refines with `refineVarF` and `refineSigF`,
+  and a sum takes the first summand that refines.
 - A context may give the free names of a language values (`definition`,
   by default from `HasDefinitions`),
   which `eval` unfolds where the names are used. `NoContext` gives none.
