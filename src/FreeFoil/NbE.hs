@@ -24,7 +24,8 @@
 -- with 'etaMatchWith'.
 --
 -- A language's signature must be a 'Bifunctor' and a 'Bifoldable', both
--- derivable, and representational in both parameters (see 'evalNode'). Its
+-- derivable, and representational in both parameters (see 'evalNode'). It
+-- names its heads in a 'HasHeads' instance, which may be empty. Its
 -- binder type must be 'Foil.CoSinkable', which free-foil generates, plus
 -- 'Foil.SinkableK' for 'whnf', which has a generic default.
 --
@@ -324,6 +325,11 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   -- Unlike 'definition', which 'eval' asks once about a free name, the
   -- method sees every variable, bound ones too, in the context where it is
   -- read back.
+  --
+  -- The result upholds the invariant of 'Value' and contains the variable
+  -- only at heads ('HasHeads'), as @f@ in @λx. f x@. Readback refines every
+  -- other position again, so the variable anywhere else would be refined
+  -- forever. The same holds for 'refineSig' and its node.
   refineVar :: Foil.Distinct n => Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n
   {-# INLINE refineVar #-}
   refineVar _ _ = VVar

@@ -78,6 +78,11 @@ inR (Inj i p) = Inj (i . R2) (\node -> p node >>= \case
 -- forms in the result with 'prj' and rebuilds a stuck node with 'inj'. Every
 -- other node falls through to 'evalNode' on the injected node, which is the
 -- default for a fragment without eliminators.
+--
+-- A fragment does not refine values: the 'Eval' instance of a sum keeps the
+-- defaults of 'refineVar' and 'refineSig', as does the one for annotated
+-- signatures ("FreeFoil.NbE.Annotated"). A language that refines gives its
+-- own 'Eval' instance.
 class (Bifunctor f, Bifoldable f, HasHeads f) => EvalF ctx binder f where
   evalF ::
     (Eval ctx binder sig, Foil.Distinct o, Foil.Distinct i) =>
