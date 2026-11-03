@@ -17,7 +17,7 @@ author:             Renata Shakirova, Nikolai Kudasov
 maintainer:         rentacat45@gmail.com
 category:           Language
 build-type:         Simple
-tested-with:        GHC == 9.10.3
+tested-with:        GHC == 9.8.2, GHC == 9.10.3, GHC == 9.12.4
 extra-doc-files:    CHANGELOG.md
 
 source-repository head
@@ -36,10 +36,10 @@ library
         , FreeFoil.NbE.Definitions
         , FreeFoil.NbE.Sum
     other-modules:    FreeFoil.NbE.Internal.Value
-    build-depends:    base ^>=4.20.2.0
+    build-depends:    base >=4.19 && <4.23
         , bifunctors
         , free-foil ^>=0.6.1
-        , containers ^>=0.7
+        , containers >=0.6.7 && <0.9
     default-language: Haskell2010
 
 -- Parsing shared by the demo languages: a BNFC parser, then scope resolution.
@@ -48,8 +48,8 @@ library demo-parsing
     visibility:       public
     hs-source-dirs:   parsing
     exposed-modules:  Demo.Parsing
-    build-depends:    base ^>=4.20.2.0
-        , containers ^>=0.7
+    build-depends:    base >=4.19 && <4.23
+        , containers >=0.6.7 && <0.9
         , free-foil ^>=0.6.1
     default-language: Haskell2010
 
@@ -62,7 +62,7 @@ library lambda-pi-syntax
         , LambdaPi.Syntax.Lex
         , LambdaPi.Syntax.Par
         , LambdaPi.Syntax.Print
-    build-depends:    base ^>=4.20.2.0
+    build-depends:    base >=4.19 && <4.23
         , array
     default-language: Haskell2010
 
@@ -79,9 +79,9 @@ library lambda-pi-demo
         , LambdaPi.Raw
         , Booleans
         , Booleans.Examples
-    build-depends:    base ^>=4.20.2.0
+    build-depends:    base >=4.19 && <4.23
         , bifunctors
-        , containers ^>=0.7
+        , containers >=0.6.7 && <0.9
         , demo-parsing
         , deepseq
         , free-foil ^>=0.6.1
@@ -98,7 +98,7 @@ library pairs-syntax
         , Pairs.Syntax.Lex
         , Pairs.Syntax.Par
         , Pairs.Syntax.Print
-    build-depends:    base ^>=4.20.2.0
+    build-depends:    base >=4.19 && <4.23
         , array
     default-language: Haskell2010
 
@@ -110,7 +110,7 @@ library dependent-types-syntax
         , DependentTypes.Syntax.Lex
         , DependentTypes.Syntax.Par
         , DependentTypes.Syntax.Print
-    build-depends:    base ^>=4.20.2.0
+    build-depends:    base >=4.19 && <4.23
         , array
     default-language: Haskell2010
 
@@ -126,9 +126,9 @@ library dependent-types-demo
         , DependentTypes.Parser
         , DependentTypes.Raw
     other-modules:    DependentTypes.Generated
-    build-depends:    base ^>=4.20.2.0
+    build-depends:    base >=4.19 && <4.23
         , bifunctors
-        , containers ^>=0.7
+        , containers >=0.6.7 && <0.9
         , demo-parsing
         , dependent-types-syntax
         , free-foil ^>=0.6.1
@@ -149,9 +149,9 @@ library pairs-demo
         , Pairs.Parser
         , Pairs.Raw
     other-modules:    Pairs.Generated
-    build-depends:    base ^>=4.20.2.0
+    build-depends:    base >=4.19 && <4.23
         , bifunctors
-        , containers ^>=0.7
+        , containers >=0.6.7 && <0.9
         , demo-parsing
         , free-foil ^>=0.6.1
         , free-foil-nbe
@@ -167,7 +167,7 @@ library naturals-syntax
         , Naturals.Syntax.Lex
         , Naturals.Syntax.Par
         , Naturals.Syntax.Print
-    build-depends:    base ^>=4.20.2.0
+    build-depends:    base >=4.19 && <4.23
         , array
     default-language: Haskell2010
 
@@ -182,9 +182,9 @@ library naturals-demo
         , Naturals.Parser
         , Naturals.Raw
     other-modules:    Naturals.Generated
-    build-depends:    base ^>=4.20.2.0
+    build-depends:    base >=4.19 && <4.23
         , bifunctors
-        , containers ^>=0.7
+        , containers >=0.6.7 && <0.9
         , demo-parsing
         , free-foil ^>=0.6.1
         , free-foil-nbe
@@ -200,7 +200,7 @@ library monolith-syntax
         , Monolith.Syntax.Lex
         , Monolith.Syntax.Par
         , Monolith.Syntax.Print
-    build-depends:    base ^>=4.20.2.0
+    build-depends:    base >=4.19 && <4.23
         , array
     default-language: Haskell2010
 
@@ -215,9 +215,9 @@ library monolith-baseline
         , Monolith.Parser
         , Monolith.Raw
     other-modules:    Monolith.Generated
-    build-depends:    base ^>=4.20.2.0
+    build-depends:    base >=4.19 && <4.23
         , bifunctors
-        , containers ^>=0.7
+        , containers >=0.6.7 && <0.9
         , demo-parsing
         , deepseq
         , free-foil ^>=0.6.1
@@ -240,7 +240,7 @@ library fragments-demo
         , Fragments.Naturals
         , Fragments.Pairs
         , Fragments.Pattern
-    build-depends:    base ^>=4.20.2.0
+    build-depends:    base >=4.19 && <4.23
         , bifunctors
         , deepseq
         , free-foil ^>=0.6.1
@@ -259,8 +259,8 @@ library lambda-pi-baselines
     hs-source-dirs:   baselines
     exposed-modules:  LambdaPi.LambdaNWays
         , LambdaPi.Monomorphic
-    build-depends:    base ^>=4.20.2.0
-        , containers ^>=0.7
+    build-depends:    base >=4.19 && <4.23
+        , containers >=0.6.7 && <0.9
         , deepseq
         , free-foil ^>=0.6.1
         , lambda-pi-demo
@@ -275,7 +275,7 @@ library lambda-let-syntax
         , LambdaLet.Syntax.Lex
         , LambdaLet.Syntax.Par
         , LambdaLet.Syntax.Print
-    build-depends:    base ^>=4.20.2.0
+    build-depends:    base >=4.19 && <4.23
         , array
     default-language: Haskell2010
 
@@ -290,9 +290,9 @@ library lambda-let-demo
         , LambdaLet.Parser
         , LambdaLet.Raw
     other-modules:    LambdaLet.Generated
-    build-depends:    base ^>=4.20.2.0
+    build-depends:    base >=4.19 && <4.23
         , bifunctors
-        , containers ^>=0.7
+        , containers >=0.6.7 && <0.9
         , demo-parsing
         , free-foil ^>=0.6.1
         , free-foil-nbe
@@ -323,9 +323,9 @@ test-suite free-foil-nbe-test
                     , Test.Naturals
                     , Test.Pairs
                     , Test.Refinement
-    build-depends:    base ^>=4.20.2.0
+    build-depends:    base >=4.19 && <4.23
         , bifunctors
-        , containers ^>=0.7
+        , containers >=0.6.7 && <0.9
         , deepseq
         , dependent-types-demo
         , fragments-demo
@@ -355,7 +355,7 @@ benchmark nbe-bench
     main-is:          Main.hs
     -- Optimisation comes from `optimization: 2` in cabal.project, which applies
     -- to the library (where nf/nfSubst live) as well as this driver.
-    build-depends:    base ^>=4.20.2.0
+    build-depends:    base >=4.19 && <4.23
         , bifunctors
         , free-foil ^>=0.6.1
         , free-foil-nbe
@@ -364,5 +364,5 @@ benchmark nbe-bench
         , lambda-pi-demo
         , monolith-baseline
         , tasty-bench
-        , containers ^>=0.7
+        , containers >=0.6.7 && <0.9
     default-language: Haskell2010
