@@ -1,24 +1,41 @@
-{-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE MonoLocalBinds        #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE RankNTypes            #-}
--- | Readback of refined values: the λ fragment with a context that knows
--- which free names are functions and η-expands them, as a language with
--- types does. The expansion goes through an environment, which @whnf@
--- substitutes into a frozen body.
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MonoLocalBinds             #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE StandaloneDeriving         #-}
+-- | Readback of refined values, with a context that knows which free names
+-- are functions and η-expands them, as a language with types does. The
+-- expansion goes through an environment, which @whnf@ substitutes into a
+-- frozen body. The functions refine in a language of their own and as a
+-- fragment beside pairs, which refines through the sum, also annotated.
 module Test.Refinement (tests) where
+
+import Data.Bifoldable          (Bifoldable)
+import Data.Bifunctor           (Bifunctor)
+import Data.Bifunctor.Sum       (Sum (..))
+import Data.Maybe               (fromMaybe)
+import Data.ZipMatchK           (ZipMatchK (..))
+import Data.ZipMatchK.Bifunctor ()
 
 import Test.Tasty
 import Test.Tasty.HUnit
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil (AST (..), ScopedAST (..), alphaEquiv)
+import Control.Monad.Free.Foil.Annotated (AnnSig)
 
 import qualified FreeFoil.NbE    as NbE
-import FreeFoil.NbE.Sum         (EvalF (..), root)
+import FreeFoil.NbE             (HasHeads)
+import FreeFoil.NbE.Annotated   (Annotation (..), ignoring)
+import FreeFoil.NbE.Sum         (EvalF (..), Inj (..), inR, root)
 
 import Fragments.Lambda         (LamF (..))
+import Fragments.Pairs          (PairF)
 import Fragments.Pattern        (Pat (..))
 
 -- | The free names of function type.
@@ -27,36 +44,66 @@ newtype Functions n = Functions [Name n]
 instance Sinkable Functions where
   sinkabilityProof rename (Functions xs) = Functions (map rename xs)
 
--- | A free name of function type is η-expanded to @λy. f y@, with @f@
--- bound to it in the environment.
+instance NbE.HasDefinitions Functions Pat sig where
+  contextDefinition _ _ = NbE.VVar
+
+-- | Functions on their own: a free name of function type is η-expanded to
+-- @λy. f y@, with @f@ bound to it in the environment.
 instance NbE.Eval Functions Pat LamF where
-  definition _ _ = NbE.VVar
   evalSig = evalF root
-  refineVar scope (Functions fs) x
-    | x `elem` fs = etaExpand scope x
-    | otherwise   = NbE.VVar x
+  refineVar scope ctx x = fromMaybe (NbE.VVar x) (expandFunction root scope ctx x)
 
-etaExpand :: Distinct n => Scope n -> Name n -> NbE.Value Pat LamF n
-etaExpand scope x = withFresh scope $ \f ->
-  let scopeF = extendScope f scope
-  in withFresh scopeF $ \y ->
-    NbE.VSuspended (addSubst identitySubst f (NbE.VVar x))
-      (LamF (ScopedAST (PatVar y) (Node (AppF (Var (sink (nameOf f))) (Var (nameOf y))))))
+-- | Functions as a fragment that refines: the rules of 'LamF', and the same
+-- η-expansion.
+newtype FunF scope term = FunF (LamF scope term)
+  deriving newtype (Functor, Bifunctor, Bifoldable, HasHeads)
 
-type Term n = AST Pat LamF n
+deriving newtype instance ZipMatchK FunF
+
+lamAt :: Inj FunF sig -> Inj LamF sig
+lamAt (Inj i p) = Inj (i . FunF) (fmap (\(FunF node) -> node) . p)
+
+instance EvalF Functions Pat FunF where
+  evalF pos scope ctx env (FunF node) = evalF (lamAt pos) scope ctx env node
+  etaMatchWithF pos scoped term (FunF node) = FunF <$> etaMatchWithF (lamAt pos) scoped term node
+  refineVarF pos = expandFunction (lamAt pos)
+
+expandFunction :: Distinct n => Inj LamF sig -> Scope n -> Functions n -> Name n -> Maybe (NbE.Value Pat sig n)
+expandFunction pos scope (Functions fs) x
+  | x `elem` fs = Just $ withFresh scope $ \f ->
+      withFresh (extendScope f scope) $ \y ->
+        NbE.VSuspended (addSubst identitySubst f (NbE.VVar x)) (lamNode pos y (sink (nameOf f)))
+  | otherwise = Nothing
+
+-- | @λy. f y@ at a position.
+lamNode :: Inj LamF sig -> NameBinder n l -> Name l -> sig (ScopedAST Pat sig n) term
+lamNode pos y f = inj pos (LamF (ScopedAST (PatVar y) (Node (inj pos (AppF (Var f) (Var (nameOf y)))))))
+
+-- | An annotation with nothing in it.
+data Blank term = Blank
+  deriving Functor
+
+instance Annotation Blank where
+  blank = Blank
+
+instance ZipMatchK Blank where
+  zipMatchWithK _ Blank _ = Just Blank
 
 tests :: TestTree
-tests = withFresh emptyScope $ \f ->
+tests = testGroup "refinement"
+  [ testGroup "a language of its own" (expandsOnce root)
+  , testGroup "a fragment right of pairs" (expandsOnce (lamAt (inR root) :: Inj LamF (Sum PairF FunF)))
+  , testGroup "a fragment of an annotated language" (expandsOnce (lamAt (inR ignoring) :: Inj LamF (AnnSig Blank (Sum PairF FunF))))
+  ]
+
+-- | @nf@ and @whnf@ η-expand a free function @f@ to @λy. f y@, once.
+expandsOnce :: (NbE.Eval Functions Pat sig, ZipMatchK sig) => Inj LamF sig -> [TestTree]
+expandsOnce pos = withFresh emptyScope $ \f ->
   let scope = extendScope f emptyScope
       ctx = Functions [nameOf f]
-      expanded = lam scope (\_ y -> Node (AppF (Var (sink (nameOf f))) (Var y)))
-  in testGroup "refinement"
-    [ testCase "nf η-expands a function once" $
-        assertBool "λy. f y" (alphaEquiv scope (NbE.nf scope ctx (Var (nameOf f))) expanded)
-    , testCase "whnf η-expands a function once" $
-        assertBool "λy. f y" (alphaEquiv scope (NbE.whnf scope ctx (Var (nameOf f))) expanded)
-    ]
-
-lam :: Distinct n => Scope n -> (forall l. DExt n l => Scope l -> Name l -> Term l) -> Term n
-lam scope body = withFresh scope $ \x ->
-  Node (LamF (ScopedAST (PatVar x) (body (extendScope x scope) (nameOf x))))
+      expanded = withFresh scope $ \y -> Node (lamNode pos y (sink (nameOf f)))
+  in [ testCase "nf η-expands a function once" $
+         assertBool "λy. f y" (alphaEquiv scope (NbE.nf scope ctx (Var (nameOf f))) expanded)
+     , testCase "whnf η-expands a function once" $
+         assertBool "λy. f y" (alphaEquiv scope (NbE.whnf scope ctx (Var (nameOf f))) expanded)
+     ]
