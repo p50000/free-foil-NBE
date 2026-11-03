@@ -3,8 +3,12 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE TypeFamilies        #-}
+-- The Eval instance for the typed annotation is an orphan on purpose: it is
+-- this test's language.
+{-# OPTIONS_GHC -Wno-orphans #-}
 -- | Evaluation of annotated terms: the composed language with a position at
 -- every node, which evaluation ignores. Normal forms, weak-head normal forms
 -- and conversion agree with the unannotated language on examples and on
@@ -27,11 +31,15 @@ import Control.Monad.Free.Foil.Annotated (AnnSig (..))
 import Data.ZipMatchK (ZipMatchFoldK (..), ZipMatchK (..))
 import Data.ZipMatchK.Bifunctor ()
 
+import Data.Bifunctor.Sum (Sum (..))
 import Fragments.Combined (Combined, Pat, Sig, nf, whnf)
+import Fragments.Lambda (LamF (..))
+import FreeFoil.NbE (Eval (..), NoContext, evalNode)
 import qualified FreeFoil.NbE as NbE
 import FreeFoil.NbE.Annotated
 import FreeFoil.NbE.Conversion (convertible)
 import FreeFoil.NbE.Definitions (Defined, define, noDefinitions)
+import FreeFoil.NbE.Sum (EvalF (..))
 import Test.Fragments (Mixed (..), budgeted, parseIn, resolve, withFree)
 
 -- | A position, which ignores the term. Matching ignores positions.
@@ -52,6 +60,39 @@ type Annotated n = AST Pat (AnnSig Loc Sig) n
 -- | Every node annotated with the same position.
 annotatedAt :: Int -> Combined n -> Annotated n
 annotatedAt k = hoistAST (AnnSig (Loc (Just k)))
+
+-- | An annotation that holds a term, as a type annotation does. Matching
+-- ignores it.
+newtype Typed term = Typed (Maybe term)
+  deriving (Show, Functor, Foldable, Traversable)
+
+instance Annotation Typed where
+  blank = Typed Nothing
+
+instance ZipMatchK Typed where
+  zipMatchWithK _ _ _ = Just (Typed Nothing)
+
+instance ZipMatchFoldK Typed where
+  zipMatchFoldK _ _ _ = Just mempty
+
+type TypedTerm n = AST Pat (AnnSig Typed Sig) n
+
+-- | The rules of the combined language on terms annotated with a term. A λ
+-- that evaluation freezes keeps its annotation, as it does in a language
+-- whose annotation is the type; the instance of "FreeFoil.NbE.Annotated"
+-- blanks it instead.
+instance Eval NoContext Pat (AnnSig Typed Sig) where
+  evalSig scope ctx env (AnnSig ann node) = case node of
+    L2 (LamF _) -> evalNode scope ctx env (AnnSig ann node)
+    _           -> evalF ignoring scope ctx env node
+  etaMatchWith scoped term (AnnSig _ node) = AnnSig blank <$> etaMatchWithF ignoring scoped term node
+  extendScopedWith scoped term (AnnSig ann node) = AnnSig (fmap term ann) (extendScopedWithF ignoring scoped term node)
+
+-- | A term annotated blank, except for its root, which holds the given term.
+typedAs :: Combined n -> Combined n -> TypedTerm n
+typedAs ann term = case hoistAST (AnnSig blank) term of
+  Node (AnnSig _ node) -> Node (AnnSig (Typed (Just (hoistAST (AnnSig blank) ann))) node)
+  var                  -> var
 
 -- | The annotations of a term, outermost first.
 annotations :: Annotated n -> [Maybe Int]
@@ -97,6 +138,14 @@ tests =
             in case annotations (whnfAnnotated emptyScope (annotatedAt 7 term)) of
                  Nothing : rest -> any isJust rest @?= True
                  other          -> assertFailure ("the lambda is not blank: " ++ show other)
+        , testCase "the term inside a kept annotation is normalised" $
+            let closed = parseIn emptyScope Map.empty
+                term = typedAs (closed "fst (zero, zero)") (closed "\\x. x")
+            in case NbE.nf emptyScope NbE.NoContext term of
+                 Node (AnnSig (Typed (Just ann)) _) ->
+                   alphaEquiv emptyScope (unannotated ann) (closed "zero") @?= True
+                 Node (AnnSig (Typed Nothing) _) -> assertFailure "the lambda's annotation is blank"
+                 Var _ -> assertFailure "the lambda is a variable"
         ]
     , testGroup "definitions"
         [ testCase "a definition unfolds through annotations" $ withFree $ \scope env ->

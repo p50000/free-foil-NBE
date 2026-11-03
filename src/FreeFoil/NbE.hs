@@ -94,7 +94,6 @@ import           Data.Bifunctor              (Bifunctor (..))
 import qualified Data.IntMap                 as IntMap
 import           Data.Monoid                 (Any (..))
 import           Data.Void                   (Void, absurd)
-import           Unsafe.Coerce               (unsafeCoerce)
 
 -- * Semantic domain
 
@@ -313,9 +312,14 @@ lookupSubstWith unmapped mapped (Foil.UnsafeSubstitution values) (Foil.UnsafeNam
 -- | Evaluate a node that has no elimination rule: suspend it whole under the
 -- environment if it has scoped subterms, otherwise evaluate its term
 -- subterms. The same environment both suspends the node and drives its
--- subterms. A node with no subterms of one kind is reused by coercion, which
--- requires the signature to be representational in both parameters; every
--- ordinary data type is.
+-- subterms.
+--
+-- The term subterms are always mapped, even when the signature's fold finds
+-- none: an annotated signature ("Control.Monad.Free.Foil.Annotated") keeps
+-- its annotation out of 'Bifoldable' but inside 'Bifunctor', so a λ whose
+-- annotation is its type has terms to evaluate that no fold sees. Mapping a
+-- node with no term subterms allocates no new node, since GHC's common
+-- subexpression elimination on STG reuses the old one.
 evalNode ::
   (Eval ctx binder sig, Foil.Distinct o, Foil.Distinct i) =>
   Foil.Scope o ->
@@ -324,34 +328,14 @@ evalNode ::
   sig (ScopedAST binder sig i) (AST binder sig i) ->
   Value binder sig o
 {-# INLINE evalNode #-}
-evalNode scope ctx env node =
-  case ensureBivacuousFirst node of
-    Just node' -> VNode (bimap absurd (eval scope ctx env) node')
-    Nothing -> VSuspended env $ case ensureBivacuousSecond node of
-      -- Nothing to evaluate either (a lambda, say): reuse the cell as it is.
-      Just node' -> vacuous node'
-      Nothing    -> bimap id (eval scope ctx env) node
-
--- A node whose parameter positions are provably empty is the same heap
--- object at any parameter type, so it is reused by coercion rather than
--- rebuilt field by field. The coercions are sound because a signature
--- bifunctor is representational in its parameters; the emptiness tests
--- constant-fold per constructor in specialised code.
-
-vacuous :: f Void -> f a
-vacuous = unsafeCoerce
-
-ensureBivacuousFirst :: Bifoldable f => f a b -> Maybe (f Void b)
-{-# INLINE ensureBivacuousFirst #-}
-ensureBivacuousFirst x
-  | getAny (bifoldMap (const (Any True)) (const (Any False)) x) = Nothing
-  | otherwise = Just (unsafeCoerce x)
-
-ensureBivacuousSecond :: Bifoldable f => f a b -> Maybe (f a Void)
-{-# INLINE ensureBivacuousSecond #-}
-ensureBivacuousSecond x
-  | getAny (bifoldMap (const (Any False)) (const (Any True)) x) = Nothing
-  | otherwise = Just (unsafeCoerce x)
+evalNode scope ctx env node
+  | hasScoped = VSuspended env (bimap id (eval scope ctx env) node)
+  | otherwise = VNode (bimap noScoped (eval scope ctx env) node)
+  where
+    -- Constant-folds per constructor in specialised code. An annotation
+    -- holds no scoped subterms, so the fold sees all of them.
+    hasScoped = getAny (bifoldMap (const (Any True)) (const (Any False)) node)
+    noScoped _ = error "evalNode: a scoped subterm that (Bifoldable sig) does not see"
 
 -- * Readback
 
