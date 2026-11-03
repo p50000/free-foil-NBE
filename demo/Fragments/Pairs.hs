@@ -25,11 +25,12 @@ module Fragments.Pairs
 import Control.DeepSeq        (NFData)
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
+import Data.Bifunctor (bimap)
 import Data.Bifunctor.TH       (deriveBifoldable, deriveBifunctor, deriveBitraversable)
 import Data.ZipMatchK.TH       (deriveZipMatchK)
 import GHC.Generics            (Generic)
 
-import FreeFoil.NbE            (EtaTerm (..), Value (..), eval, evalNode)
+import FreeFoil.NbE            (EtaTerm (..), HasHeads (..), Value (..), eval, evalNode)
 import FreeFoil.NbE.Sum
 
 -- | Pairs: @(t, u)@, @fst t@, @snd t@ and @split t as (x, y) in u@.
@@ -46,6 +47,15 @@ deriveBitraversable ''PairF
 
 deriveZipMatchK ''PairF
 instance (NFData scope, NFData term) => NFData (PairF scope term)
+
+-- | The heads: the pair of a projection and of @split@.
+instance HasHeads PairF where
+  {-# INLINE headsWith #-}
+  headsWith hd other = \case
+    FstF p        -> FstF (hd p)
+    SndF p        -> SndF (hd p)
+    SplitF p body -> SplitF (hd p) body
+    node          -> bimap id other node
 
 instance (Sinkable ctx, CoSinkable binder) => EvalF ctx binder PairF where
   {-# INLINE evalF #-}

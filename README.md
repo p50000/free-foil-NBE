@@ -30,8 +30,9 @@ which knows nothing beyond the scope.
 
 ## Limitations
 
-- Readback consults no types: normal forms are β-normal, with the language's
-  own reductions, and not η-normal.
+- Readback consults types only through a language's `refineVar` and
+  `refineSig`. Without them, as in every demo, normal forms are β-normal,
+  with the language's own reductions, and not η-normal.
 - Values are built over the same signature as terms, so a language cannot
   have value formers that its syntax lacks, as extensional booleans and sums
   need.

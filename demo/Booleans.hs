@@ -24,10 +24,11 @@ module Booleans
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
+import Data.Bifunctor (bimap)
 import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor, deriveBitraversable)
 import Data.ZipMatchK.TH (deriveZipMatchK)
 
-import FreeFoil.NbE (Eval (evalSig), HasDefinitions, Value (VNode), eval, evalNode)
+import FreeFoil.NbE (Eval (evalSig), HasDefinitions, HasHeads (..), Value (VNode), eval, evalNode)
 import qualified FreeFoil.NbE as NbE
 
 -- | Two introduction forms and one eliminator; no scoped positions.
@@ -58,6 +59,13 @@ pattern FF = Node FalseSig
 -- | @if c then t else f@.
 pattern If :: BoolTm n -> BoolTm n -> BoolTm n -> BoolTm n
 pattern If c t f = Node (IfSig c t f)
+
+-- | The heads: the condition of @if@.
+instance HasHeads BoolSig where
+  {-# INLINE headsWith #-}
+  headsWith hd other = \case
+    IfSig cond t f -> IfSig (hd cond) (other t) (other f)
+    node           -> bimap id other node
 
 -- | The one elimination rule: a canonical condition selects a branch, a
 -- neutral condition leaves the @if@ stuck.

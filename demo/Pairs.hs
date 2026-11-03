@@ -38,7 +38,8 @@ module Pairs
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
-import FreeFoil.NbE (Eval (..), HasDefinitions)
+import Data.Bifunctor (bimap)
+import FreeFoil.NbE (Eval (..), HasDefinitions, HasHeads (..))
 import qualified FreeFoil.NbE as NbE
 
 import Pairs.Generated
@@ -86,6 +87,15 @@ pattern Split p x y body = FFSplit p (FFPatternPair x y) body
 
 -- | Semantic values of pairs.
 type Value = NbE.Value FFPattern TermSig
+
+-- | The heads: the pair of a projection and of @split@.
+instance HasHeads TermSig where
+  {-# INLINE headsWith #-}
+  headsWith hd other = \case
+    FstSig p        -> FstSig (hd p)
+    SndSig p        -> SndSig (hd p)
+    SplitSig p body -> SplitSig (hd p) body
+    node            -> bimap id other node
 
 -- | Three elimination rules. A projection of a pair value selects a
 -- component, and is stuck on anything else. @split@ of a pair value enters

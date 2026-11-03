@@ -9,6 +9,15 @@
   context learns (`extendScopedWith`, in the style of `etaMatchWith`). By
   default a binder only adds its names, so any sinkable context works with
   any language.
+- A language may refine a value by the context (`refineVar` for a
+  variable, `refineSig` for a node), for example η-expand a neutral at the
+  type in its annotation or in the context. Readback and conversion refine
+  a value before they look at it, except at the heads of nodes
+  (`HasHeads`), the positions an elimination rule eliminates. By default
+  nothing is refined and no position is a head. `HasHeads` is a superclass
+  of `Eval` and `EvalF`, so every language and fragment gives an instance,
+  possibly empty. A fragment refines with `refineVarF` and `refineSigF`,
+  and a sum takes the first summand that refines.
 - A context may give the free names of a language values (`definition`,
   by default from `HasDefinitions`),
   which `eval` unfolds where the names are used. `NoContext` gives none.
