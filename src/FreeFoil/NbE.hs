@@ -451,9 +451,10 @@ quote scope ctx value = readHead scope ctx (refine scope ctx value)
     readHead :: Foil.Distinct l => Foil.Scope l -> ctx l -> Value binder sig l -> AST binder sig l
     readHead s c = readHeadWith (readHead s c) s c
 
--- | Read a value back without refining it: a head ('headsWith'), or a value
--- refined already. Its heads go to the first function, every other position
--- to 'quote'. 'quote' and 'quoteWhnf' pass the function itself.
+-- | Read a value back without refining it: a head ('headsWith'), a value
+-- refined already, or a value of an environment that 'freezeScoped'
+-- substitutes. Its heads go to the first function, every other position to
+-- 'quote'. 'quote' and 'quoteWhnf' pass the function itself.
 readHeadWith ::
   (Eval ctx binder sig, Foil.Distinct n, Foil.CoSinkable binder) =>
   (Value binder sig n -> AST binder sig n) ->
@@ -527,37 +528,31 @@ quoteWhnf scope ctx value = case refine scope ctx value of
   VVar x -> Var x
   VNode node -> Node $ bimap absurd id (headsWith (readHead scope ctx) (quote scope ctx) node)
   VSuspended env node ->
-    Node $ bimap (freezeScoped scope ctx env) id (headsWith (readHead scope ctx) (quote scope ctx) node)
+    Node $ bimap (freezeScoped (readHead scope ctx) scope env) id (headsWith (readHead scope ctx) (quote scope ctx) node)
   where
-    -- As in 'quote'.
+    -- As in 'quote', so that a specialisation of 'quoteWhnf' covers it.
     readHead :: Foil.Distinct l => Foil.Scope l -> ctx l -> Value binder sig l -> AST binder sig l
     readHead s c = readHeadWith (readHead s c) s c
 
 -- | Freeze one scoped subterm of a suspended node without evaluating under
 -- its binder: refresh the binder and substitute the captured environment,
--- quoted to terms, into the still-syntactic body. 'substitute' only renames,
--- so a redex under the binder survives.
+-- read back to terms by the given function, into the still-syntactic body.
+-- 'substitute' only renames, so a redex under the binder survives.
+--
+-- The body is not refined, so 'quoteWhnf' reads the environment back
+-- without refining its values at the root. Otherwise an
+-- η-expanded value would land at a head of the body: @f@ refined to
+-- @λy. f y@ would freeze as @λx. (λy. f y) x@.
 freezeScoped ::
-  (Eval ctx binder sig, Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder, Foil.SinkableK binder) =>
+  (Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder, Foil.SinkableK binder, Bifunctor sig) =>
+  (Value binder sig n -> AST binder sig n) ->
   Foil.Scope n ->
-  ctx n ->
   Foil.Substitution (Value binder sig) i n ->
   ScopedAST binder sig i ->
   ScopedAST binder sig n
-freezeScoped scope ctx env (ScopedAST binder body) =
+freezeScoped readValue scope (Foil.UnsafeSubstitution env) (ScopedAST binder body) =
   Foil.withRefreshedPattern scope binder $ \extendSubst binder' scope' ->
-    ScopedAST binder' (substitute scope' (extendSubst (quoteSubst scope ctx env)) body)
-
--- | Quote every value in an environment, turning it into a syntactic
--- substitution.
-quoteSubst ::
-  (Eval ctx binder sig, Foil.Distinct n, Foil.CoSinkable binder) =>
-  Foil.Scope n ->
-  ctx n ->
-  Foil.Substitution (Value binder sig) i n ->
-  Foil.Substitution (AST binder sig) i n
-quoteSubst scope ctx (Foil.UnsafeSubstitution m) =
-  Foil.UnsafeSubstitution (IntMap.map (quote scope ctx) m)
+    ScopedAST binder' (substitute scope' (extendSubst (Foil.UnsafeSubstitution (IntMap.map readValue env))) body)
 
 -- | Weak-head normal form: evaluate, then read back the head only. Shares
 -- 'eval' with 'nf'; 'quoteWhnf' does not go under binders, so a redex
