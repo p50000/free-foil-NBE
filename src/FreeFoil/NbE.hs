@@ -94,7 +94,6 @@ import           Data.Bifunctor              (Bifunctor (..))
 import qualified Data.IntMap                 as IntMap
 import           Data.Monoid                 (Any (..))
 import           Data.Void                   (Void, absurd)
-import           Unsafe.Coerce               (unsafeCoerce)
 
 -- * Semantic domain
 
@@ -329,20 +328,14 @@ evalNode ::
   sig (ScopedAST binder sig i) (AST binder sig i) ->
   Value binder sig o
 {-# INLINE evalNode #-}
-evalNode scope ctx env node =
-  case ensureBivacuousFirst node of
-    Just node' -> VNode (bimap absurd (eval scope ctx env) node')
-    Nothing    -> VSuspended env (bimap id (eval scope ctx env) node)
-
--- | The node with its scoped positions at 'Void', if 'Bifoldable' finds
--- none. The coercion is sound because a signature bifunctor is
--- representational in its parameters, and an annotation holds no scoped
--- subterms. The test constant-folds per constructor in specialised code.
-ensureBivacuousFirst :: Bifoldable f => f a b -> Maybe (f Void b)
-{-# INLINE ensureBivacuousFirst #-}
-ensureBivacuousFirst x
-  | getAny (bifoldMap (const (Any True)) (const (Any False)) x) = Nothing
-  | otherwise = Just (unsafeCoerce x)
+evalNode scope ctx env node
+  | hasScoped = VSuspended env (bimap id (eval scope ctx env) node)
+  | otherwise = VNode (bimap noScoped (eval scope ctx env) node)
+  where
+    -- Constant-folds per constructor in specialised code. An annotation
+    -- holds no scoped subterms, so the fold sees all of them.
+    hasScoped = getAny (bifoldMap (const (Any True)) (const (Any False)) node)
+    noScoped _ = error "evalNode: a scoped subterm that (Bifoldable sig) does not see"
 
 -- * Readback
 
