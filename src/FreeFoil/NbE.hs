@@ -561,9 +561,14 @@ lookupSubstWith unmapped mapped (Foil.UnsafeSubstitution values) (Foil.UnsafeNam
 -- | Evaluate a node that has no elimination rule: suspend it whole under the
 -- environment if it has scoped subterms, otherwise evaluate its term
 -- subterms. The same environment both suspends the node and drives its
--- subterms. A node with no subterms of one kind is reused by coercion, which
--- requires the signature to be representational in both parameters; every
--- ordinary data type is.
+-- subterms. A node with no scoped subterms is reused by coercion, which
+-- requires the signature to be representational in its first parameter;
+-- every ordinary data type is.
+--
+-- The term subterms are always mapped, even when the signature's fold finds
+-- none: an annotated signature ("Control.Monad.Free.Foil.Annotated") keeps
+-- its annotation out of 'Bifoldable' but inside 'Bifunctor', so a λ whose
+-- annotation is its type has terms to evaluate that no fold sees.
 evalNode ::
   (Eval ctx binder sig, Foil.Distinct o, Foil.Distinct i) =>
   Foil.Scope o ->
@@ -575,30 +580,18 @@ evalNode ::
 evalNode scope ctx env node =
   case ensureBivacuousFirst node of
     Just node' -> VNode_ (bimap absurd (eval scope ctx env) node')
-    Nothing -> VSuspended_ env $ case ensureBivacuousSecond node of
-      -- Nothing to evaluate either (a lambda, say): reuse the cell as it is.
-      Just node' -> vacuous node'
-      Nothing    -> bimap id (eval scope ctx env) node
+    Nothing    -> VSuspended_ env (bimap id (eval scope ctx env) node)
 
--- A node whose parameter positions are provably empty is the same heap
--- object at any parameter type, so it is reused by coercion rather than
--- rebuilt field by field. The coercions are sound because a signature
--- bifunctor is representational in its parameters; the emptiness tests
--- constant-fold per constructor in specialised code.
-
-vacuous :: f Void -> f a
-vacuous = unsafeCoerce
+-- A node whose scoped positions are provably empty is the same heap object
+-- at any first parameter type, so it is reused by coercion rather than
+-- rebuilt field by field. The coercion is sound because a signature
+-- bifunctor is representational in its parameters; the emptiness test
+-- constant-folds per constructor in specialised code.
 
 ensureBivacuousFirst :: Bifoldable f => f a b -> Maybe (f Void b)
 {-# INLINE ensureBivacuousFirst #-}
 ensureBivacuousFirst x
   | getAny (bifoldMap (const (Any True)) (const (Any False)) x) = Nothing
-  | otherwise = Just (unsafeCoerce x)
-
-ensureBivacuousSecond :: Bifoldable f => f a b -> Maybe (f a Void)
-{-# INLINE ensureBivacuousSecond #-}
-ensureBivacuousSecond x
-  | getAny (bifoldMap (const (Any False)) (const (Any True)) x) = Nothing
   | otherwise = Just (unsafeCoerce x)
 
 -- | Match the value of a principal subterm: an elimination rule sees it as a
