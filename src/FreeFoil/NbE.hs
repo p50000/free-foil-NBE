@@ -27,7 +27,8 @@
 -- check of subtyping.
 --
 -- A language's signature must be a 'Bifunctor' and a 'Bifoldable', both
--- derivable, and representational in both parameters (see 'evalNode'). Its
+-- derivable, and representational in both parameters (see 'evalNode'). It
+-- names its heads in a 'HasHeads' instance, which may be empty. Its
 -- binder type must be 'Foil.CoSinkable', which free-foil generates, plus
 -- 'Foil.SinkableK' for 'whnf', which has a generic default.
 --
@@ -119,7 +120,6 @@ import           Data.Monoid                 (Any (..))
 import           Data.Void                   (Void, absurd)
 import           Data.ZipMatchK              (ZipMatchFoldK, zipMatchFold2)
 import           GHC.Exts                    (inline)
-import           Unsafe.Coerce               (unsafeCoerce)
 
 import           FreeFoil.NbE.Internal.Value
 
@@ -470,7 +470,17 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   -- Unlike 'definition', which 'eval' asks once about a free name, the
   -- method sees every variable, bound ones too, in the context where it is
   -- read back.
-  refineVar :: Foil.Distinct n => Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n
+  --
+  -- The result upholds the invariant of 'Value' and contains the variable
+  -- only at heads ('HasHeads'), as @f@ in @λx. f x@. Readback refines every
+  -- other position again, so the variable anywhere else would be refined
+  -- forever. The same holds for 'refineSig' and its node.
+  --
+  -- Like an 'Extend', the method receives the language's 'Eval' instance
+  -- from the core, so that an instance that refines through other
+  -- instances, as a sum of fragments does, does not refer to itself and
+  -- stays inlinable.
+  refineVar :: (Eval ctx binder sig, Foil.Distinct n) => Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n
   {-# INLINE refineVar #-}
   refineVar _ _ = vvar
 
@@ -479,7 +489,7 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   -- of the node comes first, to embed, as in @λx. f a x@. By default a node
   -- stays as it is.
   refineSig ::
-    Foil.Distinct n =>
+    (Eval ctx binder sig, Foil.Distinct n) =>
     Foil.Scope n -> ctx n -> Value binder sig n -> sig a (Value binder sig n) -> Value binder sig n
   {-# INLINE refineSig #-}
   refineSig _ _ value _ = value
@@ -561,14 +571,14 @@ lookupSubstWith unmapped mapped (Foil.UnsafeSubstitution values) (Foil.UnsafeNam
 -- | Evaluate a node that has no elimination rule: suspend it whole under the
 -- environment if it has scoped subterms, otherwise evaluate its term
 -- subterms. The same environment both suspends the node and drives its
--- subterms. A node with no scoped subterms is reused by coercion, which
--- requires the signature to be representational in its first parameter;
--- every ordinary data type is.
+-- subterms.
 --
 -- The term subterms are always mapped, even when the signature's fold finds
 -- none: an annotated signature ("Control.Monad.Free.Foil.Annotated") keeps
 -- its annotation out of 'Bifoldable' but inside 'Bifunctor', so a λ whose
--- annotation is its type has terms to evaluate that no fold sees.
+-- annotation is its type has terms to evaluate that no fold sees. Mapping a
+-- node with no term subterms allocates no new node, since GHC's common
+-- subexpression elimination on STG reuses the old one.
 evalNode ::
   (Eval ctx binder sig, Foil.Distinct o, Foil.Distinct i) =>
   Foil.Scope o ->
@@ -577,22 +587,14 @@ evalNode ::
   sig (ScopedAST binder sig i) (AST binder sig i) ->
   Value binder sig o
 {-# INLINE evalNode #-}
-evalNode scope ctx env node =
-  case ensureBivacuousFirst node of
-    Just node' -> VNode_ (bimap absurd (eval scope ctx env) node')
-    Nothing    -> VSuspended_ env (bimap id (eval scope ctx env) node)
-
--- A node whose scoped positions are provably empty is the same heap object
--- at any first parameter type, so it is reused by coercion rather than
--- rebuilt field by field. The coercion is sound because a signature
--- bifunctor is representational in its parameters; the emptiness test
--- constant-folds per constructor in specialised code.
-
-ensureBivacuousFirst :: Bifoldable f => f a b -> Maybe (f Void b)
-{-# INLINE ensureBivacuousFirst #-}
-ensureBivacuousFirst x
-  | getAny (bifoldMap (const (Any True)) (const (Any False)) x) = Nothing
-  | otherwise = Just (unsafeCoerce x)
+evalNode scope ctx env node
+  | hasScoped = VSuspended_ env (bimap id (eval scope ctx env) node)
+  | otherwise = VNode_ (bimap noScoped (eval scope ctx env) node)
+  where
+    -- Constant-folds per constructor in specialised code. An annotation
+    -- holds no scoped subterms, so the fold sees all of them.
+    hasScoped = getAny (bifoldMap (const (Any True)) (const (Any False)) node)
+    noScoped _ = error "evalNode: a scoped subterm that (Bifoldable sig) does not see"
 
 -- | Match the value of a principal subterm: an elimination rule sees it as a
 -- 'Whnf', through the synonyms 'VVar', 'VNode', 'VSuspended' and 'Stuck'. On
@@ -665,9 +667,10 @@ quote scope ctx = \case
     readHead :: Foil.Distinct l => Foil.Scope l -> ctx l -> Value binder sig l -> AST binder sig l
     readHead s c = readHeadWith (readHead s c) s c
 
--- | Read a value back without refining it: a head ('headsWith'), or a value
--- refined already. Its heads go to the first function, every other position
--- to 'quote'. 'quote' and 'quoteWhnf' pass the function itself.
+-- | Read a value back without refining it: a head ('headsWith'), a value
+-- refined already, or a value of an environment that 'freezeScoped'
+-- substitutes. Its heads go to the first function, every other position to
+-- 'quote'. 'quote' and 'quoteWhnf' pass the function itself.
 readHeadWith ::
   (Eval ctx binder sig, Foil.Distinct n, Foil.CoSinkable binder) =>
   (Value binder sig n -> AST binder sig n) ->
@@ -742,38 +745,32 @@ quoteWhnf scope ctx value = case refine scope ctx value of
   VVar_ x -> Var x
   VNode_ node -> Node $ bimap absurd id (headsWith (readHead scope ctx) (quote scope ctx) node)
   VSuspended_ env node ->
-    Node $ bimap (freezeScoped scope ctx env) id (headsWith (readHead scope ctx) (quote scope ctx) node)
+    Node $ bimap (freezeScoped (readHead scope ctx) scope env) id (headsWith (readHead scope ctx) (quote scope ctx) node)
   VGlued_ _ folded unfolded -> quoteWhnf scope ctx (unfolding scope ctx folded unfolded)
   where
-    -- As in 'quote'.
+    -- As in 'quote', so that a specialisation of 'quoteWhnf' covers it.
     readHead :: Foil.Distinct l => Foil.Scope l -> ctx l -> Value binder sig l -> AST binder sig l
     readHead s c = readHeadWith (readHead s c) s c
 
 -- | Freeze one scoped subterm of a suspended node without evaluating under
 -- its binder: refresh the binder and substitute the captured environment,
--- quoted to terms, into the still-syntactic body. 'substitute' only renames,
--- so a redex under the binder survives.
+-- read back to terms by the given function, into the still-syntactic body.
+-- 'substitute' only renames, so a redex under the binder survives.
+--
+-- The body is not refined, so 'quoteWhnf' reads the environment back
+-- without refining its values at the root. Otherwise an
+-- η-expanded value would land at a head of the body: @f@ refined to
+-- @λy. f y@ would freeze as @λx. (λy. f y) x@.
 freezeScoped ::
-  (Eval ctx binder sig, Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder, Foil.SinkableK binder) =>
+  (Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder, Foil.SinkableK binder, Bifunctor sig) =>
+  (Value binder sig n -> AST binder sig n) ->
   Foil.Scope n ->
-  ctx n ->
   Foil.Substitution (Value binder sig) i n ->
   ScopedAST binder sig i ->
   ScopedAST binder sig n
-freezeScoped scope ctx env (ScopedAST binder body) =
+freezeScoped readValue scope (Foil.UnsafeSubstitution env) (ScopedAST binder body) =
   Foil.withRefreshedPattern scope binder $ \extendSubst binder' scope' ->
-    ScopedAST binder' (substitute scope' (extendSubst (quoteSubst scope ctx env)) body)
-
--- | Quote every value in an environment, turning it into a syntactic
--- substitution.
-quoteSubst ::
-  (Eval ctx binder sig, Foil.Distinct n, Foil.CoSinkable binder) =>
-  Foil.Scope n ->
-  ctx n ->
-  Foil.Substitution (Value binder sig) i n ->
-  Foil.Substitution (AST binder sig) i n
-quoteSubst scope ctx (Foil.UnsafeSubstitution m) =
-  Foil.UnsafeSubstitution (IntMap.map (quote scope ctx) m)
+    ScopedAST binder' (substitute scope' (extendSubst (Foil.UnsafeSubstitution (IntMap.map readValue env))) body)
 
 -- | Weak-head normal form: evaluate, then read back the head only. Shares
 -- 'eval' with 'nf'; 'quoteWhnf' does not go under binders, so a redex

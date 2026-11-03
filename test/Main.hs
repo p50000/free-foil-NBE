@@ -15,6 +15,7 @@ import qualified Test.LambdaPi
 import qualified Test.Monolith
 import qualified Test.Naturals
 import qualified Test.Pairs
+import qualified Test.Refinement
 
 main :: IO ()
 main =
@@ -33,4 +34,5 @@ main =
         , Test.Pairs.tests
         , Test.DependentTypes.tests
         , Test.Annotated.tests
+        , Test.Refinement.tests
         ]
