@@ -229,7 +229,10 @@ convScoped compare' scope ctx envL envR (ScopedAST binderL bodyL) (Extend extend
             in compare' scope' ctx' (eval scope' ctx' (extendL envL) bodyL) (eval scope' ctx' envR' bodyR)
 
 -- | Two terms are convertible under their environments: evaluate each under
--- its own environment, then compare with 'conv'.
+-- its own environment, then compare with 'conv'. The function is @INLINE@,
+-- so that a language's @SPECIALIZE@ pragmas for 'conv' and
+-- 'FreeFoil.NbE.eval' apply to it. As @INLINABLE@, it would be specialised
+-- only where the scope is fixed too.
 convertibleUnder ::
   (Eval ctx binder sig, Foil.Distinct n, Foil.Distinct i1, Foil.Distinct i2, Foil.UnifiablePattern binder) =>
   Foil.Scope n ->
@@ -239,7 +242,7 @@ convertibleUnder ::
   AST binder sig i1 ->
   AST binder sig i2 ->
   Bool
-{-# INLINABLE convertibleUnder #-}
+{-# INLINE convertibleUnder #-}
 convertibleUnder scope ctx envL envR t u =
   conv scope ctx (eval scope ctx envL t) (eval scope ctx envR u)
 
