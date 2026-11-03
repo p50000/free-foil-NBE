@@ -76,6 +76,7 @@ module FreeFoil.NbE
   , vvar
   , vnode
   , vsuspended
+  , vglued
     -- * Context
   , NoContext (..)
   , HasDefinitions (..)
@@ -169,6 +170,14 @@ vsuspended ::
   Value binder sig n
 {-# INLINE vsuspended #-}
 vsuspended = VSuspended_
+
+-- | A defined name glued to its value: the name, the neutral on it, which
+-- is its folded side, and the lazy value of its body, its unfolded side.
+-- For a context that gives 'definition' itself, as "FreeFoil.NbE.Definitions"
+-- does for its own context.
+vglued :: Foil.Name n -> Value binder sig n -> Value binder sig n
+{-# INLINE vglued #-}
+vglued x = VGlued_ x (VVar_ x)
 
 -- * Context
 
