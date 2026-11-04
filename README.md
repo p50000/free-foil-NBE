@@ -12,11 +12,12 @@ This realises the generic closure that the Free Foil paper (Kudasov,
 Shakirova, Shalagin, Tyulebaeva, [ICCQ 2024](https://arxiv.org/abs/2405.16384))
 left as future work.
 
-**Status.** The core is in place and is demonstrated on five languages:
+**Status.** The core is in place and is demonstrated on six languages:
 lambda-pi (functions and the dependent function type), Booleans (`if`, no
 binders), lambda-let (`let`), pairs (projections, and `split` with a
-pattern that binds two names) and naturals (primitive recursion, whose
-`suc` branch binds two names), and on a language composed from fragments
+pattern that binds two names), naturals (primitive recursion, whose `suc`
+branch binds two names) and dependent types (a context of types and η by
+types, on elaborated terms), and on a language composed from fragments
 of functions, pairs and naturals, whose rules the library combines
 (`FreeFoil.NbE.Sum`); the same language written in one signature serves as
 its baseline and lends it a parser. A hand-written monomorphic NbE is the
@@ -31,8 +32,9 @@ which knows nothing beyond the scope.
 ## Limitations
 
 - Readback consults types only through a language's `refineVar` and
-  `refineSig`. Without them, as in every demo, normal forms are β-normal,
-  with the language's own reductions, and not η-normal.
+  `refineSig`. Without them, as in every demo but dependent types, normal
+  forms are β-normal, with the language's own reductions, and not
+  η-normal.
 - Values are built over the same signature as terms, so a language cannot
   have value formers that its syntax lacks, as extensional booleans and sums
   need.
@@ -86,6 +88,7 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 | `demo/grammar/<Lang>/Syntax.cf`, `gen/<Lang>/` | The LBNF grammar of each demo language and the committed BNFC output. |
 | `demo/<Lang>/Raw.hs`, `Generated.hs` | free-foil's Template Haskell: the configuration and the generated scope-safe syntax. |
 | `demo/LambdaPi.hs`, `demo/LambdaLet.hs`, `demo/Booleans.hs`, `demo/Pairs.hs`, `demo/Naturals.hs` | The languages: pattern synonyms, the `Eval` instance, a reference normaliser. |
+| `demo/DependentTypes.hs`, `demo/DependentTypes/Elaborate.hs` | A typed language: its context of types, η by types, and bidirectional elaboration. |
 | `demo/<Lang>/Examples.hs` | Example terms of each language, each with its normal form. |
 | `demo/Fragments/*.hs` | The fragments of functions, pairs and naturals, their shared pattern type, and the language composed from them. |
 | `demo/LambdaPi/Parser.hs`, `PrettyPrint.hs` | Terms as string literals; two printers for values. |
