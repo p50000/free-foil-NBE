@@ -94,6 +94,7 @@ module FreeFoil.NbE
   , eliminate
   , force
   , forceFolded
+  , fromWhnf
     -- * η
   , EtaTerm (..)
   , EtaScoped (..)
@@ -150,7 +151,9 @@ pattern Stuck v <- (fromWhnf -> v)
 
 {-# COMPLETE Stuck #-}
 
--- | The synonyms match a 'Whnf' as the 'Value' it was cast from.
+-- | A 'Whnf' as the 'Value' it was cast from. The cast is free, since the
+-- index is phantom. The synonyms match through it. A language that matched
+-- a head passes it back to 'quote' or 'eval' through it as well.
 fromWhnf :: Whnf binder sig n -> Value binder sig n
 {-# INLINE fromWhnf #-}
 fromWhnf = coerce
