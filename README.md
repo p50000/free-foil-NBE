@@ -88,7 +88,7 @@ change a grammar, install `bnfc`, `alex` and `happy`, run
 | `demo/grammar/<Lang>/Syntax.cf`, `gen/<Lang>/` | The LBNF grammar of each demo language and the committed BNFC output. |
 | `demo/<Lang>/Raw.hs`, `Generated.hs` | free-foil's Template Haskell: the configuration and the generated scope-safe syntax. |
 | `demo/LambdaPi.hs`, `demo/LambdaLet.hs`, `demo/Booleans.hs`, `demo/Pairs.hs`, `demo/Naturals.hs` | The languages: pattern synonyms, the `Eval` instance, a reference normaliser. |
-| `demo/DependentTypes.hs`, `demo/DependentTypes/Elaborate.hs` | A typed language: its context of types, η by types, and bidirectional elaboration. |
+| `demo/DependentTypes.hs`, `demo/DependentTypes/Elaborate.hs` | A typed language: its context of types, η by shape, singleton types, and bidirectional elaboration. |
 | `demo/<Lang>/Examples.hs` | Example terms of each language, each with its normal form. |
 | `demo/Fragments/*.hs` | The fragments of functions, pairs and naturals, their shared pattern type, and the language composed from them. |
 | `demo/LambdaPi/Parser.hs`, `PrettyPrint.hs` | Terms as string literals; two printers for values. |

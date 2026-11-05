@@ -25,8 +25,9 @@
 -- different neutrals, which differ unless their type is a singleton: @Unit@,
 -- a Π into a singleton, or a Σ of two. A type value records whether it is a
 -- singleton ('IsSingletonType'), and in a context of types ('HasTypes')
--- readback turns a neutral of a singleton type into that type's one value
--- ('NbE.refineVar', 'NbE.refineSig'), such as @tt@ or @\\(x : A). tt@.
+-- readback and conversion turn a neutral of a singleton type into that
+-- type's one value ('NbE.refineVar', 'NbE.refineSig'), such as @tt@ or
+-- @\\(x : A). tt@.
 --
 -- η by shape is that of Abel and Coquand ("Untyped algorithmic equality for
 -- Martin-Löf's logical framework with surjective pairs", 2007), who note that

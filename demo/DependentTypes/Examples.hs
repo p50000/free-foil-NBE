@@ -41,7 +41,8 @@ functionEta =
     "(A : U) -> (f : (x : A) -> A) -> (x : A) -> A"
     "\\(A : U). \\(f : (x : A) -> A). f"
 
--- | The two η laws together: a function into the unit type is constant.
+-- | A function into the unit type is constant: its type is a singleton, so
+-- @f@ becomes @\\(x : Unit). tt@.
 unitFunctionEta :: Example
 unitFunctionEta =
   Example
