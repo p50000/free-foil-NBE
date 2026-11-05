@@ -172,8 +172,15 @@ typeAnnotation u singleton
 isSingletonType :: TypeValue n -> Bool
 {-# INLINE isSingletonType #-}
 isSingletonType = \case
-  NbE.VNode (AnnSig IsSingletonType _) -> True
-  NbE.VSuspended _ (AnnSig IsSingletonType _) -> True
+  NbE.VNode (AnnSig ann _) -> isSingletonAnn ann
+  NbE.VSuspended _ (AnnSig ann _) -> isSingletonAnn ann
+  _ -> False
+
+-- | Whether the annotation of a type says that it is a singleton.
+isSingletonAnn :: TypeAnn ty -> Bool
+{-# INLINE isSingletonAnn #-}
+isSingletonAnn = \case
+  IsSingletonType -> True
   _ -> False
 
 -- | The type in an annotation.
@@ -241,12 +248,9 @@ instance (HasTypes ctx, HasDefinitions ctx FFPattern Sig) => Eval ctx FFPattern 
     SecondSig p -> secondValue (fmap (NbE.eval scope ctx env) ann) (NbE.eval scope ctx env p)
     -- A singleton stays one under substitution, a type that is not one may
     -- become one: its value decides again.
-    PiSig {} | not (isSingleton ann) -> singletonFlag scope ctx (NbE.evalNode scope ctx env (AnnSig ann node))
-    SigmaSig {} | not (isSingleton ann) -> singletonFlag scope ctx (NbE.evalNode scope ctx env (AnnSig ann node))
+    PiSig {} | not (isSingletonAnn ann) -> singletonFlag scope ctx (NbE.evalNode scope ctx env (AnnSig ann node))
+    SigmaSig {} | not (isSingletonAnn ann) -> singletonFlag scope ctx (NbE.evalNode scope ctx env (AnnSig ann node))
     _ -> NbE.evalNode scope ctx env (AnnSig ann node)
-    where
-      isSingleton IsSingletonType = True
-      isSingleton _               = False
 
   -- The observers of a λ apply the other value to the bound name, those of a
   -- pair project it. Each carries its type, so that it is refined as well.
