@@ -23,9 +23,11 @@ module DependentTypes.Elaborate
   ( check
   , infer
   , elaborate
+  , typeIs
   ) where
 
 import qualified Data.Map.Strict as Map
+import qualified Control.Monad.Foil as Foil
 
 import Control.Monad.Foil
 import Control.Monad.Free.Foil
@@ -180,3 +182,46 @@ evalIn scope typing = NbE.eval scope typing identitySubst
 
 quoteIn :: Distinct n => Scope n -> Typing n -> Value n -> Elaborated n
 quoteIn = NbE.quote
+
+-- | Whether the type of a term under definitions is the given type, read
+-- off the value of the term and read back on the given side of the defined
+-- names. A definition is a name, its type and its body; a body may use the
+-- names defined before it.
+--
+-- The type is read off the folded head of the value, so a defined name
+-- keeps the type its declaration gives it:
+--
+-- >>> import DependentTypes (Unfolding (..))
+-- >>> let defs = [("T", "U 0", "(x : Unit) -> Unit"), ("f", "T", "\\(x : Unit). x")]
+-- >>> typeIs Folded defs "f" "T"
+-- Right True
+-- >>> typeIs Folded defs "f" "(x : Unit) -> Unit"
+-- Right False
+--
+-- Unfolded, the same type is the one the body computes:
+--
+-- >>> typeIs Unfolded defs "f" "(x : Unit) -> Unit"
+-- Right True
+typeIs :: Unfolding -> [(String, String, String)] -> String -> String -> Either String Bool
+typeIs unfolding definitions term expected = go emptyScope Map.empty emptyTyping definitions
+  where
+    go :: Distinct n => Scope n -> Map.Map String (Name n) -> Typing n -> [(String, String, String)] -> Either String Bool
+    go scope names typing [] = do
+      term0 <- parseOpen scope names term
+      (term', _) <- infer scope typing term0
+      let value = evalIn scope typing term'
+          ty = quoteIn scope (withUnfolding unfolding typing) (typeOfValue typing value)
+      expected0 <- parseOpen scope names expected
+      (expected', _) <- inferType scope typing expected0
+      pure (alphaEquiv scope (unannotated ty) (unannotated expected'))
+    go scope names typing ((x, ty, body) : rest) = do
+      ty0 <- parseOpen scope names ty
+      (ty', _) <- inferType scope typing ty0
+      let tyV = evalIn scope typing ty'
+      body0 <- parseOpen scope names body
+      body' <- check scope typing body0 tyV
+      withFresh scope $ \b ->
+        go (extendScope b scope)
+           (Map.insert x (nameOf b) (Map.map Foil.sink names))
+           (define b tyV (evalIn scope typing body') typing)
+           rest
