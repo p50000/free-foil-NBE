@@ -303,6 +303,28 @@ library lambda-let-demo
     default-language: Haskell2010
 
 -- Exercises the generic NbE on every demo language.
+-- The examples in the haddocks of the demo languages, run by doctest.
+test-suite doctests
+    import:           warnings
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          Doctests.hs
+    -- The demo's own dependencies are listed so that the package environment
+    -- file cabal writes for GHCi holds them.
+    build-depends:    base ^>=4.20.2.0
+        , bifunctors
+        , containers ^>=0.7
+        , demo-parsing
+        , dependent-types-demo
+        , dependent-types-syntax
+        , doctest-parallel ^>=0.4
+        , free-foil ^>=0.6.1
+        , free-foil-nbe
+        , kind-generics
+        , kind-generics-th
+    ghc-options:      -threaded
+    default-language: Haskell2010
+
 test-suite free-foil-nbe-test
     import:           warnings
     type:             exitcode-stdio-1.0

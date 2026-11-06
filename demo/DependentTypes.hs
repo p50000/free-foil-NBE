@@ -62,6 +62,7 @@ module DependentTypes
   , universe
   , unitType
   , typeOfNode
+  , typeOfValue
   , typeAnnotation
   , isSingletonType
     -- * Contexts of types
@@ -70,6 +71,9 @@ module DependentTypes
   , Typing
   , emptyTyping
   , typeOf
+  , define
+  , withUnfolding
+  , Unfolding (..)
   , codomainAt
     -- * Normalisation
   , eval
@@ -93,6 +97,7 @@ import FreeFoil.NbE (Eval (..), Extend (..), HasDefinitions (..), HasHeads (..))
 import Generics.Kind.TH (deriveGenericK)
 import qualified FreeFoil.NbE as NbE
 import qualified FreeFoil.NbE.Conversion as Conv
+import FreeFoil.NbE.Definitions (Unfolding (..))
 
 import DependentTypes.Generated (FFPattern (..), FFTerm, TermSig (..))
 
@@ -238,25 +243,69 @@ opposite = \case
   Contravariant -> Covariant
   Invariant     -> Invariant
 
--- | A type for every name in scope, and the direction of the comparison.
-data Typing n = Typing Variance (NameMap n (TypeValue n))
+-- | An entry for every name in scope, the side of a defined name that
+-- readback follows, and the direction of the comparison.
+data Typing n = Typing
+  { typingVariance  :: Variance
+  , typingUnfolding :: Unfolding
+  , typingEntries   :: NameMap n (Entry n)
+  }
 
--- | The context of the empty scope, for conversion.
+-- | What the context knows of a name: its type, and its value when it is
+-- defined.
+data Entry n = Entry
+  { entryType  :: TypeValue n
+  , entryValue :: Maybe (Value n)
+  }
+
+instance Sinkable Entry where
+  sinkabilityProof rename (Entry ty value) =
+    Entry (sinkabilityProof rename ty) (fmap (sinkabilityProof rename) value)
+
+-- | The context of the empty scope, for conversion. Readback unfolds every
+-- definition.
 emptyTyping :: Typing VoidS
-emptyTyping = Typing Invariant emptyNameMap
+emptyTyping = Typing
+  { typingVariance = Invariant
+  , typingUnfolding = Unfolded
+  , typingEntries = emptyNameMap
+  }
 
 -- | The type of a name.
 typeOf :: Name n -> Typing n -> TypeValue n
-typeOf x (Typing _ types) = lookupName x types
+typeOf x typing = entryType (lookupName x (typingEntries typing))
+
+-- | The context under a binder whose name has an entry. The entries in
+-- scope sink by coercion ('sink1').
+enter :: DExt n l => NameBinder n l -> Entry n -> Typing n -> Typing l
+enter x entry typing = typing { typingEntries = addNameBinder x (sink entry) (sink1 (typingEntries typing)) }
+
+-- | The context under a binder whose name has a type and a value: a
+-- definition. The name evaluates to a glued value, so readback and
+-- conversion can keep it folded.
+define :: DExt n l => NameBinder n l -> TypeValue n -> Value n -> Typing n -> Typing l
+define x ty value = enter x (Entry ty (Just value))
+
+-- | The same context, with readback following the given side of a defined
+-- name.
+withUnfolding :: Unfolding -> Typing n -> Typing n
+withUnfolding side typing = typing { typingUnfolding = side }
 
 instance HasTypes Typing where
-  assume x ty (Typing v types) = Typing v (addNameBinder x (sink ty) (sink1 types))
-  typeOfName (Typing _ types) x = lookupName x types
-  variance (Typing v _) = v
-  withVariance v (Typing _ types) = Typing v types
+  assume x ty = enter x (Entry ty Nothing)
+  typeOfName typing x = entryType (lookupName x (typingEntries typing))
+  variance = typingVariance
+  withVariance v typing = typing { typingVariance = v }
 
+-- | A defined name is glued to its value, any other name is a neutral.
 instance HasDefinitions Typing FFPattern Sig where
-  contextDefinition _ _ = NbE.vvar
+  contextDefinition _ typing x =
+    case entryValue (lookupName x (typingEntries typing)) of
+      Just value -> NbE.vglued x value
+      Nothing    -> NbE.vvar x
+  contextUnfolding _ typing folded unfolded = case typingUnfolding typing of
+    Folded   -> folded
+    Unfolded -> unfolded
 
 -- * Rules
 
@@ -413,11 +462,13 @@ appliedTo scope ctx (FFPatternVar x) f = case NbE.force (typeOfValue ctx f) of
 impossibleNonPiType :: a
 impossibleNonPiType = error "DependentTypes: impossible: η for a λ against a value whose type is not a Π"
 
--- | The type of a value: of a variable from the context, of a node from its
--- annotation. A glued value has the type of its unfolded head.
+-- | The type of a value, read off its head: the type of a name from the
+-- context, the type of a node from its annotation. The head is the folded
+-- one, so that a defined name keeps the type its declaration gives it,
+-- and not the type its body computes (see 'NbE.forceFolded').
 typeOfValue :: HasTypes ctx => ctx n -> Value n -> TypeValue n
 {-# INLINE typeOfValue #-}
-typeOfValue ctx v = case NbE.force v of
+typeOfValue ctx v = case NbE.forceFolded v of
   NbE.VVar x -> typeOfName ctx x
   NbE.VNode (AnnSig ann node) -> typeOfNode ann node
   NbE.VSuspended _ (AnnSig ann node) -> typeOfNode ann node

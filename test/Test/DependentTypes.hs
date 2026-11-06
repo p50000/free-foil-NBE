@@ -9,8 +9,8 @@ import Test.Tasty.HUnit
 import Control.Monad.Foil
 import Control.Monad.Free.Foil (alphaEquiv)
 
-import DependentTypes (convertible, emptyTyping, eval, fullyAnnotated, isSubtype, nf)
-import DependentTypes.Elaborate (elaborate)
+import DependentTypes (Unfolding (..), convertible, emptyTyping, eval, fullyAnnotated, isSubtype, nf)
+import DependentTypes.Elaborate (elaborate, typeIs)
 import DependentTypes.Examples
 
 tests :: TestTree
@@ -53,6 +53,14 @@ tests =
             (g, _) <- elaborated "\\(x : U 0). U 1" "(x : U 0) -> U 2"
             isSubtype emptyScope emptyTyping (evalType f) (evalType g) @?= False
         ]
+    , testGroup "the type of a defined name is read off its folded head"
+        [ testCase "folded, the declared type" $
+            typeIs Folded definitions "f" "T" @?= Right True
+        , testCase "folded, not the type the body computes" $
+            typeIs Folded definitions "f" "(x : Unit) -> Unit" @?= Right False
+        , testCase "unfolded, the type the body computes" $
+            typeIs Unfolded definitions "f" "(x : Unit) -> Unit" @?= Right True
+        ]
     , testGroup "elaboration rejects"
         [ testCase "a term of another type" $
             rejects "\\(x : Unit). x" "(x : U 0) -> U 0"
@@ -74,3 +82,7 @@ tests =
     rejects term ty = case elaborate term ty of
       Left _ -> pure ()
       Right (t, _) -> assertFailure ("elaborated to " ++ show t)
+
+-- | A type synonym and a function declared at it.
+definitions :: [(String, String, String)]
+definitions = [("T", "U 0", "(x : Unit) -> Unit"), ("f", "T", "\\(x : Unit). x")]
