@@ -150,6 +150,12 @@ conversions =
         "\\(A : U 0). \\(f : (x : A) -> Unit). \\(g : (x : A) -> Unit). f"
         "\\(A : U 0). \\(f : (x : A) -> Unit). \\(g : (x : A) -> Unit). g"
         True )
+  , ( "a λ over a pair pattern after β and a λ over a variable"
+    , Conversion
+        "(p : (a : U 0) * U 0) -> (b : U 0) * U 0"
+        "(\\(g : (A : U 1) -> (p : (a : A) * A) -> (b : A) * A). g (U 0)) (\\(A : U 1). \\((x, y) : (a : A) * A). (y, x))"
+        "\\(p : (a : U 0) * U 0). (second p, first p)"
+        True )
   , ( "two variables of a type variable"
     , Conversion "(A : U 0) -> (x : A) -> (y : A) -> A" "\\(A : U 0). \\(x : A). \\(y : A). x" "\\(A : U 0). \\(x : A). \\(y : A). y" False )
   , ( "a pair variable and the pair of its projections"

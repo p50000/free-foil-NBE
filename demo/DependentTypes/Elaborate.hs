@@ -59,10 +59,10 @@ check scope typing term ty = case term of
           let domV = evalIn scope typing dom'
           if Conv.conv scope typing domV piDom
             then do
-              typing' <- assumed scope pat domV typing
+              (pat', typing') <- typedPattern scope typing pat domV
               let scope' = extendScopePattern pat scope
-              body' <- check scope' typing' body (codomainAt scope' typing' (sink env) cod (patternValue pat))
-              pure (annotated (quoteIn scope typing ty) (LamSig dom' (ScopedAST pat body')))
+              body' <- check scope' typing' body (codomainAt scope' typing' (sink env) cod (patternValue scope' typing' pat'))
+              pure (annotated (quoteIn scope typing ty) (LamSig dom' (ScopedAST pat' body')))
             else Left ("the domain " ++ show dom' ++ " is not " ++ show (quoteIn scope typing piDom))
   Node ReflSig -> case NbE.force ty of
     NbE.VNode (AnnSig _ (IdSig _ a b))
@@ -97,10 +97,11 @@ infer scope typing = \case
         (dom', i) <- inferType scope typing dom
         let scope' = extendScope x scope
             typing' = assume x (evalIn scope typing dom') typing
+            pat' = TypedVar x dom'
         (body', bodyTy) <- infer scope' typing' body
         j <- levelOf typing' bodyTy
-        let piTy = typeNode scope typing (max i j) (PiSig dom' (ScopedAST pat (quoteIn scope' typing' bodyTy)))
-        pure (annotated piTy (LamSig dom' (ScopedAST pat body')), evalIn scope typing piTy)
+        let piTy = typeNode scope typing (max i j) (PiSig dom' (ScopedAST pat' (quoteIn scope' typing' bodyTy)))
+        pure (annotated piTy (LamSig dom' (ScopedAST pat' body')), evalIn scope typing piTy)
     FFPatternPair {} -> Left "the type of a λ over a pair pattern is not inferred; check it against a Π type"
   Node (IdSig a x y) -> do
     (a', i) <- inferType scope typing a
@@ -155,21 +156,31 @@ levelOf typing ty = case NbE.force universeOf of
 -- bound name. It lives in the larger of their universes.
 typeFormer ::
   Distinct n =>
-  (Elaborated n -> ScopedAST FFPattern Sig n -> TermSig (ScopedAST FFPattern Sig n) (Elaborated n)) ->
+  (Elaborated n -> ScopedAST TypedPattern Sig n -> TermSig (ScopedAST TypedPattern Sig n) (Elaborated n)) ->
   Scope n -> Typing n -> Raw n -> FFPattern n l -> Raw l -> Either String (Elaborated n, TypeValue n)
 typeFormer former scope typing dom pat cod = case (assertDistinct pat, assertExt pat) of
   (Distinct, Ext) -> do
     (dom', i) <- inferType scope typing dom
-    typing' <- assumed scope pat (evalIn scope typing dom') typing
+    (pat', typing') <- typedPattern scope typing pat (evalIn scope typing dom')
     (cod', j) <- inferType (extendScopePattern pat scope) typing' cod
-    pure (typeNode scope typing (max i j) (former dom' (ScopedAST pat cod')), universe (max i j))
+    pure (typeNode scope typing (max i j) (former dom' (ScopedAST pat' cod')), universe (max i j))
 
--- | The context under a binder assumed at a type, or the error of a pair
--- pattern at a type that is not a Σ.
-assumed :: (Distinct n, DExt n l) => Scope n -> FFPattern n l -> TypeValue n -> Typing n -> Either String (Typing l)
-assumed scope pat ty typing = case assumeAt scope pat ty typing of
-  Just typing' -> pure typing'
-  Nothing -> Left ("a pair pattern at a type that is not a Σ: " ++ show (quoteIn scope typing ty))
+-- | A binder at a type, with the types of its names, and the context under
+-- it: a variable at any type, a pair pattern at a Σ type, its first
+-- component at the domain and its second at the codomain at the first.
+typedPattern ::
+  Distinct n =>
+  Scope n -> Typing n -> FFPattern n l -> TypeValue n -> Either String (TypedPattern n l, Typing l)
+typedPattern scope typing pat ty = case pat of
+  FFPatternVar x -> case (assertDistinct x, assertExt x) of
+    (Distinct, Ext) -> pure (TypedVar x (quoteIn scope typing ty), assume x ty typing)
+  FFPatternPair l r -> case (NbE.force ty, assertDistinct l, assertExt l) of
+    (NbE.VSuspended env (AnnSig _ (SigmaSig dom cod)), Distinct, Ext) -> do
+      (l', typingL) <- typedPattern scope typing l dom
+      let scopeL = extendScopePattern l scope
+      (r', typingR) <- typedPattern scopeL typingL r (codomainAt scopeL typingL (sink env) cod (patternValue scopeL typingL l'))
+      pure (TypedPair (quoteIn scope typing ty) l' r', typingR)
+    _ -> Left ("a pair pattern at a type that is not a Σ: " ++ show (quoteIn scope typing ty))
 
 -- | Elaborate a closed term against a closed type, both parsed from strings.
 -- The result is the elaborated term and its type.
@@ -191,13 +202,13 @@ unitTerm = Node (AnnSig (IsSingletonType (universeTerm 0)) UnitSig)
 
 -- | A Π or Σ type in the universe of a level, annotated with whether it is a
 -- singleton, as its value decides.
-typeNode :: Distinct n => Scope n -> Typing n -> Integer -> TermSig (ScopedAST FFPattern Sig n) (Elaborated n) -> Elaborated n
+typeNode :: Distinct n => Scope n -> Typing n -> Integer -> TermSig (ScopedAST TypedPattern Sig n) (Elaborated n) -> Elaborated n
 typeNode scope typing level node = Node (AnnSig (typeAnnotation (universeTerm level) singleton) node)
   where
     singleton = isSingletonType (evalIn scope typing (annotated (universeTerm level) node))
 
 -- | A node annotated with its type.
-annotated :: Elaborated n -> TermSig (ScopedAST FFPattern Sig n) (Elaborated n) -> Elaborated n
+annotated :: Elaborated n -> TermSig (ScopedAST TypedPattern Sig n) (Elaborated n) -> Elaborated n
 annotated ty = Node . AnnSig (HasType ty)
 
 evalIn :: Distinct n => Scope n -> Typing n -> Elaborated n -> Value n
