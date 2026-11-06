@@ -122,6 +122,15 @@ instance (Sinkable ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPatt
     PairSig a b -> Just (PairSig (term a (NbE.EtaTerm (\_ _ -> fstValue))) (term b (NbE.EtaTerm (\_ _ -> sndValue))))
     _ -> Nothing
 
+  -- The pattern of a @split@ stands for the pair of its names, and bound
+  -- to a value gives them its projections.
+  {-# INLINE binderValue #-}
+  binderValue _ _ (FFPatternPair x y) = case assertExt y of
+    Ext -> Just (NbE.vnode (PairSig (NbE.vvar (sink (nameOf x))) (NbE.vvar (nameOf y))))
+  {-# INLINE bindValue #-}
+  bindValue _ _ env (FFPatternPair x y) v =
+    Just (addSubst (addSubst env x (fstValue v)) y (sndValue v))
+
 -- | The first component of a pair value; stuck on anything else.
 fstValue :: Value n -> Value n
 fstValue p = NbE.eliminate p $ \case

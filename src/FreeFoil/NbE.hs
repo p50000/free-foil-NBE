@@ -498,6 +498,33 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   {-# INLINE refineSig #-}
   refineSig _ _ value _ = value
 
+  -- | The value a binder stands for, in the scope it binds: a variable
+  -- binder stands for its name, a pair pattern for the pair of what its
+  -- components stand for. With 'bindValue', it lets conversion compare two
+  -- scoped positions whose binders differ in shape: the right binder is
+  -- bound to the value of the left one, so that the two bodies see one
+  -- value. By default a binder stands for nothing, which leaves such
+  -- positions compared by position when their shapes agree and unrelated
+  -- otherwise. The default does not guess from the names a binder binds:
+  -- a pattern @(_, x)@ binds one name and stands for a pair, not for @x@.
+  -- The binder is one of a scoped position in a distinct scope, so an
+  -- instance may list its names ('Foil.namesOfPattern').
+  binderValue :: (Foil.Distinct n, Foil.Distinct l) => Foil.Scope l -> ctx l -> binder n l -> Maybe (Value binder sig l)
+  {-# INLINE binderValue #-}
+  binderValue _ _ _ = Nothing
+
+  -- | Extend an environment with a binder bound to a value: a variable
+  -- binder binds its name to the value, a pair pattern binds each component
+  -- to its projection. The projections are not computed until a name is
+  -- looked up. By default a binder binds nothing (see 'binderValue').
+  bindValue ::
+    Foil.Distinct o =>
+    Foil.Scope o -> ctx o ->
+    Foil.Substitution (Value binder sig) i o -> binder i l -> Value binder sig o ->
+    Maybe (Foil.Substitution (Value binder sig) l o)
+  {-# INLINE bindValue #-}
+  bindValue _ _ _ _ _ = Nothing
+
 -- | The default of 'relateWith': two nodes match by free-foil's
 -- 'ZipMatchFoldK', every scoped position extends the given context as the
 -- left node's 'extendScopedWith' says, and every term position keeps it.
