@@ -39,12 +39,19 @@ tests =
             convertible emptyScope emptyTyping t u @?= expected
         | (name, Conversion ty t0 u0 expected) <- conversions
         ]
-    , testGroup "subtyping in a context of types"
+    , testGroup "subtyping in a context of types" $
         [ testCase name $ do
             (a, _) <- elaborated a0 "U 3"
             (b, _) <- elaborated b0 "U 3"
             isSubtype emptyScope emptyTyping (evalType a) (evalType b) @?= expected
         | (name, Subtyping a0 b0 expected) <- subtypings
+        ] ++
+        [ testCase "the body of a λ, compared invariantly" $ do
+            -- Positions other than those of a universe, a Π or a Σ are
+            -- compared invariantly, also under a binder.
+            (f, _) <- elaborated "\\(x : U 0). U 0" "(x : U 0) -> U 2"
+            (g, _) <- elaborated "\\(x : U 0). U 1" "(x : U 0) -> U 2"
+            isSubtype emptyScope emptyTyping (evalType f) (evalType g) @?= False
         ]
     , testGroup "elaboration rejects"
         [ testCase "a term of another type" $
