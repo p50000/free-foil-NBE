@@ -81,6 +81,7 @@ module FreeFoil.NbE
     -- * Context
   , NoContext (..)
   , HasDefinitions (..)
+  , GlueSpeculation (..)
   , Extend (..)
   , sinkExtend
     -- * Evaluation
@@ -113,6 +114,7 @@ import           Data.Bifoldable             (Bifoldable (..))
 import           Data.Bifunctor              (Bifunctor (..))
 import           Data.Bifunctor.Sum          (Sum (..))
 import           Data.Coerce                 (coerce)
+import           Data.Kind                   (Type)
 import qualified Data.IntMap                 as IntMap
 import           Data.Monoid                 (Any (..))
 import           Data.Void                   (Void, absurd)
@@ -188,10 +190,11 @@ instance Foil.Sinkable NoContext where
   sinkabilityProof _ NoContext = NoContext
 
 -- | The values a context gives to free names, the default of 'definition',
--- and the side of a glued value that readback follows, the default of
--- 'unfolding'. 'NoContext' defines nothing. A language generic in the
--- context requires this class of it in its 'Eval' instance, which needs
--- @UndecidableInstances@.
+-- the side of a glued value that readback follows, the default of
+-- 'unfolding', and how conversion compares glued values, the defaults of
+-- 'glueSpeculation' and 'unfoldGlued'. 'NoContext' defines nothing. A
+-- language generic in the context requires this class of it in its 'Eval'
+-- instance, which needs @UndecidableInstances@.
 class HasDefinitions ctx binder sig where
   -- | The value of a free name, or the name itself if the context does not
   -- define it. A defined name may be glued to its value, so that readback
@@ -203,6 +206,34 @@ class HasDefinitions ctx binder sig where
   contextUnfolding :: Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n -> Value binder sig n
   {-# INLINE contextUnfolding #-}
   contextUnfolding _ _ _ unfolded = unfolded
+
+  -- | How conversion compares two glued values, from their defined names
+  -- and their folded sides. By default it unfolds both and speculates
+  -- nothing.
+  contextGlueSpeculation ::
+    Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n -> Foil.Name n -> Value binder sig n -> GlueSpeculation ctx n
+  {-# INLINE contextGlueSpeculation #-}
+  contextGlueSpeculation _ ctx _ _ _ _ = CompareUnfolded ctx
+
+  -- | How conversion compares a glued value of a defined name with a value
+  -- that is not glued: the context in which its unfolded side is compared
+  -- with the value, or 'Nothing' if they differ. By default the context
+  -- itself.
+  contextUnfoldGlued :: Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n -> Maybe (ctx n)
+  {-# INLINE contextUnfoldGlued #-}
+  contextUnfoldGlued _ ctx _ _ = Just ctx
+
+-- | How conversion compares two glued values ('glueSpeculation'), as a
+-- strategy of smalltt's approximate conversion checking would. The contexts
+-- carry whatever state the strategy keeps.
+data GlueSpeculation (ctx :: Foil.S -> Type) (n :: Foil.S)
+  = TryFolded (ctx n) (Maybe (ctx n))
+    -- ^ Compare the folded sides in the first context, and if they differ
+    -- the unfolded sides in the second, if any.
+  | CompareUnfolded (ctx n)
+    -- ^ Compare the unfolded sides.
+  | Unrelated
+    -- ^ The values differ.
 
 instance HasDefinitions NoContext binder sig where
   {-# INLINE contextDefinition #-}
@@ -314,6 +345,24 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   default unfolding :: HasDefinitions ctx binder sig => Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n -> Value binder sig n
   {-# INLINE unfolding #-}
   unfolding = contextUnfolding
+
+  -- | How conversion compares two glued values, from their defined names
+  -- and their folded sides. By default the context's
+  -- 'contextGlueSpeculation'.
+  glueSpeculation ::
+    Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n -> Foil.Name n -> Value binder sig n -> GlueSpeculation ctx n
+  default glueSpeculation ::
+    HasDefinitions ctx binder sig =>
+    Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n -> Foil.Name n -> Value binder sig n -> GlueSpeculation ctx n
+  {-# INLINE glueSpeculation #-}
+  glueSpeculation = contextGlueSpeculation
+
+  -- | How conversion compares a glued value with a value that is not glued.
+  -- By default the context's 'contextUnfoldGlued'.
+  unfoldGlued :: Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n -> Maybe (ctx n)
+  default unfoldGlued :: HasDefinitions ctx binder sig => Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n -> Maybe (ctx n)
+  {-# INLINE unfoldGlued #-}
+  unfoldGlued = contextUnfoldGlued
 
   evalSig ::
     (Foil.Distinct o, Foil.Distinct i) =>
