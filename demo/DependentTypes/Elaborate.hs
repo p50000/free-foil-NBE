@@ -1,6 +1,8 @@
 {-# LANGUAGE DataKinds  #-}
 {-# LANGUAGE GADTs      #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 -- | Bidirectional elaboration of the dependent types language. A term is
 -- checked against a type, or its type is inferred, and the result carries
 -- the types that normalisation needs (see "DependentTypes"). Types are
@@ -23,6 +25,8 @@ module DependentTypes.Elaborate
   ( check
   , infer
   , elaborate
+  , Declaration
+  , checksUnder
   , typeIs
   ) where
 
@@ -49,18 +53,22 @@ check scope typing term ty = case term of
       pure (annotated (quoteIn scope typing ty) (PairSig a' b'))
     _ -> Left ("a pair against a type that is not a Σ: " ++ show (quoteIn scope typing ty))
   Node (LamSig dom (ScopedAST pat body))
-    | NbE.VSuspended env (AnnSig _ (PiSig piDom cod)) <- NbE.force ty -> case pat of
-        FFPatternVar x -> case (assertDistinct x, assertExt x) of
-          (Distinct, Ext) -> do
-            (dom', _) <- inferType scope typing dom
-            let domV = evalIn scope typing dom'
-            if Conv.conv scope typing domV piDom
-              then do
-                let scope' = extendScope x scope
-                    typing' = assume x domV typing
-                body' <- check scope' typing' body (codomainAt scope' typing' (sink env) cod (NbE.vvar (nameOf x)))
-                pure (annotated (quoteIn scope typing ty) (LamSig dom' (ScopedAST pat body')))
-              else Left ("the domain " ++ show dom' ++ " is not " ++ show (quoteIn scope typing piDom))
+    | NbE.VSuspended env (AnnSig _ (PiSig piDom cod)) <- NbE.force ty -> case (assertDistinct pat, assertExt pat) of
+        (Distinct, Ext) -> do
+          (dom', _) <- inferType scope typing dom
+          let domV = evalIn scope typing dom'
+          if Conv.conv scope typing domV piDom
+            then do
+              (pat', typing') <- typedPattern scope typing pat domV
+              let scope' = extendScopePattern pat scope
+              body' <- check scope' typing' body (codomainAt scope' typing' (sink env) cod (patternValue scope' typing' pat'))
+              pure (annotated (quoteIn scope typing ty) (LamSig dom' (ScopedAST pat' body')))
+            else Left ("the domain " ++ show dom' ++ " is not " ++ show (quoteIn scope typing piDom))
+  Node ReflSig -> case NbE.force ty of
+    NbE.VNode (AnnSig _ (IdSig _ a b))
+      | Conv.conv scope typing a b -> pure (annotated (quoteIn scope typing ty) ReflSig)
+      | otherwise -> Left ("refl: " ++ show (quoteIn scope typing a) ++ " and " ++ show (quoteIn scope typing b) ++ " are not convertible")
+    _ -> Left ("refl against a type that is not an identity type: " ++ show (quoteIn scope typing ty))
   _ -> do
     (term', ty') <- infer scope typing term
     if isSubtype scope typing ty' ty
@@ -89,10 +97,19 @@ infer scope typing = \case
         (dom', i) <- inferType scope typing dom
         let scope' = extendScope x scope
             typing' = assume x (evalIn scope typing dom') typing
+            pat' = TypedVar x dom'
         (body', bodyTy) <- infer scope' typing' body
         j <- levelOf typing' bodyTy
-        let piTy = typeNode scope typing (max i j) (PiSig dom' (ScopedAST pat (quoteIn scope' typing' bodyTy)))
-        pure (annotated piTy (LamSig dom' (ScopedAST pat body')), evalIn scope typing piTy)
+        let piTy = typeNode scope typing (max i j) (PiSig dom' (ScopedAST pat' (quoteIn scope' typing' bodyTy)))
+        pure (annotated piTy (LamSig dom' (ScopedAST pat' body')), evalIn scope typing piTy)
+    FFPatternPair {} -> Left "the type of a λ over a pair pattern is not inferred; check it against a Π type"
+  Node (IdSig a x y) -> do
+    (a', i) <- inferType scope typing a
+    let aV = evalIn scope typing a'
+    x' <- check scope typing x aV
+    y' <- check scope typing y aV
+    pure (annotated (universeTerm i) (IdSig a' x' y'), universe i)
+  Node ReflSig -> Left "the type of refl is not inferred; check it against an identity type"
   Node (PiSig dom (ScopedAST pat cod)) -> typeFormer PiSig scope typing dom pat cod
   Node (SigmaSig dom (ScopedAST pat cod)) -> typeFormer SigmaSig scope typing dom pat cod
   Node (FirstSig p) -> do
@@ -139,14 +156,31 @@ levelOf typing ty = case NbE.force universeOf of
 -- bound name. It lives in the larger of their universes.
 typeFormer ::
   Distinct n =>
-  (Elaborated n -> ScopedAST FFPattern Sig n -> TermSig (ScopedAST FFPattern Sig n) (Elaborated n)) ->
+  (Elaborated n -> ScopedAST TypedPattern Sig n -> TermSig (ScopedAST TypedPattern Sig n) (Elaborated n)) ->
   Scope n -> Typing n -> Raw n -> FFPattern n l -> Raw l -> Either String (Elaborated n, TypeValue n)
-typeFormer former scope typing dom pat cod = case pat of
+typeFormer former scope typing dom pat cod = case (assertDistinct pat, assertExt pat) of
+  (Distinct, Ext) -> do
+    (dom', i) <- inferType scope typing dom
+    (pat', typing') <- typedPattern scope typing pat (evalIn scope typing dom')
+    (cod', j) <- inferType (extendScopePattern pat scope) typing' cod
+    pure (typeNode scope typing (max i j) (former dom' (ScopedAST pat' cod')), universe (max i j))
+
+-- | A binder at a type, with the types of its names, and the context under
+-- it: a variable at any type, a pair pattern at a Σ type, its first
+-- component at the domain and its second at the codomain at the first.
+typedPattern ::
+  Distinct n =>
+  Scope n -> Typing n -> FFPattern n l -> TypeValue n -> Either String (TypedPattern n l, Typing l)
+typedPattern scope typing pat ty = case pat of
   FFPatternVar x -> case (assertDistinct x, assertExt x) of
-    (Distinct, Ext) -> do
-      (dom', i) <- inferType scope typing dom
-      (cod', j) <- inferType (extendScope x scope) (assume x (evalIn scope typing dom') typing) cod
-      pure (typeNode scope typing (max i j) (former dom' (ScopedAST pat cod')), universe (max i j))
+    (Distinct, Ext) -> pure (TypedVar x (quoteIn scope typing ty), assume x ty typing)
+  FFPatternPair l r -> case (NbE.force ty, assertDistinct l, assertExt l) of
+    (NbE.VSuspended env (AnnSig _ (SigmaSig dom cod)), Distinct, Ext) -> do
+      (l', typingL) <- typedPattern scope typing l dom
+      let scopeL = extendScopePattern l scope
+      (r', typingR) <- typedPattern scopeL typingL r (codomainAt scopeL typingL (sink env) cod (patternValue scopeL typingL l'))
+      pure (TypedPair (quoteIn scope typing ty) l' r', typingR)
+    _ -> Left ("a pair pattern at a type that is not a Σ: " ++ show (quoteIn scope typing ty))
 
 -- | Elaborate a closed term against a closed type, both parsed from strings.
 -- The result is the elaborated term and its type.
@@ -168,13 +202,13 @@ unitTerm = Node (AnnSig (IsSingletonType (universeTerm 0)) UnitSig)
 
 -- | A Π or Σ type in the universe of a level, annotated with whether it is a
 -- singleton, as its value decides.
-typeNode :: Distinct n => Scope n -> Typing n -> Integer -> TermSig (ScopedAST FFPattern Sig n) (Elaborated n) -> Elaborated n
+typeNode :: Distinct n => Scope n -> Typing n -> Integer -> TermSig (ScopedAST TypedPattern Sig n) (Elaborated n) -> Elaborated n
 typeNode scope typing level node = Node (AnnSig (typeAnnotation (universeTerm level) singleton) node)
   where
     singleton = isSingletonType (evalIn scope typing (annotated (universeTerm level) node))
 
 -- | A node annotated with its type.
-annotated :: Elaborated n -> TermSig (ScopedAST FFPattern Sig n) (Elaborated n) -> Elaborated n
+annotated :: Elaborated n -> TermSig (ScopedAST TypedPattern Sig n) (Elaborated n) -> Elaborated n
 annotated ty = Node . AnnSig (HasType ty)
 
 evalIn :: Distinct n => Scope n -> Typing n -> Elaborated n -> Value n
@@ -182,6 +216,53 @@ evalIn scope typing = NbE.eval scope typing identitySubst
 
 quoteIn :: Distinct n => Scope n -> Typing n -> Value n -> Elaborated n
 quoteIn = NbE.quote
+
+-- | A declaration: a name, its type, and its body, or none for an
+-- assumption. A body may use the names declared before it.
+type Declaration = (String, String, Maybe String)
+
+-- | Elaborate under declarations: declare each name in order, then run the
+-- continuation in the scope, names and context of all of them.
+underDeclarations ::
+  forall a.
+  [Declaration] ->
+  (forall n. Distinct n => Scope n -> Map.Map String (Name n) -> Typing n -> Either String a) ->
+  Either String a
+underDeclarations declarations continue = go emptyScope Map.empty emptyTyping declarations
+  where
+    go :: Distinct n => Scope n -> Map.Map String (Name n) -> Typing n -> [Declaration] -> Either String a
+    go scope names typing [] = continue scope names typing
+    go scope names typing ((x, ty, body) : rest) = do
+      ty0 <- parseOpen scope names ty
+      (ty', _) <- inferType scope typing ty0
+      let tyV = evalIn scope typing ty'
+      body' <- traverse (\b -> parseOpen scope names b >>= \b0 -> check scope typing b0 tyV) body
+      withFresh scope $ \b ->
+        go (extendScope b scope)
+           (Map.insert x (nameOf b) (Map.map Foil.sink names))
+           (case body' of
+              Just body'' -> define b tyV (evalIn scope typing body'') typing
+              Nothing     -> assume b tyV typing)
+           rest
+
+-- | Whether a term checks against a type under declarations.
+--
+-- A λ over a pair pattern and a λ over a variable are convertible when
+-- their bodies agree on one value, so @refl@ relates them:
+--
+-- >>> let sigma = "(a : A) * A"
+-- >>> let swap = "\\((x, y) : " ++ sigma ++ "). (y, x)"
+-- >>> let swap' = "\\(p : " ++ sigma ++ "). (second p, first p)"
+-- >>> let t = "(p : " ++ sigma ++ ") -> (b : A) * A"
+-- >>> checksUnder [("A", "U 0", Nothing), ("swap", t, Just swap), ("swap'", t, Just swap')] "refl" ("Id (" ++ t ++ ") swap swap'")
+-- Right ()
+checksUnder :: [Declaration] -> String -> String -> Either String ()
+checksUnder declarations term ty = underDeclarations declarations $ \scope names typing -> do
+  ty0 <- parseOpen scope names ty
+  (ty', _) <- inferType scope typing ty0
+  term0 <- parseOpen scope names term
+  _ <- check scope typing term0 (evalIn scope typing ty')
+  pure ()
 
 -- | Whether the type of a term under definitions is the given type, read
 -- off the value of the term and read back on the given side of the defined
@@ -203,25 +284,12 @@ quoteIn = NbE.quote
 -- >>> typeIs Unfolded defs "f" "(x : Unit) -> Unit"
 -- Right True
 typeIs :: Unfolding -> [(String, String, String)] -> String -> String -> Either String Bool
-typeIs unfolding definitions term expected = go emptyScope Map.empty emptyTyping definitions
-  where
-    go :: Distinct n => Scope n -> Map.Map String (Name n) -> Typing n -> [(String, String, String)] -> Either String Bool
-    go scope names typing [] = do
-      term0 <- parseOpen scope names term
-      (term', _) <- infer scope typing term0
-      let value = evalIn scope typing term'
-          ty = quoteIn scope (withUnfolding unfolding typing) (typeOfValue typing value)
-      expected0 <- parseOpen scope names expected
-      (expected', _) <- inferType scope typing expected0
-      pure (alphaEquiv scope (unannotated ty) (unannotated expected'))
-    go scope names typing ((x, ty, body) : rest) = do
-      ty0 <- parseOpen scope names ty
-      (ty', _) <- inferType scope typing ty0
-      let tyV = evalIn scope typing ty'
-      body0 <- parseOpen scope names body
-      body' <- check scope typing body0 tyV
-      withFresh scope $ \b ->
-        go (extendScope b scope)
-           (Map.insert x (nameOf b) (Map.map Foil.sink names))
-           (define b tyV (evalIn scope typing body') typing)
-           rest
+typeIs unfolding definitions term expected =
+  underDeclarations [(x, ty, Just body) | (x, ty, body) <- definitions] $ \scope names typing -> do
+    term0 <- parseOpen scope names term
+    (term', _) <- infer scope typing term0
+    let value = evalIn scope typing term'
+        ty = quoteIn scope (withUnfolding unfolding typing) (typeOfValue typing value)
+    expected0 <- parseOpen scope names expected
+    (expected', _) <- inferType scope typing expected0
+    pure (alphaEquiv scope (unannotated ty) (unannotated expected'))

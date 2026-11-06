@@ -190,7 +190,7 @@ convObserved ::
   Bool
 {-# INLINE convObserved #-}
 convObserved compare' scope ctx side env other (ScopedAST binder body) (Extend extend) (EtaScoped observe) =
-  Foil.withRefreshedPattern scope binder $ \extendEnv binder' scope' ->
+  evalBinder scope ctx env binder $ \extendEnv binder' scope' ->
     case Foil.assertDistinct binder of
       Foil.Distinct ->
         let ctx' = extend scope binder' scope' ctx
@@ -199,12 +199,16 @@ convObserved compare' scope ctx side env other (ScopedAST binder body) (Extend e
              (observe scope' ctx' binder' (Foil.sink other))
 
 -- | Compare two scoped subterms under their environments, by the first
--- function. Their binders must have the same shape; they come from
--- different scopes, so free-foil's 'Foil.unsafeUnifiablePatterns' compares
--- them. The left binder is refreshed for the common scope, the names it
--- binds extend both environments (the right one by position in the
--- pattern), the context is extended as 'relateWith' says, and the bodies
--- are evaluated and compared.
+-- function. The left binder is refreshed for the common scope and extends
+-- the context as 'relateWith' says. When the two binders have the same
+-- shape (they come from different scopes, so free-foil's
+-- 'Foil.unsafeUnifiablePatterns' compares them), the names the left one
+-- binds extend the right environment by position; otherwise the right
+-- environment is extended with the right binder bound to the value the
+-- left one stands for ('binderValue', 'bindValue'), so that a pair pattern
+-- on one side and a variable on the other see the same value, the one as
+-- its projections. A language whose binders stand for nothing leaves such
+-- positions unrelated. Then the bodies are evaluated and compared.
 convScoped ::
   (Eval ctx binder sig, Foil.Distinct n, Foil.Distinct i1, Foil.Distinct i2, Foil.UnifiablePattern binder) =>
   (forall l. Foil.Distinct l => Foil.Scope l -> ctx l -> Value binder sig l -> Value binder sig l -> Bool) ->
@@ -217,16 +221,19 @@ convScoped ::
   ScopedAST binder sig i2 ->
   Bool
 {-# INLINE convScoped #-}
-convScoped compare' scope ctx envL envR (ScopedAST binderL bodyL) (Extend extend) (ScopedAST binderR bodyR)
-  | not (Foil.unsafeUnifiablePatterns binderL binderR) = False
-  | otherwise =
-      Foil.withRefreshedPattern scope binderL $ \extendL binderL' scope' ->
-        case (Foil.assertDistinct binderL, Foil.assertDistinct binderR) of
-          (Foil.Distinct, Foil.Distinct) ->
-            let ctx'  = extend scope binderL' scope' ctx
-                fresh = map VVar_ (Foil.namesOfPattern binderL')
-                envR' = Foil.addSubstPattern (Foil.sink envR) binderR fresh
-            in compare' scope' ctx' (eval scope' ctx' (extendL envL) bodyL) (eval scope' ctx' envR' bodyR)
+convScoped compare' scope ctx envL envR (ScopedAST binderL bodyL) (Extend extend) (ScopedAST binderR bodyR) =
+  evalBinder scope ctx envL binderL $ \extendL binderL' scope' ->
+    case (Foil.assertDistinct binderL, Foil.assertDistinct binderR) of
+      (Foil.Distinct, Foil.Distinct) ->
+        let ctx' = extend scope binderL' scope' ctx
+            envR'
+              | Foil.unsafeUnifiablePatterns binderL binderR =
+                  Just (Foil.addSubstPattern (Foil.sink envR) binderR (map VVar_ (Foil.namesOfPattern binderL')))
+              | otherwise =
+                  bindValue scope' ctx' (Foil.sink envR) binderR =<< binderValue scope' ctx' binderL'
+        in case envR' of
+             Nothing -> False
+             Just envR'' -> compare' scope' ctx' (eval scope' ctx' (extendL envL) bodyL) (eval scope' ctx' envR'' bodyR)
 
 -- | Two terms are convertible under their environments: evaluate each under
 -- its own environment, then compare with 'conv'. The function is @INLINE@,

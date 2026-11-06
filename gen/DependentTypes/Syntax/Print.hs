@@ -142,13 +142,15 @@ instance Print DependentTypes.Syntax.Abs.Term where
     DependentTypes.Syntax.Abs.Universe n -> prPrec i 2 (concatD [doc (showString "U"), prt 0 n])
     DependentTypes.Syntax.Abs.Unit -> prPrec i 2 (concatD [doc (showString "Unit")])
     DependentTypes.Syntax.Abs.TT -> prPrec i 2 (concatD [doc (showString "tt")])
+    DependentTypes.Syntax.Abs.Refl -> prPrec i 2 (concatD [doc (showString "refl")])
     DependentTypes.Syntax.Abs.Pair term1 term2 -> prPrec i 2 (concatD [doc (showString "("), prt 0 term1, doc (showString ","), prt 0 term2, doc (showString ")")])
     DependentTypes.Syntax.Abs.App term1 term2 -> prPrec i 1 (concatD [prt 1 term1, prt 2 term2])
     DependentTypes.Syntax.Abs.First term -> prPrec i 1 (concatD [doc (showString "first"), prt 2 term])
     DependentTypes.Syntax.Abs.Second term -> prPrec i 1 (concatD [doc (showString "second"), prt 2 term])
+    DependentTypes.Syntax.Abs.Id term1 term2 term3 -> prPrec i 1 (concatD [doc (showString "Id"), prt 2 term1, prt 2 term2, prt 2 term3])
     DependentTypes.Syntax.Abs.Lam pattern_ term scopedterm -> prPrec i 0 (concatD [doc (showString "\\"), doc (showString "("), prt 0 pattern_, doc (showString ":"), prt 0 term, doc (showString ")"), doc (showString "."), prt 0 scopedterm])
-    DependentTypes.Syntax.Abs.Pi pattern_ term scopedterm -> prPrec i 0 (concatD [doc (showString "("), prt 0 pattern_, doc (showString ":"), prt 0 term, doc (showString ")"), doc (showString "->"), prt 0 scopedterm])
-    DependentTypes.Syntax.Abs.Sigma pattern_ term scopedterm -> prPrec i 0 (concatD [doc (showString "("), prt 0 pattern_, doc (showString ":"), prt 0 term, doc (showString ")"), doc (showString "*"), prt 0 scopedterm])
+    DependentTypes.Syntax.Abs.Pi pattern_ term scopedterm -> prPrec i 0 (concatD [doc (showString "("), prt 1 pattern_, doc (showString ":"), prt 0 term, doc (showString ")"), doc (showString "->"), prt 0 scopedterm])
+    DependentTypes.Syntax.Abs.Sigma pattern_ term scopedterm -> prPrec i 0 (concatD [doc (showString "("), prt 1 pattern_, doc (showString ":"), prt 0 term, doc (showString ")"), doc (showString "*"), prt 0 scopedterm])
 
 instance Print DependentTypes.Syntax.Abs.ScopedTerm where
   prt i = \case
@@ -156,4 +158,5 @@ instance Print DependentTypes.Syntax.Abs.ScopedTerm where
 
 instance Print DependentTypes.Syntax.Abs.Pattern where
   prt i = \case
-    DependentTypes.Syntax.Abs.PatternVar varident -> prPrec i 0 (concatD [prt 0 varident])
+    DependentTypes.Syntax.Abs.PatternPair pattern_1 pattern_2 -> prPrec i 0 (concatD [doc (showString "("), prt 0 pattern_1, doc (showString ","), prt 0 pattern_2, doc (showString ")")])
+    DependentTypes.Syntax.Abs.PatternVar varident -> prPrec i 1 (concatD [prt 0 varident])

@@ -1,6 +1,9 @@
 -- LBNF grammar for the dependent types demonstration language: dependent
--- functions and pairs over a hierarchy of universes, with a unit type. Every binder is
--- annotated with its type, as in the output of elaboration.
+-- functions and pairs over a hierarchy of universes, with a unit type and an
+-- identity type. Every binder is annotated with its type, as in the output
+-- of elaboration. The binder of a λ is a pattern, a variable or a pair of
+-- patterns; the binder of a Π or Σ is a variable, since after "(" a pair
+-- pattern cannot be told from a pair term. The two share the type Pattern.
 -- Generated modules live under DependentTypes.Syntax.* (see ../../../grammar-regen.sh).
 
 comment "--" ;
@@ -12,17 +15,21 @@ Var.      Term2 ::= VarIdent ;
 Universe. Term2 ::= "U" Integer ;
 Unit.     Term2 ::= "Unit" ;
 TT.       Term2 ::= "tt" ;
+Refl.     Term2 ::= "refl" ;
 Pair.     Term2 ::= "(" Term "," Term ")" ;
 App.      Term1 ::= Term1 Term2 ;
 First.    Term1 ::= "first" Term2 ;
 Second.   Term1 ::= "second" Term2 ;
+Id.       Term1 ::= "Id" Term2 Term2 Term2 ;
 Lam.      Term  ::= "\\" "(" Pattern ":" Term ")" "." ScopedTerm ;
-Pi.       Term  ::= "(" Pattern ":" Term ")" "->" ScopedTerm ;
-Sigma.    Term  ::= "(" Pattern ":" Term ")" "*" ScopedTerm ;
+Pi.       Term  ::= "(" Pattern1 ":" Term ")" "->" ScopedTerm ;
+Sigma.    Term  ::= "(" Pattern1 ":" Term ")" "*" ScopedTerm ;
 coercions Term 2 ;
 
 AScopedTerm. ScopedTerm ::= Term ;
 
-PatternVar. Pattern ::= VarIdent ;
+PatternPair. Pattern  ::= "(" Pattern "," Pattern ")" ;
+PatternVar.  Pattern1 ::= VarIdent ;
+_.           Pattern  ::= Pattern1 ;
 
 entrypoints Term ;

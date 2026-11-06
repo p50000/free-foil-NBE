@@ -498,6 +498,50 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   {-# INLINE refineSig #-}
   refineSig _ _ value _ = value
 
+  -- | The value a binder stands for, in the scope it binds: a variable
+  -- binder stands for its name, a pair pattern for the pair of what its
+  -- components stand for. With 'bindValue', it lets conversion compare two
+  -- scoped positions whose binders differ in shape: the right binder is
+  -- bound to the value of the left one, so that the two bodies see one
+  -- value. By default a binder stands for nothing, which leaves such
+  -- positions compared by position when their shapes agree and unrelated
+  -- otherwise. The default does not guess from the names a binder binds:
+  -- a pattern @(_, x)@ binds one name and stands for a pair, not for @x@.
+  -- The binder is one of a scoped position in a distinct scope, so an
+  -- instance may list its names ('Foil.namesOfPattern').
+  binderValue :: (Foil.Distinct n, Foil.Distinct l) => Foil.Scope l -> ctx l -> binder n l -> Maybe (Value binder sig l)
+  {-# INLINE binderValue #-}
+  binderValue _ _ _ = Nothing
+
+  -- | Extend an environment with a binder bound to a value: a variable
+  -- binder binds its name to the value, a pair pattern binds each component
+  -- to its projection. The projections are not computed until a name is
+  -- looked up. By default a binder binds nothing (see 'binderValue').
+  bindValue ::
+    Foil.Distinct o =>
+    Foil.Scope o -> ctx o ->
+    Foil.Substitution (Value binder sig) i o -> binder i l -> Value binder sig o ->
+    Maybe (Foil.Substitution (Value binder sig) l o)
+  {-# INLINE bindValue #-}
+  bindValue _ _ _ _ _ = Nothing
+
+  -- | Enter the binder of a scoped position of a suspended node: refresh it
+  -- for the value's scope, and move what it carries besides names (such as
+  -- the types of its names) there from the node's scope, under the
+  -- environment. The continuation receives the binder, its scope, and the
+  -- extension of a substitution by its names, as from
+  -- 'Foil.withRefreshedPattern'. By default the binder is only refreshed,
+  -- which is right for a binder of names: refreshing keeps any other field
+  -- as it is, so a term in it would still be in the node's scope.
+  evalBinder ::
+    (Foil.CoSinkable binder, Foil.Distinct n, Foil.Distinct i, Foil.Sinkable e, Foil.InjectName e) =>
+    Foil.Scope n -> ctx n ->
+    Foil.Substitution (Value binder sig) i n -> binder i l ->
+    (forall n'. Foil.DExt n n' => (Foil.Substitution e i n -> Foil.Substitution e l n') -> binder n n' -> Foil.Scope n' -> r) ->
+    r
+  {-# INLINE evalBinder #-}
+  evalBinder scope _ _ = Foil.withRefreshedPattern scope
+
 -- | The default of 'relateWith': two nodes match by free-foil's
 -- 'ZipMatchFoldK', every scoped position extends the given context as the
 -- left node's 'extendScopedWith' says, and every term position keeps it.
@@ -701,7 +745,8 @@ readHeadWith hd scope ctx = \case
     Node $! headsWith hd (quote scope ctx) (extendScopedWith (quoteScoped scope ctx env) id node)
   VGlued_ _ folded unfolded -> hd (unfolding scope ctx folded unfolded)
 
--- | Read back one scoped subterm of a suspended node: refresh the binder,
+-- | Read back one scoped subterm of a suspended node: enter the binder
+-- ('evalBinder'),
 -- extend the context with the position's 'Extend' and the captured
 -- environment with the binder, as a fresh neutral, evaluate the body once
 -- under them, and quote the result. It inlines into 'quote', so it is
@@ -716,7 +761,7 @@ quoteScoped ::
   ScopedAST binder sig n
 {-# INLINE quoteScoped #-}
 quoteScoped scope ctx env (ScopedAST binder body) (Extend extend) =
-  Foil.withRefreshedPattern scope binder $ \extendEnv binder' scope' ->
+  evalBinder scope ctx env binder $ \extendEnv binder' scope' ->
     case Foil.assertDistinct binder of
       Foil.Distinct ->
         let ctx' = extend scope binder' scope' ctx
@@ -760,7 +805,7 @@ quoteWhnf scope ctx value = case refine scope ctx value of
   VVar_ x -> Var x
   VNode_ node -> Node $ bimap absurd id (headsWith (readHead scope ctx) (quote scope ctx) node)
   VSuspended_ env node ->
-    Node $ bimap (freezeScoped (readHead scope ctx) scope env) id (headsWith (readHead scope ctx) (quote scope ctx) node)
+    Node $ bimap (freezeScoped (readHead scope ctx) scope ctx env) id (headsWith (readHead scope ctx) (quote scope ctx) node)
   VGlued_ _ folded unfolded -> quoteWhnf scope ctx (unfolding scope ctx folded unfolded)
   where
     -- As in 'quote', so that a specialisation of 'quoteWhnf' covers it.
@@ -768,7 +813,8 @@ quoteWhnf scope ctx value = case refine scope ctx value of
     readHead s c = readHeadWith (readHead s c) s c
 
 -- | Freeze one scoped subterm of a suspended node without evaluating under
--- its binder: refresh the binder and substitute the captured environment,
+-- its binder: enter the binder ('evalBinder') and substitute the captured
+-- environment,
 -- read back to terms by the given function, into the still-syntactic body.
 -- 'substitute' only renames, so a redex under the binder survives.
 --
@@ -777,15 +823,16 @@ quoteWhnf scope ctx value = case refine scope ctx value of
 -- η-expanded value would land at a head of the body: @f@ refined to
 -- @λy. f y@ would freeze as @λx. (λy. f y) x@.
 freezeScoped ::
-  (Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder, Foil.SinkableK binder, Bifunctor sig) =>
+  (Eval ctx binder sig, Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder, Foil.SinkableK binder) =>
   (Value binder sig n -> AST binder sig n) ->
   Foil.Scope n ->
+  ctx n ->
   Foil.Substitution (Value binder sig) i n ->
   ScopedAST binder sig i ->
   ScopedAST binder sig n
-freezeScoped readValue scope (Foil.UnsafeSubstitution env) (ScopedAST binder body) =
-  Foil.withRefreshedPattern scope binder $ \extendSubst binder' scope' ->
-    ScopedAST binder' (substitute scope' (extendSubst (Foil.UnsafeSubstitution (IntMap.map readValue env))) body)
+freezeScoped readValue scope ctx env@(Foil.UnsafeSubstitution values) (ScopedAST binder body) =
+  evalBinder scope ctx env binder $ \extendSubst binder' scope' ->
+    ScopedAST binder' (substitute scope' (extendSubst (Foil.UnsafeSubstitution (IntMap.map readValue values))) body)
 
 -- | Weak-head normal form: evaluate, then read back the head only. Shares
 -- 'eval' with 'nf'; 'quoteWhnf' does not go under binders, so a redex

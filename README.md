@@ -16,8 +16,9 @@ left as future work.
 lambda-pi (functions and the dependent function type), Booleans (`if`, no
 binders), lambda-let (`let`), pairs (projections, and `split` with a
 pattern that binds two names), naturals (primitive recursion, whose `suc`
-branch binds two names) and dependent types (a context of types and η by
-types, on elaborated terms), and on a language composed from fragments
+branch binds two names) and dependent types (a context of types, η by
+types, pair patterns and an identity type, on elaborated terms), and on a
+language composed from fragments
 of functions, pairs and naturals, whose rules the library combines
 (`FreeFoil.NbE.Sum`); the same language written in one signature serves as
 its baseline and lends it a parser. A hand-written monomorphic NbE is the
@@ -53,11 +54,14 @@ scope.
   The rules never see an annotation. A language whose rules depend on
   them, on types say, gives its own `Eval` instance for its annotated
   signature.
-- The core works with any free-foil pattern. The demo languages bind one
-  variable at a time, except `split` in pairs and the `suc` branch of
-  `natrec` in naturals, which bind two; the composed language has both
-  shapes in one pattern type. No demo has nested or variable-length
-  patterns.
+- The core works with any free-foil pattern, also one that carries terms
+  such as the types of its names, which the language moves under the
+  environment when the core enters the binder (`evalBinder`). The demo
+  languages bind one variable at a time, except `split` in pairs and the
+  `suc` branch of `natrec` in naturals, which bind two, and the λs of
+  dependent types, whose binders are nested pair patterns with the types of
+  their names; the composed language has both shapes in one pattern type.
+  No demo has variable-length patterns.
 - The languages are untyped, so normalisation need not terminate.
 - Readback does not α-normalise: variables are named by their foil
   identifiers, so α-equivalent normal forms may print differently.
