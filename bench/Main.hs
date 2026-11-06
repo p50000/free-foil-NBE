@@ -1,7 +1,12 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+-- The SPECIALIZE pragmas at a context of definitions are rules for the
+-- library's functions.
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 -- | Microbenchmarks for lambda-pi normalisation. Each input is normalised by
 -- the generic NbE ('nf'), the monomorphic NbE ('Mono.nf') and the
@@ -13,7 +18,10 @@ import Test.Tasty.Bench hiding (nf)
 
 import Control.Monad.Foil
 import FreeFoil.NbE (NoContext (..))
-import FreeFoil.NbE.Conversion (convertible)
+import qualified FreeFoil.NbE as NbE
+import FreeFoil.NbE.Conversion (convertible, convertibleUnder)
+import qualified FreeFoil.NbE.Conversion as Conv
+import FreeFoil.NbE.Definitions (Defined, Unfolding (..), define, noDefinitions, withUnfolding)
 import LambdaPi hiding (whnf)
 import qualified LambdaPi.Monomorphic as Mono
 import LambdaPi.Parser ()  -- IsString instance for writing terms as strings
@@ -25,6 +33,9 @@ import Data.String (fromString)
 import qualified Fragments.Combined as Composed
 import qualified Monolith
 import Monolith.Parser ()  -- IsString instance for the monolithic language
+import qualified Monolith.Parser as MonolithParser
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 
 -- | The size of a term of any language, used to force the whole normal form.
 -- A signature's 'bifoldMap' must inline for this to cost no more than the
@@ -197,6 +208,108 @@ compareNormalisers name t =
     , bench "subst"   $ whnf (sizeOf . nfSubst emptyScope) t
     ]
 
+-- * Definitions
+
+-- | Definitions of the composed language, specialised as a client of the
+-- library would. Without the pragma for 'Conv.convertible', the conversion
+-- rows run the unspecialised check.
+type DefinedComposed = Defined Composed.Pat Composed.Sig
+
+{-# SPECIALIZE NbE.nf :: Distinct n => Scope n -> DefinedComposed n -> Composed.Combined n -> Composed.Combined n #-}
+{-# SPECIALIZE NbE.eval ::
+      (Distinct o, Distinct i) =>
+      Scope o -> DefinedComposed o -> Substitution Composed.Value i o -> Composed.Combined i -> Composed.Value o #-}
+{-# SPECIALIZE NbE.quote :: Distinct n => Scope n -> DefinedComposed n -> Composed.Value n -> Composed.Combined n #-}
+{-# SPECIALIZE Conv.conv :: Distinct n => Scope n -> DefinedComposed n -> Composed.Value n -> Composed.Value n -> Bool #-}
+{-# SPECIALIZE Conv.convertible :: Distinct n => Scope n -> DefinedComposed n -> Composed.Combined n -> Composed.Combined n -> Bool #-}
+
+-- | A program of definitions of the composed language over the empty scope,
+-- each body parsed in the scope of the names before it.
+data Telescope l where
+  Empty :: Telescope VoidS
+  Define :: (Distinct m, DExt m l) => Telescope m -> Scope m -> NameBinder m l -> Composed.Combined m -> Telescope l
+
+-- | Parse a program, with the scope and the names it binds.
+withProgram ::
+  forall r.
+  [(String, String)] ->
+  (forall l. Distinct l => Telescope l -> Scope l -> Map String (Name l) -> r) ->
+  r
+withProgram = go Empty emptyScope Map.empty
+  where
+    go ::
+      forall m. Distinct m =>
+      Telescope m -> Scope m -> Map String (Name m) -> [(String, String)] ->
+      (forall l. Distinct l => Telescope l -> Scope l -> Map String (Name l) -> r) ->
+      r
+    go tele scope names [] k = k tele scope names
+    go tele scope names ((x, body) : rest) k =
+      withFresh scope $ \b ->
+        go (Define tele scope b (parseComposed scope names body)) (extendScope b scope)
+           (Map.insert x (nameOf b) (Map.map sink names)) rest k
+
+-- | The definitions of a program as a context, glued.
+definedOf :: Telescope l -> DefinedComposed l
+definedOf = \case
+  Empty -> noDefinitions
+  Define tele scope x body -> define scope x body (definedOf tele)
+
+-- | The definitions of a program as an environment, without glue: each
+-- defined name maps to the value of its body.
+environmentOf :: Telescope l -> Substitution Composed.Value l VoidS
+environmentOf = \case
+  Empty -> identitySubst
+  Define tele _ x body ->
+    let values = environmentOf tele
+    in addSubst values x (NbE.eval emptyScope NoContext values body)
+
+-- | A term of the composed language with the given free names.
+parseComposed :: Distinct n => Scope n -> Map String (Name n) -> String -> Composed.Combined n
+parseComposed scope names = Composed.fromMonolith . either error id . MonolithParser.parseOpen scope names
+
+-- | @plus@ by primitive recursion.
+plusDefinition :: (String, String)
+plusDefinition = ("plus", "\\m. \\n. natrec m { zero -> n ; suc (k, r) -> suc r }")
+
+-- | @plus@ and @mult@ by primitive recursion.
+arithmetic :: [(String, String)]
+arithmetic =
+  [ plusDefinition
+  , ("mult", "\\m. \\n. natrec m { zero -> zero ; suc (k, r) -> plus n r }")
+  ]
+
+-- | @mult m n@ under the definitions: in the plain environment, and glued,
+-- read back unfolded and folded. The context and the environment are built
+-- inside the benchmarked function, so that no iteration reuses the values
+-- of another.
+compareDefinitions :: String -> Int -> Int -> Benchmark
+compareDefinitions name m n =
+  withProgram arithmetic $ \tele scope names ->
+    let t = parseComposed scope names ("mult (" ++ natural m ++ ") (" ++ natural n ++ ")")
+    in bgroup name
+         [ bench "plain"           $ whnf (\d -> sizeOf (NbE.quote emptyScope NoContext (NbE.eval emptyScope NoContext (environmentOf d) t))) tele
+         , bench "glued, unfolded" $ whnf (\d -> sizeOf (NbE.nf scope (definedOf d) t)) tele
+         , bench "glued, folded"   $ whnf (\d -> sizeOf (NbE.nf scope (withUnfolding Folded (definedOf d)) t)) tele
+         ]
+
+-- | @d0 = 1@ and @dᵢ₊₁ = plus dᵢ dᵢ@ up to @dₖ₊₁@, so that @dᵢ@ unfolds to
+-- the numeral @2ⁱ@.
+doubling :: Int -> [(String, String)]
+doubling k =
+  plusDefinition : ("d0", "suc zero")
+    : [ ("d" ++ show i, "plus d" ++ show (i - 1) ++ " d" ++ show (i - 1)) | i <- [1 .. k + 1] ]
+
+-- | Check @t ≡ u@ under @'doubling' k@, in the plain environment and glued.
+compareConversion :: String -> Int -> String -> String -> Benchmark
+compareConversion name k t u =
+  withProgram (doubling k) $ \tele scope names ->
+    let t' = parseComposed scope names t
+        u' = parseComposed scope names u
+    in bgroup name
+         [ bench "plain" $ whnf (\d -> let values = environmentOf d in convertibleUnder emptyScope NoContext values values t' u') tele
+         , bench "glued" $ whnf (\d -> convertible scope (definedOf d) t' u') tele
+         ]
+
 main :: IO ()
 main =
   defaultMain
@@ -254,5 +367,18 @@ main =
             ]
         , bench "pair eta, depth 10 (composed)" $
             whnf (uncurry (convertible emptyScope NoContext)) (Composed.fromMonolith (fromString (etaPair 10)), Composed.fromMonolith "\\p. p")
+        ]
+    , bgroup "Definitions: plain vs glued"
+        [ compareDefinitions "mult 16 16 = 256"  16 16
+        , compareDefinitions "mult 32 32 = 1024" 32 32
+        ]
+    , bgroup "Conversion under definitions: plain vs glued"
+        [ compareConversion (name ++ ", 2^" ++ show k) k t u
+        | k <- [8, 12]
+        , (name, t, u) <-
+            [ ("a definition and its body", "d" ++ show (k + 1), "plus d" ++ show k ++ " d" ++ show k)
+            , ("a computation around a definition", "plus (suc zero) d" ++ show k, "suc d" ++ show k)
+            , ("not convertible", "d" ++ show k, "suc d" ++ show k)
+            ]
         ]
     ]

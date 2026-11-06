@@ -41,7 +41,7 @@ import           Data.Bifunctor.Sum      (Sum (..))
 import           Data.Maybe              (fromMaybe)
 import           Data.ZipMatchK          (ZipMatchFoldK)
 
-import           FreeFoil.NbE            (EtaScoped, EtaTerm, Eval (..), Extend, HasDefinitions, HasHeads, Value (VVar), evalNode, relateExtended, sinkExtend)
+import           FreeFoil.NbE            (EtaScoped, EtaTerm, Eval (..), Extend, HasDefinitions, HasHeads, Value, evalNode, relateExtended, sinkExtend, vvar)
 
 -- | The position of a fragment @f@ in a language @sig@: how to build one of
 -- its nodes in the language and how to recognise one. This is Swierstra's
@@ -232,7 +232,7 @@ instance (HasDefinitions ctx binder (Sum f g), EvalF ctx binder f, EvalF ctx bin
   {-# INLINE extendScopedWith #-}
   extendScopedWith scoped term = extendScopedWithF root scoped term
   {-# INLINE refineVar #-}
-  refineVar scope ctx x = fromMaybe (VVar x) (refineVarF root scope ctx x)
+  refineVar scope ctx x = fromMaybe (vvar x) (refineVarF root scope ctx x)
   {-# INLINE refineSig #-}
   refineSig scope ctx value node = fromMaybe value (refineSigF root scope ctx value node)
   {-# INLINE relateWith #-}
