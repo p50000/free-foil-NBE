@@ -190,7 +190,7 @@ convObserved ::
   Bool
 {-# INLINE convObserved #-}
 convObserved compare' scope ctx side env other (ScopedAST binder body) (Extend extend) (EtaScoped observe) =
-  Foil.withRefreshedPattern scope binder $ \extendEnv binder' scope' ->
+  evalBinder scope ctx env binder $ \extendEnv binder' scope' ->
     case Foil.assertDistinct binder of
       Foil.Distinct ->
         let ctx' = extend scope binder' scope' ctx
@@ -222,7 +222,7 @@ convScoped ::
   Bool
 {-# INLINE convScoped #-}
 convScoped compare' scope ctx envL envR (ScopedAST binderL bodyL) (Extend extend) (ScopedAST binderR bodyR) =
-  Foil.withRefreshedPattern scope binderL $ \extendL binderL' scope' ->
+  evalBinder scope ctx envL binderL $ \extendL binderL' scope' ->
     case (Foil.assertDistinct binderL, Foil.assertDistinct binderR) of
       (Foil.Distinct, Foil.Distinct) ->
         let ctx' = extend scope binderL' scope' ctx
