@@ -80,13 +80,13 @@ conv scope ctx l0 r0 = sameHead scope ctx (refine scope ctx l0) (refine scope ct
     sameHead scope' ctx' l r = case (l, r) of
       (VVar x, VVar y) -> x == y
       (VNode a, VNode b)
-        | Just (All same) <- relateWith scope' ctx' (\v _ _ -> absurd v) (other scope') (heads scope') a b -> same
+        | Just (All same) <- relateWith scope' ctx' (\v _ _ _ -> absurd v) (other scope') (heads scope') a b -> same
       -- The language pairs the positions of the two nodes, gives each
       -- scoped pair its extension of the context and each term pair its
       -- context.
       (VSuspended envL a, VSuspended envR b)
         | Just (All same) <- relateWith scope' ctx'
-            (\x y extend -> All (convScoped scope' ctx' envL envR x extend y)) (other scope') (heads scope') a b -> same
+            (\x y ctx'' extend -> All (convScoped scope' ctx'' envL envR x extend y)) (other scope') (heads scope') a b -> same
       -- Nodes that do not match are compared by η. A node goes to 'VNode'
       -- exactly when it has no scoped subterms, so a 'VNode' and a
       -- 'VSuspended' never have the same constructor.

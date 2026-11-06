@@ -322,15 +322,15 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
 
   -- | How conversion compares two nodes of the same constructor, in the
   -- style of free-foil's 'Data.ZipMatchK.zipMatchFoldK': each pair of
-  -- scoped positions under one binder, with the context under it, and each
-  -- pair of term positions in a context of its own, a head ('headsWith') by
-  -- the last function. 'Nothing' if the nodes do not match. A language whose
+  -- scoped positions in a context of its own, under one binder that extends
+  -- that context, and each pair of term positions in a context of its own,
+  -- a head ('headsWith') by the last function. 'Nothing' if the nodes do not match. A language whose
   -- context records the direction of the check makes conversion a check of
   -- subtyping, here with a contravariant domain:
   --
   -- > relateWith scope ctx scoped term hd l r = case (l, r) of
   -- >   (PiSig domL codL, PiSig domR codR) -> Just $
-  -- >     term domL domR (flipped ctx) <> scoped codL codR (assumeVar (smaller ctx domL domR))
+  -- >     term domL domR (flipped ctx) <> scoped codL codR ctx (assumeVar (smaller ctx domL domR))
   -- >   (UniverseSig i, UniverseSig j) | below ctx i j -> Just mempty
   -- >   _ -> relateNodes scope ctx scoped term hd l r
   --
@@ -340,7 +340,7 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
     (Monoid m, Foil.Distinct n) =>
     Foil.Scope n ->
     ctx n ->
-    (a -> a' -> Extend ctx binder sig n -> m) ->
+    (a -> a' -> ctx n -> Extend ctx binder sig n -> m) ->
     (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
     (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
     sig a (Value binder sig n) ->
@@ -350,7 +350,7 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
     (ZipMatchFoldK sig, Monoid m, Foil.Distinct n) =>
     Foil.Scope n ->
     ctx n ->
-    (a -> a' -> Extend ctx binder sig n -> m) ->
+    (a -> a' -> ctx n -> Extend ctx binder sig n -> m) ->
     (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
     (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
     sig a (Value binder sig n) ->
@@ -392,8 +392,8 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   refineSig _ _ value _ = value
 
 -- | The default of 'relateWith': two nodes match by free-foil's
--- 'ZipMatchFoldK', every scoped position extends the context as the left
--- node's 'extendScopedWith' says, and every term position keeps the context.
+-- 'ZipMatchFoldK', every scoped position extends the given context as the
+-- left node's 'extendScopedWith' says, and every term position keeps it.
 -- A language's own cases fall back on it:
 --
 -- > _ -> relateNodes scope ctx scoped term hd l r
@@ -401,7 +401,7 @@ relateNodes ::
   (Eval ctx binder sig, ZipMatchFoldK sig, Monoid m, Foil.Distinct n) =>
   Foil.Scope n ->
   ctx n ->
-  (a -> a' -> Extend ctx binder sig n -> m) ->
+  (a -> a' -> ctx n -> Extend ctx binder sig n -> m) ->
   (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
   (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
   sig a (Value binder sig n) ->
@@ -409,12 +409,13 @@ relateNodes ::
   Maybe m
 {-# INLINE relateNodes #-}
 relateNodes _ ctx scoped term hd l r =
-  relateExtended ctx term hd (extendScopedWith (\a extend a' -> scoped a a' extend) id l) r
+  relateExtended ctx term hd (extendScopedWith (\a extend a' ctx' -> scoped a a' ctx' extend) id l) r
 
 -- | Compare two nodes position by position, if they match by free-foil's
 -- 'ZipMatchFoldK': the scoped positions of the left node, already given
--- their extensions and as functions of the right ones, and the term
--- positions in the context, the heads ('headsWith') by the last function.
+-- their extensions and as functions of the right ones and of the context,
+-- and the term positions, all in the context, the heads ('headsWith') by
+-- the last function.
 -- For a language that extends the context otherwise than 'extendScopedWith'
 -- says, and for a fragment @f@ of a language @sig@.
 relateExtended ::
@@ -422,12 +423,12 @@ relateExtended ::
   ctx n ->
   (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
   (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
-  f (a' -> m) (Value binder sig n) ->
+  f (a' -> ctx n -> m) (Value binder sig n) ->
   f a' (Value binder sig n) ->
   Maybe m
 {-# INLINE relateExtended #-}
 relateExtended ctx term hd l r =
-  zipMatchFold2 ($) ($) (headsWith (\v v' -> hd v v' ctx) (\v v' -> term v v' ctx) l) r
+  zipMatchFold2 (\k a' -> k a' ctx) ($) (headsWith (\v v' -> hd v v' ctx) (\v v' -> term v v' ctx) l) r
 
 -- | Evaluate a term under an environment: look variables up, hand nodes to
 -- 'evalSig'. A variable that the environment does not map is a free name,

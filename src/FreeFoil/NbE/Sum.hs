@@ -159,7 +159,7 @@ class (Bifunctor f, Bifoldable f, HasHeads f) => EvalF ctx binder f where
     Inj f sig ->
     Foil.Scope n ->
     ctx n ->
-    (a -> a' -> Extend ctx binder sig n -> m) ->
+    (a -> a' -> ctx n -> Extend ctx binder sig n -> m) ->
     (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
     (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
     f a (Value binder sig n) ->
@@ -170,7 +170,7 @@ class (Bifunctor f, Bifoldable f, HasHeads f) => EvalF ctx binder f where
     Inj f sig ->
     Foil.Scope n ->
     ctx n ->
-    (a -> a' -> Extend ctx binder sig n -> m) ->
+    (a -> a' -> ctx n -> Extend ctx binder sig n -> m) ->
     (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
     (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
     f a (Value binder sig n) ->
@@ -186,7 +186,7 @@ relateNodesF ::
   Inj f sig ->
   Foil.Scope n ->
   ctx n ->
-  (a -> a' -> Extend ctx binder sig n -> m) ->
+  (a -> a' -> ctx n -> Extend ctx binder sig n -> m) ->
   (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
   (Value binder sig n -> Value binder sig n -> ctx n -> m) ->
   f a (Value binder sig n) ->
@@ -194,7 +194,7 @@ relateNodesF ::
   Maybe m
 {-# INLINE relateNodesF #-}
 relateNodesF pos _ ctx scoped term hd l r =
-  relateExtended ctx term hd (extendScopedWithF pos (\a extend a' -> scoped a a' extend) id l) r
+  relateExtended ctx term hd (extendScopedWithF pos (\a extend a' ctx' -> scoped a a' ctx' extend) id l) r
 
 -- | The rules of a sum are the rules of its summands.
 instance (EvalF ctx binder f, EvalF ctx binder g) => EvalF ctx binder (Sum f g) where
