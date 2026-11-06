@@ -15,10 +15,12 @@ data Term
     | Universe Integer
     | Unit
     | TT
+    | Refl
     | Pair Term Term
     | App Term Term
     | First Term
     | Second Term
+    | Id Term Term Term
     | Lam Pattern Term ScopedTerm
     | Pi Pattern Term ScopedTerm
     | Sigma Pattern Term ScopedTerm
@@ -27,7 +29,7 @@ data Term
 data ScopedTerm = AScopedTerm Term
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
-data Pattern = PatternVar VarIdent
+data Pattern = PatternPair Pattern Pattern | PatternVar VarIdent
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
 newtype VarIdent = VarIdent String

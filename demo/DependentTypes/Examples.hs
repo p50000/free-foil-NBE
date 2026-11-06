@@ -14,6 +14,8 @@ module DependentTypes.Examples
   , redexInDomain
   , cumulativity
   , contravariantDomain
+  , pairPattern
+  , reflexivity
   , examples
   , Conversion (..)
   , conversions
@@ -94,6 +96,23 @@ contravariantDomain =
     "(f : (X : U 1) -> U 0) -> (X : U 0) -> U 1"
     "\\(f : (X : U 1) -> U 0). f"
 
+-- | A λ over a pair pattern: its body sees the components, and it is
+-- checked against a Π over a variable.
+pairPattern :: Example
+pairPattern =
+  Example
+    "\\(A : U 0). \\((x, y) : (a : A) * A). (y, x)"
+    "(A : U 0) -> (p : (a : A) * A) -> (b : A) * A"
+    "\\(A : U 0). \\((x, y) : (a : A) * A). (y, x)"
+
+-- | @refl@ proves an identity whose sides are convertible.
+reflexivity :: Example
+reflexivity =
+  Example
+    "\\(A : U 0). \\(a : A). refl"
+    "(A : U 0) -> (a : A) -> Id A a ((\\(x : A). x) a)"
+    "\\(A : U 0). \\(a : A). refl"
+
 -- | The examples with their names.
 examples :: [(String, Example)]
 examples =
@@ -106,6 +125,8 @@ examples =
   , ("redexInDomain",   redexInDomain)
   , ("cumulativity",    cumulativity)
   , ("contravariantDomain", contravariantDomain)
+  , ("pairPattern",     pairPattern)
+  , ("reflexivity",     reflexivity)
   ]
 
 -- | Two closed terms of one type, and whether they are convertible in a
@@ -173,6 +194,36 @@ conversions =
         "\\(A : U 0). \\(p : (x : A) * A). p"
         "\\(A : U 0). \\(p : (x : A) * A). (second p, first p)"
         False )
+  , ( "a λ over a pair pattern and a λ over a variable with the same body"
+    , Conversion
+        "(A : U 0) -> (p : (a : A) * A) -> (b : A) * A"
+        "\\(A : U 0). \\((x, y) : (a : A) * A). (y, x)"
+        "\\(A : U 0). \\(p : (a : A) * A). (second p, first p)"
+        True )
+  , ( "a λ over a variable and a λ over a pair pattern with the same body"
+    , Conversion
+        "(A : U 0) -> (p : (a : A) * A) -> (b : A) * A"
+        "\\(A : U 0). \\(p : (a : A) * A). (second p, first p)"
+        "\\(A : U 0). \\((x, y) : (a : A) * A). (y, x)"
+        True )
+  , ( "a λ over a pair pattern and a λ over a variable with different bodies"
+    , Conversion
+        "(A : U 0) -> (p : (a : A) * A) -> (b : A) * A"
+        "\\(A : U 0). \\((x, y) : (a : A) * A). (y, x)"
+        "\\(A : U 0). \\(p : (a : A) * A). p"
+        False )
+  , ( "a λ over a nested pair pattern and a λ over a variable with the same body"
+    , Conversion
+        "(A : U 0) -> (p : (q : (a : A) * A) * A) -> A"
+        "\\(A : U 0). \\(((x, y), z) : (q : (a : A) * A) * A). y"
+        "\\(A : U 0). \\(p : (q : (a : A) * A) * A). second (first p)"
+        True )
+  , ( "a λ over a pair pattern and a λ over a variable that is the pair of its components"
+    , Conversion
+        "(A : U 0) -> (p : (a : A) * A) -> (b : A) * A"
+        "\\(A : U 0). \\((x, y) : (a : A) * A). (x, y)"
+        "\\(A : U 0). \\(p : (a : A) * A). p"
+        True )
   ]
 
 -- | Two closed types, and whether the first is a subtype of the second in a

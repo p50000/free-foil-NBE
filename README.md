@@ -16,8 +16,9 @@ left as future work.
 lambda-pi (functions and the dependent function type), Booleans (`if`, no
 binders), lambda-let (`let`), pairs (projections, and `split` with a
 pattern that binds two names), naturals (primitive recursion, whose `suc`
-branch binds two names) and dependent types (a context of types and η by
-types, on elaborated terms), and on a language composed from fragments
+branch binds two names) and dependent types (a context of types, η by
+types, pair patterns and an identity type, on elaborated terms), and on a
+language composed from fragments
 of functions, pairs and naturals, whose rules the library combines
 (`FreeFoil.NbE.Sum`); the same language written in one signature serves as
 its baseline and lends it a parser. A hand-written monomorphic NbE is the

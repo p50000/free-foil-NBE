@@ -14,10 +14,16 @@
 -- The Show instance of a synonym over library types.
 {-# OPTIONS_GHC -Wno-orphans #-}
 -- | Dependent functions and pairs over a cumulative hierarchy of universes
--- @U 0@, @U 1@, …, with a unit type: a language whose context holds types.
--- Its terms are elaborated (see "DependentTypes.Elaborate"). Every node
--- carries its type as free-foil's annotation ('TypeAnn'), except a universe,
--- whose type is the next universe.
+-- @U 0@, @U 1@, …, with a unit type and an identity type: a language whose
+-- context holds types. Its terms are elaborated (see
+-- "DependentTypes.Elaborate"). Every node carries its type as free-foil's
+-- annotation ('TypeAnn'), except a universe, whose type is the next
+-- universe. The binder of a λ is a pattern, a variable or a pair of
+-- patterns: a pair pattern is assumed at a Σ type ('assumeAt'), stands for
+-- the pair of its components ('patternValue'), and bound to a value binds
+-- them to its projections ('bindPattern'). Conversion compares a λ over a pair
+-- pattern with a λ over a variable through these two ('NbE.binderValue',
+-- 'NbE.bindValue').
 --
 -- Conversion checks subtyping when the context says so ('Variance', as in
 -- Rzk): @U i@ is a subtype of @U j@ for @i ≤ j@, a Π is contravariant in its
@@ -74,6 +80,10 @@ module DependentTypes
   , define
   , withUnfolding
   , Unfolding (..)
+    -- * Binders
+  , assumeAt
+  , patternValue
+  , bindPattern
   , codomainAt
     -- * Normalisation
   , eval
@@ -84,6 +94,7 @@ module DependentTypes
   ) where
 
 import Control.Monad.Foil
+import Data.Maybe (fromMaybe)
 import Control.Monad.Free.Foil
 import Control.Monad.Free.Foil.Annotated (AnnSig (..))
 import Data.Bifoldable (bifold)
@@ -362,9 +373,11 @@ instance (HasTypes ctx, HasDefinitions ctx FFPattern Sig) => Eval ctx FFPattern 
     FirstSig p        -> FirstSig (term p)
     SecondSig p       -> SecondSig (term p)
     PairSig a b       -> PairSig (term a) (term b)
+    IdSig a x y       -> IdSig (term a) (term x) (term y)
     UniverseSig i     -> UniverseSig i
     UnitSig           -> UnitSig
     TTSig             -> TTSig
+    ReflSig           -> ReflSig
 
   -- U i is a subtype of U j for i ≤ j, a Π is contravariant in its domain,
   -- and a Σ is covariant in both. The bound name of a Π or Σ has the smaller
@@ -392,17 +405,24 @@ instance (HasTypes ctx, HasDefinitions ctx FFPattern Sig) => Eval ctx FFPattern 
     SecondSig {} -> refineAt scope ctx value (typeOfNode ann node)
     _            -> value
 
+  -- A binder stands for its pattern's value, and bound to a value binds
+  -- its leaves to the projections.
+  {-# INLINE binderValue #-}
+  binderValue _ _ pat = Just (patternValue pat)
+  {-# INLINE bindValue #-}
+  bindValue scope ctx env pat v = Just (bindPattern scope ctx env pat v)
+
 -- | Apply a function value to an argument value: a suspended lambda is
 -- entered under its environment extended with the argument, any other
 -- function is a stuck application of the type in the annotation.
 appValue ::
-  (Eval ctx FFPattern Sig, Distinct n) =>
+  (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) =>
   TypeAnn (TypeValue n) -> Scope n -> ctx n -> Value n -> Value n -> Value n
 {-# INLINE appValue #-}
 appValue ann scope ctx fun arg = NbE.eliminate fun $ \case
-  NbE.VSuspended env (AnnSig _ (LamSig _ (ScopedAST (FFPatternVar x) body))) ->
-    case assertDistinct x of
-      Distinct -> NbE.eval scope ctx (addSubst env x arg) body
+  NbE.VSuspended env (AnnSig _ (LamSig _ (ScopedAST pat body))) ->
+    case assertDistinct pat of
+      Distinct -> NbE.eval scope ctx (bindPattern scope ctx env pat arg) body
   NbE.Stuck fun' -> NbE.vnode (AnnSig ann (AppSig fun' arg))
 
 -- | The first component of a pair value. Any other value gives a stuck
@@ -420,25 +440,33 @@ secondValue ann p = NbE.eliminate p $ \case
   NbE.VNode (AnnSig _ (PairSig _ b)) -> b
   NbE.Stuck p' -> NbE.vnode (AnnSig ann (SecondSig p'))
 
--- | The projections for η of pairs. They carry their types, so that they are
--- refined as well.
+-- | The projections for η of pairs and for the leaves of a pair pattern.
+-- A stuck projection carries its type, read off the Σ type of the value
+-- when the projection is refined; a projection of a pair does not read it.
 firstOf :: HasTypes ctx => Scope n -> ctx n -> Value n -> Value n
 {-# INLINE firstOf #-}
-firstOf _ ctx p = case NbE.force (typeOfValue ctx p) of
-  NbE.VSuspended _ (AnnSig _ (SigmaSig a _)) -> firstValue (HasType a) p
-  _ -> impossibleNonSigmaType
+firstOf _ ctx p = firstValue (HasType (domainOfSigma (typeOfValue ctx p))) p
 
 secondOf :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> Value n -> Value n
 {-# INLINE secondOf #-}
-secondOf scope ctx p = case NbE.force (typeOfValue ctx p) of
-  NbE.VSuspended env (AnnSig _ (SigmaSig _ cod)) ->
-    secondValue (HasType (codomainAt scope ctx env cod (firstOf scope ctx p))) p
+secondOf scope ctx p = secondValue (HasType (codomainOfSigma scope ctx (typeOfValue ctx p) (firstOf scope ctx p))) p
+
+-- | The domain of a Σ type, and its codomain at a value.
+domainOfSigma :: TypeValue n -> TypeValue n
+domainOfSigma ty = case NbE.force ty of
+  NbE.VSuspended _ (AnnSig _ (SigmaSig a _)) -> a
+  _ -> impossibleNonSigmaType
+
+codomainOfSigma :: (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n) => Scope n -> ctx n -> TypeValue n -> Value n -> TypeValue n
+codomainOfSigma scope ctx ty a = case NbE.force ty of
+  NbE.VSuspended env (AnnSig _ (SigmaSig _ cod)) -> codomainAt scope ctx env cod a
   _ -> impossibleNonSigmaType
 
 -- | Impossible: conversion compares two values of one type, so the value
--- that η compares with a pair has the pair's type, which is a Σ.
+-- that η compares with a pair has the pair's type, which is a Σ, and so
+-- does the value a pair pattern is bound to.
 impossibleNonSigmaType :: a
-impossibleNonSigmaType = error "DependentTypes: impossible: η for a pair against a value whose type is not a Σ"
+impossibleNonSigmaType = error "DependentTypes: impossible: a projection of a value whose type is not a Σ"
 
 -- | The observers of η for a λ: the domain of the other value's type, and the
 -- other value applied to the bound name.
@@ -449,12 +477,13 @@ domainOf _ ctx f = case NbE.force (typeOfValue ctx f) of
   _ -> impossibleNonPiType
 
 appliedTo ::
-  (Eval ctx FFPattern Sig, HasTypes ctx, DExt n l) =>
+  (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n, DExt n l) =>
   Scope l -> ctx l -> FFPattern n l -> Value l -> Value l
 {-# INLINE appliedTo #-}
-appliedTo scope ctx (FFPatternVar x) f = case NbE.force (typeOfValue ctx f) of
+appliedTo scope ctx pat f = case NbE.force (typeOfValue ctx f) of
   NbE.VSuspended env (AnnSig _ (PiSig _ cod)) ->
-    appValue (HasType (codomainAt scope ctx env cod (NbE.vvar (nameOf x)))) scope ctx f (NbE.vvar (nameOf x))
+    let arg = patternValue pat
+    in appValue (HasType (codomainAt scope ctx env cod arg)) scope ctx f arg
   _ -> impossibleNonPiType
 
 -- | Impossible: conversion compares two values of one type, so the value
@@ -488,20 +517,68 @@ smaller = \case
   Contravariant -> \_ r -> r
   _             -> \l _ -> l
 
--- | The binder of one name of a type.
+-- | The context under a binder assumed at a type: a variable at any type,
+-- a pair pattern at a Σ type, its first component at the domain and its
+-- second at the codomain at the first. Nothing when a pair pattern meets a
+-- type that is not a Σ, which elaboration refuses.
+assumeAt ::
+  (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n, DExt n l) =>
+  Scope n -> FFPattern n l -> TypeValue n -> ctx n -> Maybe (ctx l)
+assumeAt scope pat ty ctx = case pat of
+  FFPatternVar x -> Just (assume x ty ctx)
+  FFPatternPair l r -> case (NbE.force ty, assertDistinct l, assertExt l, assertExt r) of
+    (NbE.VSuspended env (AnnSig _ (SigmaSig dom cod)), Distinct, Ext, Ext) -> do
+      ctxL <- assumeAt scope l dom ctx
+      let scopeL = extendScopePattern l scope
+      assumeAt scopeL r (codomainAt scopeL ctxL (sink env) cod (patternValue l)) ctxL
+    _ -> Nothing
+
+-- | The binder of a scoped position assumed at a type.
 assumeVar :: HasTypes ctx => TypeValue n -> Extend ctx FFPattern Sig n
 {-# INLINE assumeVar #-}
-assumeVar ty = Extend $ \_ pat _ ctx -> case pat of
-  FFPatternVar x -> assume x ty ctx
+assumeVar ty = Extend $ \scope pat _ ctx -> fromMaybe impossiblePattern (assumeAt scope pat ty ctx)
+
+-- | Impossible: elaboration assumes every pair pattern at a Σ type.
+impossiblePattern :: a
+impossiblePattern = error "DependentTypes: impossible: a pair pattern at a type that is not a Σ"
+
+-- | The value a binder stands for: a variable stands for its name, a pair
+-- pattern for the pair of what its components stand for. The pair carries
+-- no type: it is projected or matched against another pair, never typed,
+-- so its annotation is not read.
+patternValue :: forall n l. Distinct n => FFPattern n l -> Value l
+patternValue pat = fst (go pat (namesOfPattern pat))
+  where
+    go :: forall i j. FFPattern i j -> [Name l] -> (Value l, [Name l])
+    go (FFPatternVar _) (x : names) = (NbE.vvar x, names)
+    go (FFPatternPair l r) names =
+      let (a, names') = go l names
+          (b, names'') = go r names'
+      in (NbE.vnode (AnnSig (HasType unreadType) (PairSig a b)), names'')
+    go _ [] = error "DependentTypes: impossible: a pattern has as many names as leaves"
+
+-- | The type a pair pattern's value would carry, which nothing reads.
+unreadType :: TypeValue n
+unreadType = error "DependentTypes: impossible: the type of the pair a binder stands for is read"
+
+-- | An environment extended with a binder bound to a value: a variable is
+-- bound to the value, the components of a pair pattern to its projections,
+-- which are computed when a name is looked up.
+bindPattern ::
+  (Eval ctx FFPattern Sig, HasTypes ctx, Distinct o) =>
+  Scope o -> ctx o -> Substitution Value i o -> FFPattern i l -> Value o -> Substitution Value l o
+bindPattern scope ctx env pat v = case pat of
+  FFPatternVar x    -> addSubst env x v
+  FFPatternPair l r -> bindPattern scope ctx (bindPattern scope ctx env l (firstOf scope ctx v)) r (secondOf scope ctx v)
 
 -- | The codomain of a Π or Σ type at a value, from the environment and the
 -- codomain of the type's value.
 codomainAt ::
-  (Eval ctx FFPattern Sig, Distinct n, Distinct i) =>
+  (Eval ctx FFPattern Sig, HasTypes ctx, Distinct n, Distinct i) =>
   Scope n -> ctx n -> Substitution Value i n -> ScopedAST FFPattern Sig i -> Value n -> TypeValue n
 {-# INLINE codomainAt #-}
-codomainAt scope ctx env (ScopedAST (FFPatternVar b) cod) arg = case assertDistinct b of
-  Distinct -> NbE.eval scope ctx (addSubst env b arg) cod
+codomainAt scope ctx env (ScopedAST pat cod) arg = case assertDistinct pat of
+  Distinct -> NbE.eval scope ctx (bindPattern scope ctx env pat arg) cod
 
 -- | A Π or Σ type value, annotated with whether it is a singleton. The flag
 -- is lazy and decided one level down, from the flags of the parts' values: a

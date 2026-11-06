@@ -10,7 +10,7 @@ import Control.Monad.Foil
 import Control.Monad.Free.Foil (alphaEquiv)
 
 import DependentTypes (Unfolding (..), convertible, emptyTyping, eval, fullyAnnotated, isSubtype, nf)
-import DependentTypes.Elaborate (elaborate, typeIs)
+import DependentTypes.Elaborate (checksUnder, elaborate, typeIs)
 import DependentTypes.Examples
 
 tests :: TestTree
@@ -74,6 +74,20 @@ tests =
             rejects "\\(A : U 1). A" "(A : U 1) -> U 0"
         , testCase "a function on a lower universe as one on a higher" $
             rejects "\\(f : (X : U 0) -> U 0). f" "(f : (X : U 0) -> U 0) -> (X : U 1) -> U 0"
+        , testCase "a pair pattern at a type that is not a Σ" $
+            rejects "\\((x, y) : Unit). x" "(u : Unit) -> Unit"
+        , testCase "refl between sides that are not convertible" $
+            rejects "\\(A : U 0). \\(a : A). \\(b : A). refl" "(A : U 0) -> (a : A) -> (b : A) -> Id A a b"
+        , testCase "refl against a type that is not an identity type" $
+            rejects "refl" "Unit"
+        ]
+    , testGroup "refl relates a λ over a pair pattern to a λ over a variable"
+        [ testCase "the pattern on the left" $
+            accepts "\\(A : U 0). refl" ("(A : U 0) -> Id " ++ swapType ++ " (" ++ swapPattern ++ ") (" ++ swapVariable ++ ")")
+        , testCase "the pattern on the right" $
+            accepts "\\(A : U 0). refl" ("(A : U 0) -> Id " ++ swapType ++ " (" ++ swapVariable ++ ") (" ++ swapPattern ++ ")")
+        , testCase "as defined names" $
+            checksUnder [("A", "U 0", Nothing), ("swap", swapType, Just swapPattern), ("swap'", swapType, Just swapVariable)] "refl" ("Id " ++ swapType ++ " swap swap'") @?= Right ()
         ]
     ]
   where
@@ -82,6 +96,10 @@ tests =
     rejects term ty = case elaborate term ty of
       Left _ -> pure ()
       Right (t, _) -> assertFailure ("elaborated to " ++ show t)
+    accepts term ty = either assertFailure (const (pure ())) (elaborate term ty)
+    swapType = "((p : (a : A) * A) -> (b : A) * A)"
+    swapPattern = "\\((x, y) : (a : A) * A). (y, x)"
+    swapVariable = "\\(p : (a : A) * A). (second p, first p)"
 
 -- | A type synonym and a function declared at it.
 definitions :: [(String, String, String)]
