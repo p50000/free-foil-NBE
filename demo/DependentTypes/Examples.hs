@@ -32,15 +32,17 @@ unitResult =
     "(f : (A : U) -> Unit) -> (A : U) -> Unit"
     "\\(f : (A : U) -> Unit). \\(A : U). tt"
 
--- | A variable of a function type is η-expanded.
+-- | A variable of a function type that is not a singleton stays as it is:
+-- η for functions goes by shape, in conversion.
 functionEta :: Example
 functionEta =
   Example
     "\\(A : U). \\(f : (x : A) -> A). f"
     "(A : U) -> (f : (x : A) -> A) -> (x : A) -> A"
-    "\\(A : U). \\(f : (x : A) -> A). \\(x : A). f x"
+    "\\(A : U). \\(f : (x : A) -> A). f"
 
--- | The two η laws together: a function into the unit type is constant.
+-- | A function into the unit type is constant: its type is a singleton, so
+-- @f@ becomes @\\(x : Unit). tt@.
 unitFunctionEta :: Example
 unitFunctionEta =
   Example
@@ -120,6 +122,30 @@ conversions =
         "(p : (u : Unit) * Unit) -> (u : Unit) * Unit"
         "\\(p : (u : Unit) * Unit). p"
         "\\(p : (u : Unit) * Unit). (tt, tt)"
+        True )
+  , ( "two pair variables of unit components"
+    , Conversion
+        "(p : (u : Unit) * Unit) -> (q : (u : Unit) * Unit) -> (u : Unit) * Unit"
+        "\\(p : (u : Unit) * Unit). \\(q : (u : Unit) * Unit). p"
+        "\\(p : (u : Unit) * Unit). \\(q : (u : Unit) * Unit). q"
+        True )
+  , ( "two pair variables whose first components are not of a singleton type"
+    , Conversion
+        "(A : U) -> (p : (x : A) * Unit) -> (q : (x : A) * Unit) -> (x : A) * Unit"
+        "\\(A : U). \\(p : (x : A) * Unit). \\(q : (x : A) * Unit). p"
+        "\\(A : U). \\(p : (x : A) * Unit). \\(q : (x : A) * Unit). q"
+        False )
+  , ( "a pair variable and its first component paired with tt"
+    , Conversion
+        "(A : U) -> (p : (x : A) * Unit) -> (x : A) * Unit"
+        "\\(A : U). \\(p : (x : A) * Unit). p"
+        "\\(A : U). \\(p : (x : A) * Unit). (first p, tt)"
+        True )
+  , ( "two functions whose type becomes a singleton by β"
+    , Conversion
+        "(A : U) -> (f : (y : A) -> Unit) -> (g : (y : A) -> Unit) -> (y : A) -> Unit"
+        "\\(A : U). (\\(B : (x : A) -> U). \\(f : (y : A) -> B y). \\(g : (y : A) -> B y). f) (\\(x : A). Unit)"
+        "\\(A : U). (\\(B : (x : A) -> U). \\(f : (y : A) -> B y). \\(g : (y : A) -> B y). g) (\\(x : A). Unit)"
         True )
   , ( "a pair variable and its components swapped"
     , Conversion
