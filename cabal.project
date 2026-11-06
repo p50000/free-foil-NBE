@@ -14,3 +14,7 @@ benchmarks: True
 -- Optimise every component, including the library where `nf`/`nfSubst` live, so
 -- the benchmark measures -O2 code end to end (cabal defaults to -O1).
 optimization: 2
+
+-- doctest spawns GHCi to run the examples, and needs cabal to emit a package
+-- environment file so that GHCi sees the project's libraries.
+write-ghc-environment-files: always
