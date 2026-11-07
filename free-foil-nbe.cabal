@@ -341,6 +341,7 @@ test-suite free-foil-nbe-test
                     , Test.LambdaNWays
                     , Test.LambdaPi
                     , Test.LambdaPi.Gen
+                    , Test.Mismatch
                     , Test.Monolith
                     , Test.Naturals
                     , Test.Pairs

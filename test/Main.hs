@@ -12,6 +12,7 @@ import qualified Test.Glue
 import qualified Test.LambdaLet
 import qualified Test.LambdaNWays
 import qualified Test.LambdaPi
+import qualified Test.Mismatch
 import qualified Test.Monolith
 import qualified Test.Naturals
 import qualified Test.Pairs
@@ -35,4 +36,5 @@ main =
         , Test.DependentTypes.tests
         , Test.Annotated.tests
         , Test.Refinement.tests
+        , Test.Mismatch.tests
         ]
