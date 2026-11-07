@@ -387,4 +387,6 @@ benchmark nbe-bench
         , monolith-baseline
         , tasty-bench
         , containers ^>=0.7
+        , deepseq
+        , dependent-types-demo
     default-language: Haskell2010

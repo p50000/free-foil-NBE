@@ -37,6 +37,11 @@ import qualified Monolith.Parser as MonolithParser
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
+import Control.DeepSeq (NFData (..))
+import Control.Exception (evaluate)
+import DependentTypes.Elaborate (elaborateRaw)
+import qualified DependentTypes.Parser as DependentTypes
+
 -- | The size of a term of any language, used to force the whole normal form.
 -- A signature's 'bifoldMap' must inline for this to cost no more than the
 -- traversal itself. Small signatures and sums of them inline on their own,
@@ -310,6 +315,78 @@ compareConversion name k t u =
          , bench "glued" $ whnf (\d -> convertible scope (definedOf d) t' u') tele
          ]
 
+-- * Type checking the dependent types language
+
+-- | Time checking a closed term against a closed type. Parsing and scope
+-- resolution come before, and the elaborated term is not forced. A row
+-- whose term does not check is an error.
+checkRow :: String -> String -> String -> Benchmark
+checkRow name term ty = env prepare $ \terms ->
+  bench name $ whnf (uncurry elaborateRaw) terms
+  where
+    parse = either (\e -> error (name ++ ": " ++ e)) id . DependentTypes.parseOpen emptyScope Map.empty
+    prepare = do
+      let terms = (parse term, parse ty)
+      _ <- evaluate (rnf terms)
+      either (\e -> error (name ++ ": " ++ e)) (const (pure terms)) (uncurry elaborateRaw terms)
+
+-- | The names a row assumes, bound by λs in the term and by a Π in the type.
+assuming :: [(String, String)] -> (String, String) -> (String, String)
+assuming names (term, ty) =
+  ( concat ["\\(" ++ x ++ " : " ++ a ++ "). " | (x, a) <- names] ++ term
+  , concat ["(" ++ x ++ " : " ++ a ++ ") -> " | (x, a) <- names] ++ ty )
+
+-- | A nested tuple checked against a nested Σ type whose components depend
+-- on the earlier ones: @(f a, (g (f a), ...))@ against
+-- @(x1 : A) * (y1 : P x1) * ...@, with @n@ pairs of components.
+dependentPairs :: Int -> Benchmark
+dependentPairs n =
+  uncurry (checkRow ("pairs, " ++ show n)) $
+    assuming
+      [ ("A", "U 0")
+      , ("P", "(x : A) -> U 0")
+      , ("f", "(x : A) -> A")
+      , ("g", "(x : A) -> P x")
+      , ("a", "A")
+      ]
+      (go 1, sigma 1)
+  where
+    go i | i == n    = "(f a, g (f a))"
+         | otherwise = "(f a, (g (f a), " ++ go (i + 1) ++ "))"
+    sigma i
+      | i == n    = "(" ++ x i ++ " : A) * P " ++ x i
+      | otherwise = "(" ++ x i ++ " : A) * (y" ++ show i ++ " : P " ++ x i ++ ") * " ++ sigma (i + 1)
+    x i = "x" ++ show i
+
+-- | Typed Church numerals: @refl@ proves that @mult n n@ is the numeral
+-- @n * n@, which evaluates both sides and compares them under binders.
+typedChurch :: Int -> Benchmark
+typedChurch n =
+  checkRow ("Church mult " ++ show n ++ " " ++ show n ++ " = " ++ show (n * n))
+    "refl"
+    ("Id (" ++ nat ++ ") ((" ++ mult ++ ") (" ++ numeral n ++ ") (" ++ numeral n ++ ")) (" ++ numeral (n * n) ++ ")")
+  where
+    nat = "(A : U 0) -> (s : (x : A) -> A) -> (z : A) -> A"
+    numeral k = "\\(A : U 0). \\(s : (x : A) -> A). \\(z : A). " ++ iterate (\t -> "s (" ++ t ++ ")") "z" !! k
+    mult = "\\(m : " ++ nat ++ "). \\(k : " ++ nat ++ "). \\(A : U 0). \\(s : (x : A) -> A). m A (k A s)"
+
+-- | @refl@ proves that a neutral @h a@ of a singleton type, a Σ of @n@ unit
+-- types, is the tuple of @tt@s: evaluating @h a@ reads its type off its
+-- annotation and refines it to the tuple.
+singletonNeutral :: Int -> Benchmark
+singletonNeutral n =
+  uncurry (checkRow ("singleton neutral, " ++ show n)) $
+    assuming
+      [ ("A", "U 0")
+      , ("a", "A")
+      , ("h", "(x : A) -> " ++ units)
+      ]
+      ("refl", "Id (" ++ units ++ ") (h a) " ++ tuple n)
+  where
+    units = concat ["(y" ++ show i ++ " : Unit) * " | i <- [1 .. n]] ++ "Unit"
+    tuple 0 = "tt"
+    tuple k = "(tt, " ++ tuple (k - 1) ++ ")"
+
 main :: IO ()
 main =
   defaultMain
@@ -380,5 +457,13 @@ main =
             , ("a computation around a definition", "plus (suc zero) d" ++ show k, "suc d" ++ show k)
             , ("not convertible", "d" ++ show k, "suc d" ++ show k)
             ]
+        ]
+    , bgroup "Type checking (dependent types)"
+        [ dependentPairs 100
+        , dependentPairs 1000
+        , typedChurch 16
+        , typedChurch 32
+        , singletonNeutral 100
+        , singletonNeutral 1000
         ]
     ]
