@@ -207,6 +207,36 @@ instance CoSinkable TypedPattern where
           go transportL scopeL r $ \fr r' scopeR transportR ->
             cont (comp fl fr) (TypedPair (transportPayload scope transport ty) l' r') scopeR transportR
 
+  -- The types are the payloads: a substitution, or any other map of the
+  -- names outside the pattern, reaches each type in the scope before its
+  -- binder.
+  type Payload TypedPattern = AST TypedPattern Sig
+
+  withMappedPattern
+    :: forall m o n l r. Distinct o
+    => (forall x y z r'. Distinct z => Scope z -> NameBinder x y -> (forall z'. DExt z z' => NameBinder z z' -> r') -> r')
+    -> (forall x x' y y'. DExt y y' => m x y -> NameBinder x x' -> NameBinder y y' -> m x' y')
+    -> (forall x y y'. DExt y y' => m x y -> m x y')
+    -> (forall x y. Distinct y => Scope y -> m x y -> Elaborated x -> Elaborated y)
+    -> Scope o
+    -> m n o
+    -> TypedPattern n l
+    -> (forall o'. DExt o o' => m l o' -> TypedPattern o o' -> Scope o' -> r)
+    -> r
+  withMappedPattern refresh extend _sinkMap mapPayload = go
+    where
+      go :: forall n' l' o' r'. Distinct o'
+         => Scope o' -> m n' o' -> TypedPattern n' l'
+         -> (forall o''. DExt o' o'' => m l' o'' -> TypedPattern o' o'' -> Scope o'' -> r')
+         -> r'
+      go scope m (TypedVar x ty) cont =
+        refresh scope x $ \x' ->
+          cont (extend m x x') (TypedVar x' (mapPayload scope m ty)) (extendScope x' scope)
+      go scope m (TypedPair ty l r) cont =
+        go scope m l $ \mL l' scopeL ->
+          go scopeL mL r $ \mR r' scopeR ->
+            cont mR (TypedPair (mapPayload scope m ty) l' r') scopeR
+
 -- | Renaming the outer scope renames the types, as 'coSinkabilityProof'
 -- does. An index that the renaming skips keeps its names.
 instance SinkableK TypedPattern where
