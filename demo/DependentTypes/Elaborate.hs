@@ -25,6 +25,7 @@ module DependentTypes.Elaborate
   ( check
   , infer
   , elaborate
+  , elaborateRaw
   , Declaration
   , checksUnder
   , typeIs
@@ -188,8 +189,13 @@ elaborate :: String -> String -> Either String (Elaborated VoidS, Elaborated Voi
 elaborate term ty = do
   ty0 <- parseOpen emptyScope Map.empty ty
   term0 <- parseOpen emptyScope Map.empty term
-  (ty', _) <- inferType emptyScope emptyTyping ty0
-  term' <- check emptyScope emptyTyping term0 (evalIn emptyScope emptyTyping ty')
+  elaborateRaw term0 ty0
+
+-- | Elaborate a closed raw term against a closed raw type.
+elaborateRaw :: Raw VoidS -> Raw VoidS -> Either String (Elaborated VoidS, Elaborated VoidS)
+elaborateRaw term ty = do
+  (ty', _) <- inferType emptyScope emptyTyping ty
+  term' <- check emptyScope emptyTyping term (evalIn emptyScope emptyTyping ty')
   pure (term', ty')
 
 -- | The universe of a level, which has no annotation.
