@@ -11,8 +11,9 @@ import Control.Monad.Foil
 import Control.Monad.Free.Foil (alphaEquiv, foldAST)
 import Control.Monad.Free.Foil.Annotated (AnnSig (..))
 import Data.Bifoldable (bifoldMap)
+import Data.Functor.Const (Const (..))
 
-import DependentTypes (Elaborated, Raw, TypedPattern (..), Unfolding (..), convertible, emptyTyping, eval, fullyAnnotated, isSubtype, nf, unannotated)
+import DependentTypes (Elaborated, Raw, TypedPattern (..), Unfolding (..), convertible, emptyTyping, eval, fullyAnnotated, isSubtype, nf, unannotated, whnf)
 import DependentTypes.Elaborate (checksUnder, elaborate, typeIs)
 import DependentTypes.Examples
 
@@ -103,6 +104,11 @@ tests =
                 assertBool (show ty) (alphaEquiv emptyScope ty (unannotated sigma))
                 assertBool (show a) (alphaEquiv emptyScope a (unannotated u0))
               types -> assertFailure ("the types of the pattern of " ++ show result ++ ": " ++ show types)
+        , testCase "a binder under the binder of a λ, after β and whnf" $ do
+            -- whnf stops at the binder of y, and the binder of x below it
+            -- keeps the type A, substituted by U 0.
+            (term, _) <- elaborated "(\\(A : U 1). \\(y : U 0). \\(x : A). x) (U 0)" "(y : U 0) -> (x : U 0) -> U 0"
+            binderTypes (whnf emptyScope emptyTyping term) @?= ["U 0", "U 0"]
         ]
     ]
   where
@@ -128,6 +134,15 @@ pairTypes term = types
       _ -> []
 
 newtype Types n = Types [Raw n]
+
+-- | The types of all binders of a term, outermost first, printed.
+binderTypes :: Elaborated n -> [String]
+binderTypes = getConst . foldAST (\_ -> Const []) (\pat (Const body) -> Const (ofPattern pat ++ body)) (\(AnnSig _ node) -> Const (bifoldMap getConst getConst node))
+  where
+    ofPattern :: TypedPattern m l -> [String]
+    ofPattern = \case
+      TypedVar _ ty -> [show ty]
+      TypedPair ty l r -> show ty : ofPattern l ++ ofPattern r
 
 -- | A type synonym and a function declared at it.
 definitions :: [(String, String, String)]
