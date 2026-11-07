@@ -796,7 +796,7 @@ nf scope ctx = quote scope ctx . eval scope ctx Foil.identitySubst
 -- their binders.
 quoteWhnf ::
   forall ctx binder sig n.
-  (Eval ctx binder sig, Foil.Distinct n, Foil.CoSinkable binder, Foil.SinkableK binder) =>
+  (Eval ctx binder sig, Foil.Distinct n, Foil.CoSinkable binder, Foil.SinkableK binder, Foil.BindPayload (Foil.Payload binder) (AST binder sig)) =>
   Foil.Scope n ->
   ctx n ->
   Value binder sig n ->
@@ -823,7 +823,7 @@ quoteWhnf scope ctx value = case refine scope ctx value of
 -- η-expanded value would land at a head of the body: @f@ refined to
 -- @λy. f y@ would freeze as @λx. (λy. f y) x@.
 freezeScoped ::
-  (Eval ctx binder sig, Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder, Foil.SinkableK binder) =>
+  (Eval ctx binder sig, Foil.Distinct n, Foil.Distinct i, Foil.CoSinkable binder, Foil.SinkableK binder, Foil.BindPayload (Foil.Payload binder) (AST binder sig)) =>
   (Value binder sig n -> AST binder sig n) ->
   Foil.Scope n ->
   ctx n ->
@@ -839,7 +839,7 @@ freezeScoped readValue scope ctx env@(Foil.UnsafeSubstitution values) (ScopedAST
 -- under a lambda survives. Term positions are values already, so the two
 -- readbacks differ only at scoped positions.
 whnf ::
-  (Eval ctx binder sig, Foil.Distinct n, Foil.CoSinkable binder, Foil.SinkableK binder) =>
+  (Eval ctx binder sig, Foil.Distinct n, Foil.CoSinkable binder, Foil.SinkableK binder, Foil.BindPayload (Foil.Payload binder) (AST binder sig)) =>
   Foil.Scope n ->
   ctx n ->
   AST binder sig n ->
