@@ -70,7 +70,8 @@ import           FreeFoil.NbE.Internal.Value (Value' (..))
 -- | Two values are convertible: their normal forms are equal up to renaming
 -- of bound variables and η. Nodes match when 'relateWith' matches them, by
 -- default when they have the same constructor, and then their subterms are
--- compared left to right.
+-- compared left to right. Two values of a term position that do not match
+-- are equal if the language's 'relateMismatch' says so.
 conv ::
   forall ctx binder sig n.
   (Eval ctx binder sig, Foil.Distinct n, Foil.UnifiablePattern binder) =>
@@ -82,11 +83,14 @@ conv ::
 {-# INLINABLE conv #-}
 conv = convIn
   where
-    -- Two values, refined first. The functions are local, so that a
-    -- specialisation of 'conv' covers them. They close over nothing, so
-    -- that no call allocates them.
+    -- Two values, refined first, and if they do not match, related by the
+    -- context. The functions are local, so that a specialisation of 'conv'
+    -- covers them. They close over nothing, so that no call allocates them.
     convIn :: Foil.Distinct l => Foil.Scope l -> ctx l -> Value binder sig l -> Value binder sig l -> Bool
-    convIn scope ctx l r = sameHead Term scope ctx (refine scope ctx l) (refine scope ctx r)
+    convIn scope ctx l r =
+      let l' = refine scope ctx l
+          r' = refine scope ctx r
+      in sameHead Term scope ctx l' r' || relateMismatch scope ctx l' r'
 
     -- Two values compared without refining them: heads ('headsWith'), or
     -- values refined already. Their heads are compared the same way, every

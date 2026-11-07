@@ -466,6 +466,27 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   {-# INLINE relateWith #-}
   relateWith scope ctx scoped term hd l r = relateNodes scope ctx scoped term hd l r
 
+  -- | The last word on two values that conversion has found different at a
+  -- term position, after refinement ('refine'), the comparison of their
+  -- nodes and η: 'True' if the context makes them equal all the same, by
+  -- assumed equations, by equality reflection, or by any other extensional
+  -- check. A context that assumes equations between free names says so
+  -- here:
+  --
+  -- > relateMismatch _ (Equations eqs) l r = case (force l, force r) of
+  -- >   (VVar x, VVar y) -> (x, y) `elem` eqs || (y, x) `elem` eqs
+  -- >   _                -> False
+  --
+  -- Conversion asks only once a comparison has failed, so a comparison that
+  -- succeeds never calls it. By default no two different values are equal.
+  -- Like 'refineVar', the method receives the language's 'Eval' instance
+  -- from the core.
+  relateMismatch ::
+    (Eval ctx binder sig, Foil.Distinct n) =>
+    Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n -> Bool
+  {-# INLINE relateMismatch #-}
+  relateMismatch _ _ _ _ = False
+
   -- | Refine a variable by the context, in readback and conversion
   -- ('refine'). For example, a language whose context knows types
   -- η-expands @f@ of a function type to @λx. f x@. By default a variable

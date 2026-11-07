@@ -152,6 +152,21 @@ class (Bifunctor f, Bifoldable f, HasHeads f) => EvalF ctx binder f where
   {-# INLINE refineSigF #-}
   refineSigF _ _ _ _ _ = Nothing
 
+  -- | Whether the context makes two values of the language equal that
+  -- conversion has found different, as 'relateMismatch'. Like 'refineVarF',
+  -- the method sees the values of the whole language, and a sum relates
+  -- them if one of its summands does. By default the fragment relates none.
+  relateMismatchF ::
+    (Eval ctx binder sig, Foil.Distinct n) =>
+    Inj f sig ->
+    Foil.Scope n ->
+    ctx n ->
+    Value binder sig n ->
+    Value binder sig n ->
+    Bool
+  {-# INLINE relateMismatchF #-}
+  relateMismatchF _ _ _ _ _ = False
+
   -- | How conversion compares two nodes of the fragment at a position, as
   -- 'relateWith' does for a language.
   relateWithF ::
@@ -216,6 +231,9 @@ instance (EvalF ctx binder f, EvalF ctx binder g) => EvalF ctx binder (Sum f g) 
   {-# INLINE refineSigF #-}
   refineSigF pos scope ctx value node =
     refineSigF (inL pos) scope ctx value node <|> refineSigF (inR pos) scope ctx value node
+  {-# INLINE relateMismatchF #-}
+  relateMismatchF pos scope ctx l r =
+    relateMismatchF (inL pos) scope ctx l r || relateMismatchF (inR pos) scope ctx l r
   {-# INLINE relateWithF #-}
   relateWithF pos scope ctx scoped term hd l r = case (l, r) of
     (L2 a, L2 b) -> relateWithF (inL pos) scope ctx scoped term hd a b
@@ -237,3 +255,5 @@ instance (HasDefinitions ctx binder (Sum f g), EvalF ctx binder f, EvalF ctx bin
   refineSig scope ctx value node = fromMaybe value (refineSigF root scope ctx value node)
   {-# INLINE relateWith #-}
   relateWith = relateWithF root
+  {-# INLINE relateMismatch #-}
+  relateMismatch = relateMismatchF root
