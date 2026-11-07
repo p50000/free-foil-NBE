@@ -8,12 +8,10 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE StandaloneDeriving         #-}
--- | Conversion with a context that makes free names equal, as the context
--- of a type theory with an interval makes points equal under its assumed
--- equations: two values that conversion finds different are equal when the
--- language's 'NbE.relateMismatch' says so. The functions relate in a
--- language of their own and as a fragment beside pairs, which relates
--- through the sum.
+-- | Conversion with a context that assumes equations between free names:
+-- two values that conversion finds different are equal when the language's
+-- 'NbE.relateMismatch' says so. The functions relate in a language of their
+-- own and as a fragment beside pairs, which relates through the sum.
 module Test.Mismatch (tests) where
 
 import Data.Bifoldable          (Bifoldable)

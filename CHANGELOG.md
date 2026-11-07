@@ -19,10 +19,10 @@
   possibly empty. A fragment refines with `refineVarF` and `refineSigF`,
   and a sum takes the first summand that refines.
 - A context may make two values equal that conversion finds different
-  (`relateMismatch`, by fragment `relateMismatchF`), as the context of a
-  type theory with an interval makes points equal under its assumed
-  equations. Conversion asks only once a comparison of a term position has
-  failed; by default no two different values are equal.
+  (`relateMismatch`, by fragment `relateMismatchF`), by assumed equations,
+  by equality reflection, or by any other extensional check. Conversion
+  asks only once a comparison of a term position has failed; by default no
+  two different values are equal.
 - A context may give the free names of a language values (`definition`,
   by default from `HasDefinitions`),
   which `eval` unfolds where the names are used. `NoContext` gives none.
