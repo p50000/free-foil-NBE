@@ -57,6 +57,8 @@ instance {-# OVERLAPPABLE #-} (HasDefinitions ctx binder (AnnSig ann sig), EvalF
   refineVar scope ctx x = fromMaybe (VVar x) (refineVarF ignoring scope ctx x)
   {-# INLINE refineSig #-}
   refineSig scope ctx value node = fromMaybe value (refineSigF ignoring scope ctx value node)
+  {-# INLINE relateWith #-}
+  relateWith scope ctx scoped term hd (AnnSig _ l) (AnnSig _ r) = relateWithF ignoring scope ctx scoped term hd l r
 
 -- | A term without its annotations.
 unannotated :: (Functor ann, Bifunctor sig) => AST binder (AnnSig ann sig) n -> AST binder sig n
