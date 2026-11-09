@@ -24,6 +24,17 @@
   Top-level definitions (`FreeFoil.NbE.Definitions`) are such a context,
   built one definition at a time, and a term is normalised in it with
   plain `nf`.
+- An elimination rule matches the value of its principal subterm through
+  `eliminate`, which hands it a `Whnf` to match with `VVar`, `VNode`,
+  `VSuspended` and `Stuck`. `eval` returns an opaque `Value`, built with
+  `vvar`, `vnode`, `vsuspended` and `vglued`, so a rule that matches a
+  value directly does not type-check; `force` looks through the glue of a
+  value for inspection.
+- Glued evaluation for definitions, after Kovács: a defined name evaluates
+  to the name glued to the lazy value of its body. Readback follows the
+  side the context says (`unfolding`, by default from `HasDefinitions`), so
+  that top-level definitions read back unfolded or folded (`Unfolding`).
+  Conversion compares glued values folded first.
 - Evaluation of annotated terms (`FreeFoil.NbE.Annotated`): a language
   whose rules are fragments evaluates terms over free-foil's `AnnSig`,
   ignoring the annotations. Values carry the annotation's blank.
