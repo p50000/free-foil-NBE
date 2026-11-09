@@ -279,9 +279,11 @@ arithmetic =
   ]
 
 -- | @mult m n@ under the definitions: in the plain environment, and glued,
--- read back unfolded and folded. The context and the environment are built
--- inside the benchmarked function, so that no iteration reuses the values
--- of another.
+-- read back unfolded and folded. The folded readback reads back the spine
+-- @mult (suc … zero) (suc … zero)@ and never forces the unfolded side: it
+-- measures the cost of not computing. The context and the environment are
+-- built inside the benchmarked function, so that no iteration reuses the
+-- values of another.
 compareDefinitions :: String -> Int -> Int -> Benchmark
 compareDefinitions name m n =
   withProgram arithmetic $ \tele scope names ->

@@ -32,12 +32,12 @@ import           Data.Bifunctor              (Bifunctor)
 
 import qualified Data.IntMap                 as IntMap
 
-import           FreeFoil.NbE                (Eval, HasDefinitions (..), Value, eval)
-import           FreeFoil.NbE.Internal.Value (Value' (..))
+import           FreeFoil.NbE                (Eval, HasDefinitions (..), Value, eval, vglued, vvar)
 
 -- | Which side of a defined name readback follows.
 data Unfolding
-  = Folded    -- ^ Keep the defined names.
+  = Folded    -- ^ Keep the defined names, as far as the language does not
+              -- refine them ('FreeFoil.NbE.refineVar').
   | Unfolded  -- ^ Unfold every definition: the normal form.
 
 -- | A context of definitions: the values of the names it defines, and the
@@ -59,10 +59,10 @@ instance Bifunctor sig => HasDefinitions (Defined binder sig) binder sig where
   {-# INLINE contextDefinition #-}
   contextDefinition _ (Defined _ (Foil.UnsafeSubstitution values)) x =
     case IntMap.lookup (Foil.nameId x) values of
-      Just value -> VGlued_ x (VVar_ x) value
-      Nothing    -> VVar_ x
+      Just value -> vglued x value
+      Nothing    -> vvar x
   {-# INLINE contextUnfolding #-}
-  contextUnfolding _ (Defined unfolding _) folded unfolded = case unfolding of
+  contextUnfolding _ (Defined unfolding _) _ folded unfolded = case unfolding of
     Folded   -> folded
     Unfolded -> unfolded
 

@@ -72,10 +72,13 @@ instance HasHeads BoolSig where
 instance (Sinkable ctx, HasDefinitions ctx NameBinder BoolSig) => Eval ctx NameBinder BoolSig where
   {-# INLINABLE evalSig #-}
   evalSig scope ctx env = \case
-    IfSig cond t f -> eliminate (eval scope ctx env cond) $ \case
-      VNode TrueSig  -> eval scope ctx env t
-      VNode FalseSig -> eval scope ctx env f
-      Stuck cond'    -> vnode (IfSig cond' (eval scope ctx env t) (eval scope ctx env f))
+    IfSig cond t f ->
+      let t' = eval scope ctx env t
+          f' = eval scope ctx env f
+      in eliminate (eval scope ctx env cond) $ \case
+        VNode TrueSig  -> t'
+        VNode FalseSig -> f'
+        Stuck cond'    -> vnode (IfSig cond' t' f')
     node -> evalNode scope ctx env node
 
 -- | Normal form, inherited from the generic 'NbE.nf'.

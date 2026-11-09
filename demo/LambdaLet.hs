@@ -93,11 +93,12 @@ instance (Sinkable ctx, HasDefinitions ctx FFPattern TermSig) => Eval ctx FFPatt
   {-# INLINABLE evalSig #-}
   evalSig scope ctx env = \case
     AppSig fun arg ->
-      NbE.eliminate (NbE.eval scope ctx env fun) $ \case
+      let arg' = NbE.eval scope ctx env arg
+      in NbE.eliminate (NbE.eval scope ctx env fun) $ \case
         NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
           case assertDistinct binder of
-            Distinct -> NbE.eval scope ctx (addSubst env' binder (NbE.eval scope ctx env arg)) body
-        NbE.Stuck fun' -> NbE.vnode (AppSig fun' (NbE.eval scope ctx env arg))
+            Distinct -> NbE.eval scope ctx (addSubst env' binder arg') body
+        NbE.Stuck fun' -> NbE.vnode (AppSig fun' arg')
     LetSig e (ScopedAST (FFPatternVar binder) body) ->
       case assertDistinct binder of
         Distinct -> NbE.eval scope ctx (addSubst env binder (NbE.eval scope ctx env e)) body

@@ -112,7 +112,6 @@ import           Control.Monad.Free.Foil.Annotated (AnnSig (..))
 import           Data.Bifoldable             (Bifoldable (..))
 import           Data.Bifunctor              (Bifunctor (..))
 import           Data.Bifunctor.Sum          (Sum (..))
-import           Data.Coerce                 (coerce)
 import qualified Data.IntMap                 as IntMap
 import           Data.Monoid                 (Any (..))
 import           Data.Void                   (Void, absurd)
@@ -146,11 +145,6 @@ pattern Stuck :: Value binder sig n -> Whnf binder sig n
 pattern Stuck v <- (fromWhnf -> v)
 
 {-# COMPLETE Stuck #-}
-
--- | The synonyms match a 'Whnf' as the 'Value' it was cast from.
-fromWhnf :: Whnf binder sig n -> Value binder sig n
-{-# INLINE fromWhnf #-}
-fromWhnf = coerce
 
 -- | A neutral variable, as a value.
 vvar :: Foil.Name n -> Value binder sig n
@@ -198,11 +192,11 @@ class HasDefinitions ctx binder sig where
   -- and conversion can keep it folded.
   contextDefinition :: Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n
 
-  -- | The side of a glued value that readback follows, from the folded and
-  -- the unfolded side. By default the unfolded one.
-  contextUnfolding :: Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n -> Value binder sig n
+  -- | The side of a glued value that readback follows, from the defined
+  -- name, the folded and the unfolded side. By default the unfolded one.
+  contextUnfolding :: Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n -> Value binder sig n -> Value binder sig n
   {-# INLINE contextUnfolding #-}
-  contextUnfolding _ _ _ unfolded = unfolded
+  contextUnfolding _ _ _ _ unfolded = unfolded
 
 instance HasDefinitions NoContext binder sig where
   {-# INLINE contextDefinition #-}
@@ -289,17 +283,19 @@ instance (Functor ann, HasHeads sig) => HasHeads (AnnSig ann sig) where
 --
 -- > evalSig scope ctx env = \case
 -- >   AppSig fun arg ->
--- >     NbE.eliminate (eval scope ctx env fun) $ \case
+-- >     let arg' = eval scope ctx env arg
+-- >     in NbE.eliminate (eval scope ctx env fun) $ \case
 -- >       NbE.VSuspended env' (LamSig (ScopedAST (FFPatternVar binder) body)) ->
 -- >         case assertDistinct binder of
--- >           Distinct -> eval scope ctx (addSubst env' binder (eval scope ctx env arg)) body
--- >       NbE.Stuck fun' -> NbE.vnode (AppSig fun' (eval scope ctx env arg))
+-- >           Distinct -> eval scope ctx (addSubst env' binder arg') body
+-- >       NbE.Stuck fun' -> NbE.vnode (AppSig fun' arg')
 -- >   node -> NbE.evalNode scope ctx env node
 --
--- Every other node falls through to 'evalNode'. The node arrives raw, so
--- that a redex never builds the interpreted node it would discard. The
--- instance upholds the 'Value' invariant, and it comes with the pragmas
--- described in the module header.
+-- The argument is evaluated outside the rule, which 'eliminate' may run
+-- once per side of a glued value. Every other node falls through to
+-- 'evalNode'. The node arrives raw, so that a redex never builds the
+-- interpreted node it would discard. The instance upholds the 'Value'
+-- invariant, and it comes with the pragmas described in the module header.
 class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   -- | The value of a free name, or the name itself if it has none. By
   -- default the context's 'contextDefinition'.
@@ -308,10 +304,11 @@ class (Bifunctor sig, Bifoldable sig, HasHeads sig) => Eval ctx binder sig where
   {-# INLINE definition #-}
   definition = contextDefinition
 
-  -- | The side of a glued value that readback follows, from the folded and
-  -- the unfolded side. By default the context's 'contextUnfolding'.
-  unfolding :: Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n -> Value binder sig n
-  default unfolding :: HasDefinitions ctx binder sig => Foil.Scope n -> ctx n -> Value binder sig n -> Value binder sig n -> Value binder sig n
+  -- | The side of a glued value that readback follows, from the defined
+  -- name, the folded and the unfolded side. By default the context's
+  -- 'contextUnfolding'.
+  unfolding :: Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n -> Value binder sig n -> Value binder sig n
+  default unfolding :: HasDefinitions ctx binder sig => Foil.Scope n -> ctx n -> Foil.Name n -> Value binder sig n -> Value binder sig n -> Value binder sig n
   {-# INLINE unfolding #-}
   unfolding = contextUnfolding
 
@@ -555,30 +552,37 @@ evalNode scope ctx env node
 -- again. The results are glued again, so that readback can still choose. On
 -- any other value the rule applies directly, and it is a closure only on a
 -- glued value.
+--
+-- The rule runs once per side of a glued value, so work in it that does not
+-- depend on the value, such as evaluating another subterm, is bound outside
+-- the rule and shared by both sides, as in the example of 'Eval'.
 eliminate ::
   Value binder sig n ->
   (Whnf binder sig n -> Value binder sig n) ->
   Value binder sig n
 {-# INLINE eliminate #-}
 eliminate v rule = case v of
-  VGlued_ name folded unfolded -> VGlued_ name (eliminateLoop folded rule) (eliminateLoop unfolded rule)
-  _ -> inline rule (coerce v)
+  VGlued_ name folded unfolded -> VGlued_ name (rule (toWhnf folded)) (eliminateLoop unfolded rule)
+  _ -> inline rule (toWhnf v)
 
--- | The loop of 'eliminate' under the first glue, out of line.
+-- | The loop of 'eliminate' under the first glue, out of line. The folded
+-- side is never glued: a neutral headed by the defined name.
 eliminateLoop ::
   Value binder sig n ->
   (Whnf binder sig n -> Value binder sig n) ->
   Value binder sig n
 {-# NOINLINE eliminateLoop #-}
 eliminateLoop v rule = case v of
-  VGlued_ name folded unfolded -> VGlued_ name (eliminateLoop folded rule) (eliminateLoop unfolded rule)
-  _ -> rule (coerce v)
+  VGlued_ name folded unfolded -> VGlued_ name (rule (toWhnf folded)) (eliminateLoop unfolded rule)
+  _ -> rule (toWhnf v)
 
--- | The unfolded head of a value: peel every layer of glue off its root.
+-- | The unfolded head of a value: peel every layer of glue off its root. For
+-- inspection, as of a type: a value built from the result has lost its glue,
+-- so a rule matches through 'eliminate' instead.
 force :: Value binder sig n -> Whnf binder sig n
 force = \case
   VGlued_ _ _ unfolded -> force unfolded
-  v                  -> coerce v
+  v                  -> toWhnf v
 
 -- * Readback
 
@@ -611,7 +615,7 @@ quote ::
   AST binder sig n
 {-# INLINABLE quote #-}
 quote scope ctx = \case
-  VGlued_ _ folded unfolded -> quote scope ctx (unfolding scope ctx folded unfolded)
+  VGlued_ name folded unfolded -> quote scope ctx (unfolding scope ctx name folded unfolded)
   value -> readHead scope ctx (refine scope ctx value)
   where
     -- Local, so that a specialisation of 'quote' covers it, and closed, so
@@ -636,7 +640,7 @@ readHeadWith hd scope ctx = \case
   VNode_ node -> Node $! bimap absurd id (headsWith hd (quote scope ctx) node)
   VSuspended_ env node ->
     Node $! headsWith hd (quote scope ctx) (extendScopedWith (quoteScoped scope ctx env) id node)
-  VGlued_ _ folded unfolded -> hd (unfolding scope ctx folded unfolded)
+  VGlued_ name folded unfolded -> hd (unfolding scope ctx name folded unfolded)
 
 -- | Read back one scoped subterm of a suspended node: refresh the binder,
 -- extend the context with the position's 'Extend' and the captured
@@ -698,7 +702,7 @@ quoteWhnf scope ctx value = case refine scope ctx value of
   VNode_ node -> Node $ bimap absurd id (headsWith (readHead scope ctx) (quote scope ctx) node)
   VSuspended_ env node ->
     Node $ bimap (freezeScoped (readHead scope ctx) scope env) id (headsWith (readHead scope ctx) (quote scope ctx) node)
-  VGlued_ _ folded unfolded -> quoteWhnf scope ctx (unfolding scope ctx folded unfolded)
+  VGlued_ name folded unfolded -> quoteWhnf scope ctx (unfolding scope ctx name folded unfolded)
   where
     -- As in 'quote', so that a specialisation of 'quoteWhnf' covers it.
     readHead :: Foil.Distinct l => Foil.Scope l -> ctx l -> Value binder sig l -> AST binder sig l

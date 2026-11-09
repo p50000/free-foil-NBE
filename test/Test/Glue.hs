@@ -31,6 +31,9 @@ tests = testGroup "glue (composed language)"
       , folded "through a projection" arith "fst (four, zero)" "four"
       , folded "under a binder" arith "\\y. plus y two" "\\y. plus y two"
       , folded "keeps an eliminator on a defined name" arith recTwo recTwo
+      , folded "keeps a projection of a defined pair" pairs "fst p" "fst p"
+      , folded "keeps a name defined as another" nested "four'" "four'"
+      , foldedWhnf "keeps an application of a definition at the head" arith plusTwoTwo plusTwoTwo
       ]
   , testGroup "unfolded readback"
       [ unfolded "a defined name" arith "four" (natural 4)
@@ -38,6 +41,10 @@ tests = testGroup "glue (composed language)"
       , unfolded "under a binder" arith
           "\\y. plus y two"
           ("\\y. natrec y { zero -> " ++ natural 2 ++ " ; suc (k, r) -> suc r }")
+      , unfolded "a projection of a defined pair" pairs "fst p" (natural 2)
+      , unfolded "a name defined as another" nested "four'" (natural 4)
+      , unfoldedWhnf "an application of a definition at the head" arith plusTwoTwo (natural 4)
+      , unfoldedWhnf "a defined name under a binder, frozen" arith "\\y. plus y two" "\\y. plus y two"
       , testProperty "of the folded readback is the unfolded readback" propFoldedThenUnfolded
       ]
   , testGroup "conversion under definitions"
@@ -46,6 +53,8 @@ tests = testGroup "glue (composed language)"
       , convertibleCase "two different names" arith "four" "two" False
       , convertibleCase "one name on different arguments with equal unfoldings" constant "k zero two" "k zero four" True
       , convertibleCase "one name on different arguments with different unfoldings" constant "k two zero" "k four zero" False
+      , convertibleCase "a defined function and its η-expansion" arith "plus" "\\m. \\n. plus m n" True
+      , convertibleCase "a defined function and its η-expansion under a constant function" constant "k plus zero" "k (\\m. \\n. plus m n) zero" True
       , testCase "compares folded sides without unfolding" $
           withFree $ \scope0 env0 ->
             withDefined scope0 env0 omega $ \ctx scope env -> do
@@ -79,6 +88,14 @@ constant = arith ++ [("k", "\\x. \\y. x")]
 omega :: [(String, String)]
 omega = [("omega", "(\\w. w w) (\\w. w w)")]
 
+-- | A defined pair over the arithmetic definitions.
+pairs :: [(String, String)]
+pairs = arith ++ [("p", "(two, zero)")]
+
+-- | A name defined as another defined name.
+nested :: [(String, String)]
+nested = arith ++ [("four'", "four")]
+
 readsBackAs :: Unfolding -> String -> [(String, String)] -> String -> String -> TestTree
 readsBackAs unfolding name definitions t expected = testCase name $
   withFree $ \scope0 env0 ->
@@ -89,6 +106,18 @@ readsBackAs unfolding name definitions t expected = testCase name $
 folded, unfolded :: String -> [(String, String)] -> String -> String -> TestTree
 folded = readsBackAs Folded
 unfolded = readsBackAs Unfolded
+
+-- | The weak-head normal form, read back on a side, is the expected term.
+whnfReadsBackAs :: Unfolding -> String -> [(String, String)] -> String -> String -> TestTree
+whnfReadsBackAs unfolding name definitions t expected = testCase name $
+  withFree $ \scope0 env0 ->
+    withDefined scope0 env0 definitions $ \ctx scope env ->
+      let result = NbE.whnf scope (withUnfolding unfolding ctx) (parseIn scope env t)
+      in assertBool (show result) (alphaEquiv scope result (parseIn scope env expected))
+
+foldedWhnf, unfoldedWhnf :: String -> [(String, String)] -> String -> String -> TestTree
+foldedWhnf = whnfReadsBackAs Folded
+unfoldedWhnf = whnfReadsBackAs Unfolded
 
 convertibleCase :: String -> [(String, String)] -> String -> String -> Bool -> TestTree
 convertibleCase name definitions t u expected = testCase name $

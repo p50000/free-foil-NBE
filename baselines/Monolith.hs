@@ -101,13 +101,14 @@ instance (Sinkable ctx, HasDefinitions ctx Pattern TermSig) => Eval ctx Pattern 
   {-# INLINABLE evalSig #-}
   evalSig scope ctx env = \case
     AppSig fun arg ->
-      NbE.eliminate (NbE.eval scope ctx env fun) $ \case
+      let arg' = NbE.eval scope ctx env arg
+      in NbE.eliminate (NbE.eval scope ctx env fun) $ \case
         NbE.VSuspended env' (LamSig (ScopedAST (PatternVar binder) body)) ->
           case assertDistinct binder of
-            Distinct -> NbE.eval scope ctx (addSubst env' binder (NbE.eval scope ctx env arg)) body
+            Distinct -> NbE.eval scope ctx (addSubst env' binder arg') body
         NbE.VSuspended _ (LamSig (ScopedAST PatternPair {} _)) ->
           error "Monolith: a lambda binds one name"
-        NbE.Stuck fun' -> NbE.vnode (AppSig fun' (NbE.eval scope ctx env arg))
+        NbE.Stuck fun' -> NbE.vnode (AppSig fun' arg')
     FstSig p ->
       NbE.eliminate (NbE.eval scope ctx env p) $ \case
         NbE.VNode (PairSig a _) -> a

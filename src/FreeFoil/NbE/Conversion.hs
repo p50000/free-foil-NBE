@@ -134,12 +134,10 @@ conv = convIn Rigid
     {-# INLINE other #-}
     other state scope l r ctx = All (convIn state scope ctx l r)
 
--- | The state of the comparison, after smalltt. A comparison starts
--- 'Rigid'. Two glued values of one defined name compare their folded sides
--- 'Flex', which unfolds nothing and fails where it would have to. If that
--- fails, they compare their unfolded sides 'Full', which unfolds every
--- glued value at once and never compares folded sides again. So the check
--- tries the folded sides at most once on any path to a subterm.
+-- | The state of the comparison of glued values, after smalltt (see the
+-- module header): 'Rigid' at the start, 'Flex' on the folded sides of two
+-- glued values of one name, which unfolds nothing, and 'Full' below their
+-- unfolded sides, which never compares folded sides again.
 data State = Rigid | Flex | Full
 
 -- | Whether the state unfolds a glued value compared with another value.
