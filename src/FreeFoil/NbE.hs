@@ -112,6 +112,7 @@ import           Control.Monad.Free.Foil.Annotated (AnnSig (..))
 import           Data.Bifoldable             (Bifoldable (..))
 import           Data.Bifunctor              (Bifunctor (..))
 import           Data.Bifunctor.Sum          (Sum (..))
+import           Data.Coerce                 (coerce)
 import qualified Data.IntMap                 as IntMap
 import           Data.Monoid                 (Any (..))
 import           Data.Void                   (Void, absurd)
@@ -145,6 +146,11 @@ pattern Stuck :: Value binder sig n -> Whnf binder sig n
 pattern Stuck v <- (fromWhnf -> v)
 
 {-# COMPLETE Stuck #-}
+
+-- | The synonyms match a 'Whnf' as the 'Value' it was cast from.
+fromWhnf :: Whnf binder sig n -> Value binder sig n
+{-# INLINE fromWhnf #-}
+fromWhnf = coerce
 
 -- | A neutral variable, as a value.
 vvar :: Foil.Name n -> Value binder sig n
@@ -562,19 +568,18 @@ eliminate ::
   Value binder sig n
 {-# INLINE eliminate #-}
 eliminate v rule = case v of
-  VGlued_ name folded unfolded -> VGlued_ name (rule (toWhnf folded)) (eliminateLoop unfolded rule)
-  _ -> inline rule (toWhnf v)
+  VGlued_ name folded unfolded -> VGlued_ name (eliminateLoop folded rule) (eliminateLoop unfolded rule)
+  _ -> inline rule (coerce v)
 
--- | The loop of 'eliminate' under the first glue, out of line. The folded
--- side is never glued: a neutral headed by the defined name.
+-- | The loop of 'eliminate' under the first glue, out of line.
 eliminateLoop ::
   Value binder sig n ->
   (Whnf binder sig n -> Value binder sig n) ->
   Value binder sig n
 {-# NOINLINE eliminateLoop #-}
 eliminateLoop v rule = case v of
-  VGlued_ name folded unfolded -> VGlued_ name (rule (toWhnf folded)) (eliminateLoop unfolded rule)
-  _ -> rule (toWhnf v)
+  VGlued_ name folded unfolded -> VGlued_ name (eliminateLoop folded rule) (eliminateLoop unfolded rule)
+  _ -> rule (coerce v)
 
 -- | The unfolded head of a value: peel every layer of glue off its root. For
 -- inspection, as of a type: a value built from the result has lost its glue,
@@ -582,7 +587,7 @@ eliminateLoop v rule = case v of
 force :: Value binder sig n -> Whnf binder sig n
 force = \case
   VGlued_ _ _ unfolded -> force unfolded
-  v                  -> toWhnf v
+  v                  -> coerce v
 
 -- * Readback
 

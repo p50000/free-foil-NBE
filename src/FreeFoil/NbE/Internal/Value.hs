@@ -3,7 +3,6 @@
 {-# LANGUAGE InstanceSigs   #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RankNTypes     #-}
-{-# LANGUAGE RoleAnnotations #-}
 -- | The semantic domain with its constructors, for the library's own
 -- modules. A language sees it only through "FreeFoil.NbE", which hides the
 -- constructors, so that a rule can inspect a value only through
@@ -13,8 +12,6 @@ module FreeFoil.NbE.Internal.Value
   , Value' (..)
   , Value
   , Whnf
-  , toWhnf
-  , fromWhnf
   ) where
 
 import qualified Control.Monad.Foil      as Foil
@@ -22,15 +19,13 @@ import           Control.Monad.Free.Foil (ScopedAST (..))
 import           Data.Bifunctor          (Bifunctor (..))
 import           Data.Kind               (Type)
 import           Data.Void               (Void)
-import           Unsafe.Coerce           (unsafeCoerce)
 
 -- | Whether a value may be glued at its root.
 data Glue = MayGlue | NoGlue
 
 -- | The semantic domain, indexed by whether a value may be glued at its
--- root. The index is phantom in the representation, so a 'Whnf' is a
--- 'Value' with the same representation, and nominal in its role, so that
--- only 'toWhnf' and 'fromWhnf' cast between them.
+-- root. The index is phantom, so a 'Whnf' is a 'Value' with the same
+-- representation.
 data Value' (g :: Glue) binder sig (n :: Foil.S) :: Type where
   -- | A neutral variable.
   VVar_ :: {-# UNPACK #-} !(Foil.Name n) -> Value' g binder sig n
@@ -49,8 +44,6 @@ data Value' (g :: Glue) binder sig (n :: Foil.S) :: Type where
   -- ('FreeFoil.NbE.unfolding'). Conversion compares the folded sides of two
   -- glued values of one name first.
   VGlued_ :: {-# UNPACK #-} !(Foil.Name n) -> Value binder sig n -> Value binder sig n -> Value' g binder sig n
-
-type role Value' nominal _ _ _
 
 -- | A semantic value in scope @n@. Term subterms are values already; only
 -- scoped subterms, the bodies under binders, are suspended. A
@@ -75,17 +68,6 @@ type Value = Value' 'MayGlue
 -- The rule matches it with the synonyms 'FreeFoil.NbE.VVar',
 -- 'FreeFoil.NbE.VNode', 'FreeFoil.NbE.VSuspended' and 'FreeFoil.NbE.Stuck'.
 type Whnf = Value' 'NoGlue
-
--- | A value that is not glued at its root, as a 'Whnf'. The library casts
--- where it has matched the glue away; the representation is the same.
-toWhnf :: Value' g binder sig n -> Whnf binder sig n
-{-# INLINE toWhnf #-}
-toWhnf = unsafeCoerce
-
--- | A 'Whnf' as the 'Value' it was cast from.
-fromWhnf :: Whnf binder sig n -> Value binder sig n
-{-# INLINE fromWhnf #-}
-fromWhnf = unsafeCoerce
 
 instance Foil.InjectName (Value' g binder sig) where
   injectName = VVar_
